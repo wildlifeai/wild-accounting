@@ -54,7 +54,8 @@ function composeTracking(entity, currentQi, measure) {
       // something the budget does not - not mandatory quarterly data entry.
       // Reading 0 here made every source with an unmaintained Forecast tab appear
       // certain to underspend, and silently understated org-wide expected spend.
-      const forecast = hasForecast ? L.fc[q] : baseline;
+      // The rule lives in forecastOrBaseline_ so health check D5 applies the same one.
+      const forecast = forecastOrBaseline_(L.fc, L.base, q);
       const isCurrent = col.qi === currentQi;
       // Past quarters: effective = actual
       // Current quarter: effective = actual (partial, still accumulating)

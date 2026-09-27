@@ -89,6 +89,11 @@ function qiOfLabel_(label) {
   return (2000 + parseInt(m[1], 10)) * 4 + (parseInt(m[3], 10) - 1);
 }
 
+/** First day of quarter index `qi`. Date rolls month 12+ into the next year. */
+function quarterStartDate_(qi) {
+  return new Date(Math.floor(qi / 4), fyStartMonth_() - 1 + 3 * (qi % 4), 1);
+}
+
 function quarterOfMonthKey_(monthKey) { return labelOfQi_(qiOfMonthKey_(monthKey)); }
 function currentQuarterLabel(date) { return labelOfQi_(qiOfDate_(date || new Date())); }
 function quarterSortNum(label) { return qiOfLabel_(label); }
@@ -146,6 +151,45 @@ function distributeByMonth_(lines, field) {
     });
   });
   return byMonth;
+}
+
+/**
+ * One quarter's expected figure: the Forecast-tab entry where one was written, a 0
+ * included, otherwise the budget baseline. A blank cell is not an entry, so an
+ * unmaintained Forecast tab means "the budget is still our best estimate", never
+ * "nothing". The single statement of the rule, used by the tracking grid and by health
+ * check D5, so a finding cannot contradict the grid it sends you to.
+ */
+function forecastOrBaseline_(forecast, baseline, q) {
+  return (forecast && forecast[q] !== undefined) ? forecast[q] : ((baseline && baseline[q]) || 0);
+}
+
+/**
+ * What a funding source expects to spend in each FY quarter: forecastOrBaseline_ per
+ * item, summed. Items are grouped exactly as buildTracking_ groups them.
+ */
+function expectedCostByQuarter_(src) {
+  const fc = (src && src.forecast && src.forecast.cost) || {};
+  const byItem = {};
+  ((src && src.lines) || []).forEach(l => {
+    const code = itemCode_(l.item) || ('(' + (l.milestone || 'unassigned') + ')');
+    (byItem[code] = byItem[code] || []).push(l);
+  });
+  const out = {};
+  Object.keys(byItem).forEach(code => {
+    const base = bucketToQuarters(distributeByMonth_(byItem[code], 'cost'));
+    const entered = {};
+    Object.keys(fc).forEach(k => {
+      const cut = k.indexOf('||');
+      if (k.slice(0, cut) === code) entered[k.slice(cut + 2)] = fc[k];
+    });
+    const quarters = {};
+    Object.keys(base).concat(Object.keys(entered)).forEach(q => { quarters[q] = true; });
+    Object.keys(quarters).forEach(q => {
+      out[q] = (out[q] || 0) + forecastOrBaseline_(entered, base, q);
+    });
+  });
+  return out;
 }
 
 /**

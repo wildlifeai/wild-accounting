@@ -94,8 +94,9 @@ const HEALTH_CATALOGUE = {
     title: 'Actuals coded to a funding source with no budget sheet',
     action: 'Either the sheet is missing, or the Xero tag is a typo.' },
   D5: { severity: 'warning', category: 'Xero coding',
-    title: 'Secured grant under way with no actuals at all',
-    action: 'Nothing is being coded to it. Usually a missing or misspelt Xero tag.' },
+    title: 'Spend was expected, nothing is coded',
+    action: 'Usually a missing or misspelt Xero tag. If the work has slipped, enter 0 ' +
+      'for those quarters on the Forecast tab.' },
   D6: { severity: 'error', category: 'Xero coding',
     title: 'Actuals dated after the grant ended',
     action: 'Almost always a stale repeating journal or template still pointing here.' },
@@ -104,7 +105,8 @@ const HEALTH_CATALOGUE = {
     action: 'Re-budget, or explain the overspend to the funder.' },
   E2: { severity: 'warning', category: 'Reconciliation',
     title: 'Underspend risk',
-    action: 'Funders care about underspend as much as overspend. Re-profile or spend.' },
+    action: 'Funders care about underspend as much as overspend. If the work has ' +
+      'slipped, move it to later quarters on the Forecast tab; otherwise re-profile or spend.' },
   E3: { severity: 'error', category: 'Reconciliation',
     title: 'Same item code in two funding sources',
     action: 'One cost is billed to two funders. Item codes are {SOURCE}_{NNN} for a reason.' },
@@ -388,14 +390,28 @@ function buildHealth(budgets, actualLines, ctx) {
         owner: meta['owner'] || '', link: b.sheetUrl || '' };
       const cost = (b.lines || []).reduce((a, l) => a + (l.cost || 0), 0);
       const actual = spend[b.name] || 0;
-      const start = parseSheetDate_(meta['funding start']);
-      const end = parseSheetDate_(meta['funding end']);
 
-      // D5: a secured grant that has started and had nothing coded to it is almost
-      // always a Xero tag that does not match the sheet name.
-      if (b.status === 'secured' && start && now && start < now && actual === 0) {
-        add('D5', withBase_(bse, { amount: Math.round(cost),
-          detail: 'started ' + isoDate_(start) + ' with no actuals coded to it at all' }));
+      // What should have been spent by the end of the last finished quarter, by the
+      // tracking grid's own rule, forecastOrBaseline_: the Forecast entry where one was
+      // written, otherwise the budget baseline. D5 and E2 both judge against this. They
+      // used to judge against the funding dates instead, which flagged every grant whose
+      // work was scheduled later than its contract.
+      let due = 0, dueBy = '';
+      if (now) {
+        const curQi = qiOfDate_(now);
+        const exp = expectedCostByQuarter_(b);
+        due = Object.keys(exp).reduce((t, q) => (qiOfLabel_(q) < curQi ? t + exp[q] : t), 0);
+        const qs = quarterStartDate_(curQi);
+        dueBy = isoDate_(new Date(qs.getFullYear(), qs.getMonth(), 0));
+      }
+
+      // D5: a secured grant that should have spent something by now, with nothing coded
+      // to it, is almost always a Xero tag that does not match the sheet name. Finished
+      // quarters only, so it stays quiet while the first quarter of spend is under way;
+      // a misspelt tag is caught sooner than that, by D4.
+      if (b.status === 'secured' && actual === 0 && due >= 1) {
+        add('D5', withBase_(bse, { amount: Math.round(due),
+          detail: Math.round(due) + ' expected by ' + dueBy + ', nothing coded to it at all' }));
       }
 
       // E1: overspend against the sheet's own budget.
@@ -404,16 +420,18 @@ function buildHealth(budgets, actualLines, ctx) {
           detail: 'actual ' + Math.round(actual) + ' against budget ' + Math.round(cost) }));
       }
 
-      // E2: underspend. Only once a grant is meaningfully under way, and only when the
-      // gap between elapsed time and spent money is wide enough to be worth acting on.
-      if (cost > 0 && start && end && now && end > start) {
-        const elapsed = Math.min(1, Math.max(0, (now - start) / (end - start)));
-        const spent = actual / cost;
-        if (elapsed >= (CONFIG.UNDERSPEND_MIN_ELAPSED || 0.5) &&
-            (elapsed - spent) >= (CONFIG.UNDERSPEND_GAP || 0.25)) {
-          add('E2', withBase_(bse, { amount: Math.round(cost - actual),
-            detail: Math.round(elapsed * 100) + '% of the period elapsed, ' +
-              Math.round(spent * 100) + '% of the budget spent' }));
+      // E2: underspend against the same expected-to-date figure as D5, once at least half
+      // the budget should have been spent and only when the shortfall is wide enough to
+      // act on. Secured only, as D5: an application not yet won has nothing to underspend.
+      // Spend so far this quarter counts, so a source that has since caught up is not
+      // flagged for last quarter's lag.
+      if (b.status === 'secured' && cost > 0 && due >= 1) {
+        const dueShare = due / cost, spentShare = actual / cost;
+        if (dueShare >= (CONFIG.UNDERSPEND_MIN_DUE || 0.5) &&
+            (dueShare - spentShare) >= (CONFIG.UNDERSPEND_GAP || 0.25)) {
+          add('E2', withBase_(bse, { amount: Math.round(due - actual),
+            detail: Math.round(dueShare * 100) + '% of the budget was expected by ' + dueBy +
+              ', ' + Math.round(spentShare * 100) + '% has been spent' }));
         }
       }
     });

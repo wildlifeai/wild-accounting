@@ -37,7 +37,7 @@ node tools/run_tests.js             # runs dashboard/Tests.js headlessly
 Both live in `tools/`, not `dashboard/`, because `.claspignore` is a whitelist: any `.js`
 file under `dashboard/` is swept into the Apps Script project whether or not it belongs there.
 
-`dashboard/Tests.js` holds `runTests()`: 180 checks over the forecast maths, budget and
+`dashboard/Tests.js` holds `runTests()`: 195 checks over the forecast maths, budget and
 forecast parsing, the health catalogue, serve-time staleness, which Xero statuses count
 as actuals, funded runway, scoped access, and the funding pipeline. It runs
 from the IDE with no Drive or Xero access, and `tools/run_tests.js` runs the same file under

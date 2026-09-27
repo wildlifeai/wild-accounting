@@ -70,9 +70,10 @@ const CONFIG = {
                   'funding start', 'funding end', 'owner'],
   // C4: a sheet nobody has looked at in this long is probably no longer true.
   STALE_REVIEW_DAYS: 90,
-  // E2: only worth asking about underspend once a grant is meaningfully under way, and
-  // only when the gap between time elapsed and money spent is wide enough to act on.
-  UNDERSPEND_MIN_ELAPSED: 0.5,
+  // E2: only worth asking about underspend once at least this share of the budget should
+  // have been spent, by the tracking grid's rule, and only when the shortfall is at
+  // least UNDERSPEND_GAP of the whole budget.
+  UNDERSPEND_MIN_DUE: 0.5,
   UNDERSPEND_GAP: 0.25,
   // Contribution policy values the code understands. Anything else is C6.
   CONTRIBUTION_POLICIES: [/^none$/, /^per_line$/, /^percent_of_income:\d+(\.\d+)?$/],

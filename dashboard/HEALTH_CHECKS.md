@@ -105,7 +105,7 @@ the budget baseline, so an absent tab legitimately means "the budget is still ou
 | D2 | warning | Actual lines with no `Funding source` tag | Land in `(unassigned)`. |
 | D3 | warning | Actual lines with no item code | Outside the tracking grid. |
 | D4 | error | Actuals coded to a `Funding source` with no budget sheet | Either the sheet is missing or the tag is a typo. |
-| D5 | warning | Budget sheet with zero actuals though its period has started | Nothing is being coded to it. |
+| D5 | warning | A secured source was expected to spend something by the end of the last finished quarter, and nothing is coded to it | Usually a missing or misspelt Xero tag. "Expected" is the tracking grid's rule: the `Forecast` entry where one was written, a 0 included, otherwise the `Budget` baseline. A blank cell is not a 0. If the work has slipped, enter 0 for those quarters. Finished quarters only, so it stays quiet while the first quarter of spend is under way; D4 catches a misspelt tag sooner. |
 | D6 | error | Actuals against a funding source whose `Funding end` has passed, or whose sheet is archived | Almost always a stale recurring journal or template. |
 
 ### E. Reconciliation
@@ -114,7 +114,7 @@ the budget baseline, so an absent tab legitimately means "the budget is still ou
 |---|---|---|---|
 | _(none implemented yet, see below)_ | | | |
 | E1 | warning | Actuals exceed budget for a funding source | Re-budget or explain to the funder. |
-| E2 | warning | Under-spend risk: proportion spent well below proportion of period elapsed | Funders care about underspend as much as overspend. |
+| E2 | warning | A secured source has spent well below what was expected by the end of the last finished quarter, by the same rule as D5 | Funders care about underspend as much as overspend. Fires once at least half the budget was due (`UNDERSPEND_MIN_DUE`) and the shortfall is a quarter of the budget or more (`UNDERSPEND_GAP`). Spend so far this quarter counts toward catching up. If the work has slipped, move it to later quarters on the `Forecast` tab. |
 | E3 | error | Same item code in two funding sources | One cost billed twice. |
 | E4 | warning | Same `*Account` + `Description` in two sources with overlapping dates | Double-funding signal — e.g. the same FTE in two grants. |
 
