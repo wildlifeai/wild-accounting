@@ -41,6 +41,57 @@ function isArchivedSource_(name) {
   return ARCHIVED_SOURCE_NAMES[n] === true;
 }
 
+/**
+ * Share of a funding source's income that funds General, from its Contribution policy.
+ *
+ * Only percent_of_income derives anything. A per_line source already puts its General
+ * work on General line by line, through the Project column, so deriving on top would
+ * count it twice. None contributes nothing, and neither does a missing or unreadable
+ * policy: C6 reports those, and guessing a rate would move money on a typo.
+ */
+function contributionRate_(src) {
+  const raw = clean_(((src && src.metadata) || {})['contribution policy'] || '');
+  const m = /^percent_of_income:(\d+(?:\.\d+)?)$/.exec(normalisePolicy_(raw));
+  if (!m) return 0;
+  const pct = parseFloat(m[1]);
+  return pct > 0 && pct <= 100 ? pct / 100 : 0;
+}
+
+/** The part of one budget line's income owed to General: none if the line is General's. */
+function lineContribution_(line, rate) {
+  if (!rate || !line) return 0;
+  if ((line.project || CONFIG.DEFAULT_PROJECT) === CONFIG.GENERAL_PROJECT) return 0;
+  return (Number(line.income) || 0) * rate;
+}
+
+/** The milestone General's inflow from one source appears under, in every view. */
+function contributionMilestone_(sourceName) { return sourceName + ' (contribution)'; }
+
+/**
+ * What deriving contribution moves between projects, per source and per (status,
+ * project), without changing anything. The Overview credits income to each line's own
+ * project, so this does the same: a dry run reports what the breakdown will show.
+ */
+function contributionMoves_(budgets) {
+  const sources = [], moves = {};
+  (budgets || []).forEach(src => {
+    const rate = contributionRate_(src);
+    let toGeneral = 0;
+    (src.lines || []).forEach(l => {
+      const c = lineContribution_(l, rate);
+      if (!c) return;
+      toGeneral += c;
+      const from = src.status + '||' + (l.project || CONFIG.DEFAULT_PROJECT);
+      const to = src.status + '||' + CONFIG.GENERAL_PROJECT;
+      moves[from] = (moves[from] || 0) - c;
+      moves[to] = (moves[to] || 0) + c;
+    });
+    sources.push({ name: src.name, status: src.status, rate: rate, toGeneral: toGeneral,
+      policy: clean_(((src.metadata) || {})['contribution policy'] || '') });
+  });
+  return { sources: sources, moves: moves };
+}
+
 function buildSnapshot() {
   const now = new Date();
   const fy = fyBounds_(now);

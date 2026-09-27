@@ -76,7 +76,10 @@ const CONFIG = {
   UNDERSPEND_MIN_DUE: 0.5,
   UNDERSPEND_GAP: 0.25,
   // Contribution policy values the code understands. Anything else is C6.
-  CONTRIBUTION_POLICIES: [/^none$/, /^per_line$/, /^percent_of_income:\d+(\.\d+)?$/],
+  // A percentage runs 0 to 100: above that it would send General more than the source
+  // receives, and the derivation would otherwise have to ignore it silently.
+  CONTRIBUTION_POLICIES: [/^none$/, /^per_line$/,
+    /^percent_of_income:(100(\.0+)?|\d{1,2}(\.\d+)?)$/],
 
   // ---- Funding_info keys read by code -------------------------------------
   // Metadata keys are lower-cased by parseFundingInfoTab_, so these are the lower-case

@@ -776,6 +776,47 @@ function runTests() {
     policyOk('') === false);
   check('policy: a percentage still needs a number',
     policyOk('percent_of_income:') === false && policyOk('percent_of_income:abc') === false);
+  // Above 100 it would send General more than the source receives.
+  check('policy: a percentage runs 0 to 100',
+    policyOk('percent_of_income:100') && policyOk('percent_of_income:0') &&
+    policyOk('percent_of_income:150') === false);
+
+  // ---- contribution: which share of a source's income funds General ------------
+  function cSrc(policy, status, lines) {
+    return { name: 'XXX_27_C', status: status || 'secured', projectFolder: 'Spyfish Aotearoa',
+      metadata: policy === undefined ? {} : { 'contribution policy': policy },
+      lines: lines || [] };
+  }
+  check('contribution: percent_of_income:40 is a rate of 0.4',
+    contributionRate_(cSrc('percent_of_income:40')) === 0.4);
+  check('contribution: read through the same normalising as C6',
+    contributionRate_(cSrc('Percent of income: 12.5')) === 0.125);
+  // per_line lines are already on General through the Project column; deriving on top
+  // would count them twice.
+  check('contribution: none and per_line derive nothing',
+    contributionRate_(cSrc('none')) === 0 && contributionRate_(cSrc('per_line')) === 0);
+  check('contribution: a missing or unreadable policy derives nothing',
+    contributionRate_(cSrc(undefined)) === 0 && contributionRate_(cSrc('40%')) === 0 &&
+    contributionRate_(cSrc('percent_of_income:150')) === 0);
+  check('contribution: a line already on General owes nothing',
+    lineContribution_({ project: 'General', income: 1000 }, 0.4) === 0 &&
+    lineContribution_({ project: 'Spyfish Aotearoa', income: 1000 }, 0.4) === 400 &&
+    lineContribution_({ project: 'Spyfish Aotearoa', income: 1000 }, 0) === 0);
+
+  var cMoves = contributionMoves_([
+    cSrc('percent_of_income:40', 'secured', [
+      { project: 'Spyfish Aotearoa', income: 10000, cost: 6000 },
+      { project: 'General', income: 2000, cost: 2000 }]),
+    cSrc('percent_of_income:40', 'proposed', [
+      { project: 'Wildlife Watcher', income: 5000, cost: 3000 }]),
+    cSrc('per_line', 'secured', [{ project: 'General', income: 3000, cost: 3000 }])
+  ]).moves;
+  check('contribution: secured income moves from the project to General',
+    cMoves['secured||Spyfish Aotearoa'] === -4000 && cMoves['secured||General'] === 4000);
+  check('contribution: an application moves as proposed, not secured',
+    cMoves['proposed||Wildlife Watcher'] === -2000 && cMoves['proposed||General'] === 2000);
+  check('contribution: organisation totals do not move',
+    Object.keys(cMoves).reduce(function (t, k) { return t + cMoves[k]; }, 0) === 0);
 
   // ---- serve-time health: staleness and the trigger ------------------------
   // Judged when a cached snapshot is served, because inside a refresh the snapshot is

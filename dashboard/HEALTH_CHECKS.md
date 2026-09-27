@@ -94,7 +94,7 @@ the budget baseline, so an absent tab legitimately means "the budget is still ou
 | C3 | error | `Funding source` ≠ file name | Budgets and actuals will not join. |
 | C4 | warning | `Last reviewed` older than 90 days | Review it, then update the date. |
 | C5 | warning | `Funding end` in the past, sheet still in `secured/` | Archive it, or extend the end date. |
-| C6 | error | `Contribution policy` missing or unparseable | General's income cannot be derived. The three values are `none`, `per_line` and `percent_of_income:<n>`. Case, surrounding spaces, hyphens for underscores and a space after the colon are all normalised before matching, so `None` and `Percent of income: 40` pass. The finding quotes the value back exactly as typed. `40%` is still rejected: it is a different statement, and guessing which was meant is not the checker's job. |
+| C6 | error | `Contribution policy` missing or unparseable | General's income cannot be derived. The three values are `none`, `per_line` and `percent_of_income:<n>`, with `n` from 0 to 100. Case, surrounding spaces, hyphens for underscores and a space after the colon are all normalised before matching, so `None` and `Percent of income: 40` pass. The finding quotes the value back exactly as typed. `40%` is still rejected: it is a different statement, and guessing which was meant is not the checker's job. |
 | C7 | warning | `proposed` with no `Decision date` | Needed for pipeline forecasting and funder forms. |
 
 ### D. Xero coding — aimed at the bookkeeper
