@@ -136,16 +136,8 @@ function filterSnapshotForProjects_(snap, allowedProjects) {
   // Derive the legacy flags from the filtered findings, so the two cannot disagree.
   filteredSnap.dataFlags = healthToFlags(filteredSnap.health || []);
 
-  // Recalculate totals based on filtered projects
-  var totals = { budget: 0, secured: 0, actual: 0, unsecuredGap: 0,
-                 budgetFY: 0, securedFY: 0, actualFY: 0, unsecuredGapFY: 0 };
-  (filteredSnap.projects || []).forEach(function (r) {
-    totals.budget += r.proposedBudget; totals.secured += r.securedIncome;
-    totals.actual += r.actualExpense; totals.unsecuredGap += r.unsecuredGap;
-    totals.budgetFY += r.proposedBudgetFY; totals.securedFY += r.securedIncomeFY;
-    totals.actualFY += r.actualExpenseFY; totals.unsecuredGapFY += r.unsecuredGapFY;
-  });
-  filteredSnap.totals = totals;
+  // Totals over the lead's projects, by the same function as the organisation's.
+  filteredSnap.totals = orgTotals_(filteredSnap.projects || []);
 
   filteredSnap._accessLevel = 'filtered';
   return filteredSnap;
@@ -381,35 +373,12 @@ function resolveEntity_(snap, ids) {
       if (t.sheetUrl) sheetUrls.push({ source: t.source, url: t.sheetUrl });
     });
 
-    // For General project, add contribution milestones from non-General sources.
-    // Each source's total net (income − expense) per quarter flows to General.
+    // General's contribution from each source, by that source's Contribution policy:
+    // the policy's share of its income on milestones not already General's. Income only.
+    // This used to copy whole sources across, cost and all, so on the Cost measure every
+    // contributing project's spend appeared a second time under General.
     if (projectName === CONFIG.GENERAL_PROJECT) {
-      tracking.forEach(function (t) {
-        if (t.project === CONFIG.GENERAL_PROJECT) return;
-        var aggBaseline = {}, aggActual = {}, aggIncBase = {}, aggIncAct = {};
-        var aggCostFc = {}, aggIncFc = {};
-        (t.milestones || []).forEach(function (m) {
-          addMaps_(aggBaseline, m.baseline);
-          addMaps_(aggActual, m.actual);
-          addMaps_(aggIncBase, m.incomeBaseline);
-          addMaps_(aggIncAct, m.incomeActual);
-          addMaps_(aggCostFc, m.costForecast);
-          addMaps_(aggIncFc, m.incomeForecast);
-        });
-        milestones.push({
-          item: t.source + '_contrib',
-          milestone: t.source + ' (contribution)',
-          source: t.source,
-          project: CONFIG.GENERAL_PROJECT,
-          baseline: aggBaseline,
-          actual: aggActual,
-          incomeBaseline: aggIncBase,
-          incomeActual: aggIncAct,
-          costForecast: aggCostFc,
-          incomeForecast: aggIncFc,
-          forecastComment: ''
-        });
-      });
+      milestones.push.apply(milestones, contributionMilestones_(tracking));
     }
 
     if (!milestones.length) throw new Error('No milestones for project: ' + projectName);
@@ -469,4 +438,45 @@ function addMaps_(target, source) {
   Object.keys(source).forEach(function (k) {
     target[k] = (target[k] || 0) + (source[k] || 0);
   });
+}
+
+/**
+ * General's contribution rows for the tracking view: per source, its policy's share of the
+ * income on milestones not already General's. Income layers only, because a contribution
+ * is income to General, not spend. Pure over the tracking entries, so it can be tested.
+ */
+function contributionMilestones_(tracking) {
+  var out = [];
+  (tracking || []).forEach(function (t) {
+    var rate = t.contributionRate || 0;
+    if (!rate) return;
+    var items = (t.milestones || []).filter(function (m) {
+      return m.project !== CONFIG.GENERAL_PROJECT;
+    });
+    var incBase = {}, incAct = {}, incFc = {}, fcQuarters = {};
+    items.forEach(function (m) {
+      addMaps_(incBase, m.incomeBaseline);
+      addMaps_(incAct, m.incomeActual);
+      Object.keys(m.incomeForecast || {}).forEach(function (q) { fcQuarters[q] = true; });
+    });
+    // Where any milestone has an income forecast, the row's figure is each milestone's own
+    // forecastOrBaseline_, summed. Summing the entries alone would let one milestone's
+    // forecast erase another's budget for that quarter.
+    Object.keys(fcQuarters).forEach(function (q) {
+      incFc[q] = items.reduce(function (s, m) {
+        return s + forecastOrBaseline_(m.incomeForecast, m.incomeBaseline, q);
+      }, 0);
+    });
+    if (!Object.keys(incBase).length && !Object.keys(incAct).length &&
+        !Object.keys(incFc).length) return;
+    var share = function (map) { return roundMapValues_(scaleMap_(map, rate)); };
+    out.push({
+      item: t.source + '_contrib', milestone: contributionMilestone_(t.source),
+      source: t.source, project: CONFIG.GENERAL_PROJECT,
+      baseline: {}, actual: {}, costForecast: {},
+      incomeBaseline: share(incBase), incomeActual: share(incAct),
+      incomeForecast: share(incFc), forecastComment: ''
+    });
+  });
+  return out;
 }

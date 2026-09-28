@@ -10,9 +10,11 @@
  *                       (month secured income stops covering forecast spend).
  *
  * Project-level attribution of a funding source's expense uses each project's
- * day-weighted share of that source's operating expense; income and overhead are
- * allocated by the same share. Actuals come pre-split by Xero's Projects tracking
- * category, so actual numbers are exact, not approximated.
+ * day-weighted share of that source's operating expense, and the rollup allocates income
+ * by the same share; the Overview breakdown credits income to each line's own project.
+ * General's overhead is derived from each source's Contribution policy, see
+ * contributionRate_. Actuals come pre-split by Xero's Projects tracking category, so
+ * actual numbers are exact, not approximated.
  */
 
 /**
@@ -41,6 +43,57 @@ function isArchivedSource_(name) {
   return ARCHIVED_SOURCE_NAMES[n] === true;
 }
 
+/**
+ * Share of a funding source's income that funds General, from its Contribution policy.
+ *
+ * Only percent_of_income derives anything. A per_line source already puts its General
+ * work on General line by line, through the Project column, so deriving on top would
+ * count it twice. None contributes nothing, and neither does a missing or unreadable
+ * policy: C6 reports those, and guessing a rate would move money on a typo.
+ */
+function contributionRate_(src) {
+  const raw = clean_(((src && src.metadata) || {})['contribution policy'] || '');
+  const m = /^percent_of_income:(\d+(?:\.\d+)?)$/.exec(normalisePolicy_(raw));
+  if (!m) return 0;
+  const pct = parseFloat(m[1]);
+  return pct > 0 && pct <= 100 ? pct / 100 : 0;
+}
+
+/** The part of one budget line's income owed to General: none if the line is General's. */
+function lineContribution_(line, rate) {
+  if (!rate || !line) return 0;
+  if ((line.project || CONFIG.DEFAULT_PROJECT) === CONFIG.GENERAL_PROJECT) return 0;
+  return (Number(line.income) || 0) * rate;
+}
+
+/** The milestone General's inflow from one source appears under, in every view. */
+function contributionMilestone_(sourceName) { return sourceName + ' (contribution)'; }
+
+/**
+ * What deriving contribution moves between projects, per source and per (status,
+ * project), without changing anything. The Overview credits income to each line's own
+ * project, so this does the same: a dry run reports what the breakdown will show.
+ */
+function contributionMoves_(budgets) {
+  const sources = [], moves = {};
+  (budgets || []).forEach(src => {
+    const rate = contributionRate_(src);
+    let toGeneral = 0;
+    (src.lines || []).forEach(l => {
+      const c = lineContribution_(l, rate);
+      if (!c) return;
+      toGeneral += c;
+      const from = src.status + '||' + (l.project || CONFIG.DEFAULT_PROJECT);
+      const to = src.status + '||' + CONFIG.GENERAL_PROJECT;
+      moves[from] = (moves[from] || 0) - c;
+      moves[to] = (moves[to] || 0) + c;
+    });
+    sources.push({ name: src.name, status: src.status, rate: rate, toGeneral: toGeneral,
+      policy: clean_(((src.metadata) || {})['contribution policy'] || '') });
+  });
+  return { sources: sources, moves: moves };
+}
+
 function buildSnapshot() {
   const now = new Date();
   const fy = fyBounds_(now);
@@ -55,130 +108,26 @@ function buildSnapshot() {
   const actualLines = isXeroConnected() ? fetchXeroActuals(actualSince) : [];
   setRefreshProgress_('Aggregating ' + actualLines.length + ' actual line(s)', 0, 0, 90);
 
-  const projects = {}; // name -> rollup accumulator
-  const fundingSources = []; // per-source summary
+  // Competing applications for the same work share an Exclusivity group, and only one
+  // member of each group carries the cost. See chooseExclusivityReps_.
+  const exclusivityReps = chooseExclusivityReps_(budgets);
+  const agg = aggregateBudgets_(budgets, fy, exclusivityReps);
+  const projects = agg.projects;             // name -> rollup accumulator
+  const fundingSources = agg.fundingSources; // per-source summary
+  const budgetByKey = agg.budgetByKey;       // 'project||source||milestone' -> entry
+  const sourceStatus = agg.sourceStatus;     // source name -> 'secured' | 'proposed'
+  const itemToMilestone = agg.itemToMilestone; // 'source||itemCode' -> milestone name
+  const costSuppressed = agg.costSuppressed; // source -> the source carrying its cost
   const dataFlags = [];
-  const budgetByKey = {}; // 'project||source||milestone' -> { budget, income, status }
   const actualByKey = {}; // 'project||source||milestone' -> actual expense
   const actualByKeyFY = {}; // 'project||source||milestone' -> FY actual expense
   const actualByKeyQ = {}; // 'project||source||milestone' -> { quarter label -> actual }
   const quartersSeen = {};    // quarter label -> true, for the Overview's FY selector
-  const sourceStatus = {};    // source name -> 'secured' | 'proposed'
-  const itemToMilestone = {}; // 'source||itemCode' -> milestone name
 
+  // Actuals can name a project no budget does, so the rollup still grows here.
   function project_(name) {
-    if (!projects[name]) {
-      projects[name] = { name: name, proposedBudget: 0, securedIncome: 0,
-        proposedIncome: 0, actualExpense: 0, weightedIncome: 0,
-        proposedBudgetFY: 0, securedIncomeFY: 0, proposedIncomeFY: 0, actualExpenseFY: 0,
-        weightedIncomeFY: 0 };
-    }
-    return projects[name];
+    return projects[name] || (projects[name] = newProjectRollup_(name));
   }
-
-  // Competing applications for the same work share an Exclusivity group, and only one
-  // member of each group carries the cost. See chooseExclusivityReps_.
-  const exclusivityReps = chooseExclusivityReps_(budgets);
-  const costSuppressed = {};  // source name -> the source that carries the cost instead
-
-  budgets.forEach(src => {
-    const group = clean_((src.metadata || {})[CONFIG.META.exclusivityGroup] || '');
-    const rep = group ? exclusivityReps[group] : null;
-    // A non-representative still contributes its ask, just not the work behind it.
-    const carriesCost = !group || rep === src.name;
-    if (!carriesCost) costSuppressed[src.name] = { group: group, countedIn: rep };
-    const costFactor = carriesCost ? 1 : 0;
-    const probability = sourceProbability_(src.status, src.metadata);
-
-    // Per-line project attribution is handled in BudgetReader: a line uses its
-    // `Project` value when set, otherwise the parent project folder. Falling back
-    // to the folder is expected, so it is not flagged here.
-    const fc = computeFundingSourceForecast(src.lines);
-    const shares = projectExpenseShares_(src.lines); // {project: 0..1}
-
-    const expenseFY = sumMonthsInFY_(fc.expenseByMonth, fy);
-    const incomeFY = sumMonthsInFY_(fc.incomeByMonth, fy);
-
-    // Project-level rollups (unchanged — used for org totals cards)
-    Object.keys(shares).forEach(pName => {
-      const share = shares[pName];
-      const p = project_(pName);
-      const expTotal = fc.totalBudgetExpense * share;
-      const incTotal = fc.totalBudgetIncome * share;
-      const expFY = expenseFY * share;
-      const incFY = incomeFY * share;
-      p.proposedBudget += expTotal * costFactor;
-      p.proposedIncome += incTotal;
-      p.proposedBudgetFY += expFY * costFactor;
-      p.proposedIncomeFY += incFY;
-      if (src.status === 'secured') {
-        p.securedIncome += incTotal;
-        p.securedIncomeFY += incFY;
-      }
-      // Expected income: secured counts in full, proposed at its stated probability. A
-      // proposed source with no probability contributes nothing here rather than being
-      // guessed at, and check G2 asks for the number.
-      if (probability !== null) {
-        p.weightedIncome += incTotal * probability;
-        p.weightedIncomeFY += incFY * probability;
-      }
-    });
-
-    // Build budgetByKey at (project, source, milestone) granularity.
-    // Each budget line carries its own cost, income, milestone, and project.
-    src.lines.forEach(l => {
-      const pName = l.project || CONFIG.DEFAULT_PROJECT;
-      const mile = l.milestone || '(unassigned)';
-      const bkey = pName + '||' + src.name + '||' + mile;
-
-      // Build item-to-milestone lookup for actuals mapping
-      const code = itemCode_(l.item);
-      if (code) itemToMilestone[src.name + '||' + code] = mile;
-
-      // Day-weighted FY portion for this single line
-      const lineCostByMonth = distributeByMonth_([l], 'cost');
-      const lineIncByMonth = distributeByMonth_([l], 'income');
-      const lineCostFY = sumMonthsInFY_(lineCostByMonth, fy);
-      const lineIncFY = sumMonthsInFY_(lineIncByMonth, fy);
-
-      if (!budgetByKey[bkey]) {
-        budgetByKey[bkey] = { budget: 0, income: 0, status: src.status,
-          budgetFY: 0, incomeFY: 0, budgetByQ: {}, incomeByQ: {}, weightedByQ: {},
-          comment: '', start: null, end: null };
-      }
-      const entry = budgetByKey[bkey];
-      // costFactor is 0 when a competing application in the same exclusivity group carries
-      // the work. The ask still shows; the work is counted once, on the representative.
-      entry.budget += l.cost * costFactor;
-      entry.income += l.income;
-      entry.budgetFY += lineCostFY * costFactor;
-      entry.incomeFY += lineIncFY;
-      // Per-quarter as well as per-FY, so the Overview can be shown for any financial
-      // year rather than only the current one. The day-weighted month buckets already
-      // exist; bucketToQuarters just folds them into FY quarters.
-      addInto_(entry.budgetByQ, scaleMap_(bucketToQuarters(lineCostByMonth), costFactor));
-      addInto_(entry.incomeByQ, bucketToQuarters(lineIncByMonth));
-      if (probability !== null) {
-        addInto_(entry.weightedByQ,
-                 scaleMap_(bucketToQuarters(lineIncByMonth), probability));
-      }
-      if (!entry.comment && code && src.forecast && src.forecast.comments) {
-        entry.comment = src.forecast.comments[code] || '';
-      }
-      if (l.start && (!entry.start || l.start < new Date(entry.start)))
-        entry.start = isoOrNull_(l.start);
-      if (l.end && (!entry.end || l.end > new Date(entry.end)))
-        entry.end = isoOrNull_(l.end);
-    });
-
-    sourceStatus[src.name] = src.status;
-    fundingSources.push({ name: src.name, status: src.status,
-      project: src.projectFolder, budgetExpense: fc.totalBudgetExpense,
-      budgetIncome: fc.totalBudgetIncome,
-      probability: probability, exclusivityGroup: group || '',
-      carriesCost: carriesCost,
-      link: clean_((src.metadata || {})[CONFIG.META.link] || '') });
-  });
 
   // Actuals from Xero, split by project, funding-source, and milestone.
   actualLines.forEach(l => {
@@ -304,6 +253,164 @@ function buildSnapshot() {
     health: health,
     dataFlags: dataFlags.concat(healthToFlags(health))
   };
+}
+
+/**
+ * Budgets -> the per-project rollup and the (project, source, milestone) entries the
+ * Overview is built from. Pure over its inputs, so the arithmetic deciding which project
+ * is credited with which money can be tested without Drive or Xero. It used to run inline
+ * in buildSnapshot, where no test could reach it.
+ */
+function aggregateBudgets_(budgets, fy, exclusivityReps) {
+  const projects = {};        // name -> rollup accumulator
+  const fundingSources = [];  // per-source summary
+  const budgetByKey = {};     // 'project||source||milestone' -> { budget, income, status }
+  const sourceStatus = {};    // source name -> 'secured' | 'proposed'
+  const itemToMilestone = {}; // 'source||itemCode' -> milestone name
+  const costSuppressed = {};  // source name -> the source that carries the cost instead
+  function project_(name) {
+    return projects[name] || (projects[name] = newProjectRollup_(name));
+  }
+
+  budgets.forEach(src => {
+    const group = clean_((src.metadata || {})[CONFIG.META.exclusivityGroup] || '');
+    const rep = group ? exclusivityReps[group] : null;
+    // A non-representative still contributes its ask, just not the work behind it.
+    const carriesCost = !group || rep === src.name;
+    if (!carriesCost) costSuppressed[src.name] = { group: group, countedIn: rep };
+    const costFactor = carriesCost ? 1 : 0;
+    const probability = sourceProbability_(src.status, src.metadata);
+
+    // Per-line project attribution is handled in BudgetReader: a line uses its
+    // `Project` value when set, otherwise the parent project folder. Falling back
+    // to the folder is expected, so it is not flagged here.
+    const fc = computeFundingSourceForecast(src.lines);
+    const shares = projectExpenseShares_(src.lines); // {project: 0..1}
+
+    const expenseFY = sumMonthsInFY_(fc.expenseByMonth, fy);
+    const incomeFY = sumMonthsInFY_(fc.incomeByMonth, fy);
+
+    // The share of this source's income its Contribution policy sends to General.
+    const rate = contributionRate_(src);
+
+    // Income into a project's rollup, in every form the rollup keeps. Expected income:
+    // secured counts in full, proposed at its stated probability. A proposed source with
+    // no probability contributes nothing here rather than being guessed at, and check G2
+    // asks for the number.
+    const creditIncome = (p, inc, incFY) => {
+      p.proposedIncome += inc;
+      p.proposedIncomeFY += incFY;
+      if (src.status === 'secured') {
+        p.securedIncome += inc;
+        p.securedIncomeFY += incFY;
+      }
+      if (probability !== null) {
+        p.weightedIncome += inc * probability;
+        p.weightedIncomeFY += incFY * probability;
+      }
+    };
+
+    // Project-level rollups, for the org totals and a project lead's totals. Income
+    // follows the cost share, and the policy's share of it is General's.
+    Object.keys(shares).forEach(pName => {
+      const share = shares[pName];
+      const p = project_(pName);
+      const toGeneral = pName === CONFIG.GENERAL_PROJECT ? 0 : rate;
+      const incTotal = fc.totalBudgetIncome * share;
+      const incFY = incomeFY * share;
+      p.proposedBudget += fc.totalBudgetExpense * share * costFactor;
+      p.proposedBudgetFY += expenseFY * share * costFactor;
+      creditIncome(p, incTotal * (1 - toGeneral), incFY * (1 - toGeneral));
+      if (toGeneral) {
+        creditIncome(project_(CONFIG.GENERAL_PROJECT), incTotal * toGeneral, incFY * toGeneral);
+      }
+    });
+
+    // Build budgetByKey at (project, source, milestone) granularity.
+    // Each budget line carries its own cost, income, milestone, and project.
+    src.lines.forEach(l => {
+      const pName = l.project || CONFIG.DEFAULT_PROJECT;
+      const mile = l.milestone || '(unassigned)';
+      const bkey = pName + '||' + src.name + '||' + mile;
+
+      // Build item-to-milestone lookup for actuals mapping
+      const code = itemCode_(l.item);
+      if (code) itemToMilestone[src.name + '||' + code] = mile;
+
+      // Day-weighted FY portion for this single line
+      const lineCostByMonth = distributeByMonth_([l], 'cost');
+      const lineIncByMonth = distributeByMonth_([l], 'income');
+      const lineCostFY = sumMonthsInFY_(lineCostByMonth, fy);
+      const lineIncFY = sumMonthsInFY_(lineIncByMonth, fy);
+
+      const entry = budgetByKey[bkey] || (budgetByKey[bkey] = newBudgetEntry_(src.status));
+      // costFactor is 0 when a competing application in the same exclusivity group carries
+      // the work. The ask still shows; the work is counted once, on the representative.
+      entry.budget += l.cost * costFactor;
+      entry.budgetFY += lineCostFY * costFactor;
+      // Per-quarter as well as per-FY, so the Overview can be shown for any financial
+      // year rather than only the current one. The day-weighted month buckets already
+      // exist; bucketToQuarters just folds them into FY quarters.
+      addInto_(entry.budgetByQ, scaleMap_(bucketToQuarters(lineCostByMonth), costFactor));
+
+      // The policy's share of this line's income is General's, and shows under General as
+      // this source's contribution; the project keeps the rest. lineContribution_ is what
+      // the dry run used, so what it reported is what this does.
+      const toGeneral = lineContribution_(l, rate) ? rate : 0;
+      creditLineIncome_(entry, l, lineIncByMonth, lineIncFY, probability, 1 - toGeneral);
+      if (toGeneral) {
+        const gkey = CONFIG.GENERAL_PROJECT + '||' + src.name + '||' +
+          contributionMilestone_(src.name);
+        const g = budgetByKey[gkey] || (budgetByKey[gkey] = newBudgetEntry_(src.status));
+        creditLineIncome_(g, l, lineIncByMonth, lineIncFY, probability, toGeneral);
+      }
+
+      if (!entry.comment && code && src.forecast && src.forecast.comments) {
+        entry.comment = src.forecast.comments[code] || '';
+      }
+    });
+
+    sourceStatus[src.name] = src.status;
+    fundingSources.push({ name: src.name, status: src.status,
+      project: src.projectFolder, budgetExpense: fc.totalBudgetExpense,
+      budgetIncome: fc.totalBudgetIncome,
+      probability: probability, exclusivityGroup: group || '',
+      carriesCost: carriesCost,
+      link: clean_((src.metadata || {})[CONFIG.META.link] || '') });
+  });
+
+  return { projects: projects, fundingSources: fundingSources, budgetByKey: budgetByKey,
+    sourceStatus: sourceStatus, itemToMilestone: itemToMilestone,
+    costSuppressed: costSuppressed };
+}
+
+function newProjectRollup_(name) {
+  return { name: name, proposedBudget: 0, securedIncome: 0,
+    proposedIncome: 0, actualExpense: 0, weightedIncome: 0,
+    proposedBudgetFY: 0, securedIncomeFY: 0, proposedIncomeFY: 0, actualExpenseFY: 0,
+    weightedIncomeFY: 0 };
+}
+
+function newBudgetEntry_(status) {
+  return { budget: 0, income: 0, status: status, budgetFY: 0, incomeFY: 0,
+    budgetByQ: {}, incomeByQ: {}, weightedByQ: {}, comment: '', start: null, end: null };
+}
+
+/**
+ * Credit `share` of one budget line's income to an entry, in every form it keeps: total,
+ * this FY, by quarter, and expected. One function, so the part a project keeps and the
+ * part General receives cannot be computed two different ways.
+ */
+function creditLineIncome_(entry, l, lineIncByMonth, lineIncFY, probability, share) {
+  const byQ = scaleMap_(bucketToQuarters(lineIncByMonth), share);
+  entry.income += l.income * share;
+  entry.incomeFY += lineIncFY * share;
+  addInto_(entry.incomeByQ, byQ);
+  if (probability !== null) addInto_(entry.weightedByQ, scaleMap_(byQ, probability));
+  if (l.start && (!entry.start || l.start < new Date(entry.start)))
+    entry.start = isoOrNull_(l.start);
+  if (l.end && (!entry.end || l.end > new Date(entry.end)))
+    entry.end = isoOrNull_(l.end);
 }
 
 /**
@@ -473,57 +580,29 @@ function buildTimeline_(budgets, actualLines, itemToMilestone, fy, now) {
     }
   });
 
-  // For General project: add contribution entries from non-General sources.
-  // Each source's net (income − cost) per month represents what flows to General.
-  budgets.forEach(function (src) {
-    if (src.projectFolder === CONFIG.GENERAL_PROJECT) return;
-
-    var monthlyInc = distributeByMonth_(src.lines, 'income');
-    var monthlyCst = distributeByMonth_(src.lines, 'cost');
-
-    // Compute monthly net = income − cost
-    var allMks = {};
-    Object.keys(monthlyInc).forEach(function (mk) { allMks[mk] = true; });
-    Object.keys(monthlyCst).forEach(function (mk) { allMks[mk] = true; });
-    var monthlyNet = {};
-    var netTotal = 0;
-    Object.keys(allMks).forEach(function (mk) {
-      monthlyNet[mk] = (monthlyInc[mk] || 0) - (monthlyCst[mk] || 0);
-      netTotal += monthlyNet[mk];
+  // General's contribution: one row per contributing source, carrying the share of that
+  // source's income its Contribution policy sends to General, from lines not already on
+  // General. One row per source rather than one row of many segments, because the
+  // planner reads each month from a single segment and overlapping sources would hide
+  // one another. Income, not cost: this used to be every source's whole margin entered
+  // as cost, which both ignored the policy and turned General's inflow into spend.
+  budgets.forEach(src => {
+    const rate = contributionRate_(src);
+    if (!rate) return;
+    const monthly = {};
+    src.lines.forEach(l => {
+      if (lineContribution_(l, rate)) addInto_(monthly, scaleMap_(distributeByMonth_([l], 'income'), rate));
     });
-
-    var sortedMks = Object.keys(allMks).sort();
-    if (!sortedMks.length) return;
-
-    var pmKey = CONFIG.GENERAL_PROJECT + '||' + src.name + ' (contribution)';
-    byProjMile[pmKey] = {
-      project: CONFIG.GENERAL_PROJECT,
-      milestone: src.name + ' (contribution)',
-      segments: [{
-        source: src.name,
-        status: src.status,
-        start: sortedMks[0],
-        end: sortedMks[sortedMks.length - 1],
-        cost: round_(netTotal),
-        monthlyCost: roundMapValues_(monthlyNet)
-      }],
-      actualExpense: 0
+    const months = Object.keys(monthly).sort();
+    if (!months.length) return;
+    const mile = contributionMilestone_(src.name);
+    const total = months.reduce((t, mk) => t + monthly[mk], 0);
+    byProjMile[CONFIG.GENERAL_PROJECT + '||' + mile] = {
+      project: CONFIG.GENERAL_PROJECT, milestone: mile, actualExpense: 0,
+      segments: [{ source: src.name, status: src.status, start: months[0],
+        end: months[months.length - 1], cost: 0, income: round_(total),
+        monthlyCost: {}, monthlyIncome: roundMapValues_(monthly) }]
     };
-  });
-
-  // Compute actual net per source for contribution entries
-  var sourceActualNet = {};
-  actualLines.forEach(function (l) {
-    if (!l.fundingSource || isArchivedSource_(l.fundingSource)) return;
-    if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
-    var pmKey = CONFIG.GENERAL_PROJECT + '||' + l.fundingSource + ' (contribution)';
-    if (!byProjMile[pmKey]) return;
-    // Income adds to contribution, expense subtracts
-    if (l.kind === 'income') {
-      byProjMile[pmKey].actualExpense += l.amount;
-    } else {
-      byProjMile[pmKey].actualExpense -= l.amount;
-    }
   });
 
   // Horizon: FY start through today + 16 months.
@@ -796,7 +875,9 @@ function buildTracking_(budgets, actualLines) {
       .forEach(map => Object.keys(map).forEach(q => (quarterSet[q] = true))));
     const quarters = Object.keys(quarterSet).sort((a, b) => quarterSortNum(a) - quarterSortNum(b));
     return { source: src.name, status: src.status, project: src.projectFolder,
-      quarters: quarters, milestones: milestones, sheetUrl: src.sheetUrl || null };
+      quarters: quarters, milestones: milestones, sheetUrl: src.sheetUrl || null,
+      // So General's tracking view can show its contribution by the same policy.
+      contributionRate: contributionRate_(src) };
   });
 }
 
@@ -862,16 +943,26 @@ function latestBudgetEnd_(budgets) {
 
 function isoOrNull_(d) { return d ? d.toISOString() : null; }
 
+/**
+ * Totals across the rows given: the whole organisation, or a project lead's projects.
+ *
+ * The gap is taken on the totals, not summed from each row's gap. Each row's gap is
+ * floored at zero, so summing them let no project's surplus offset another's shortfall.
+ * Once General receives its contribution it can end a period in surplus, and summed
+ * gaps would then report the organisation short of money that its own figures show it has.
+ */
 function orgTotals_(rows) {
   const t = { budget: 0, secured: 0, actual: 0, unsecuredGap: 0, weighted: 0,
               budgetFY: 0, securedFY: 0, actualFY: 0, unsecuredGapFY: 0, weightedFY: 0 };
-  rows.forEach(r => {
+  (rows || []).forEach(r => {
     t.budget += r.proposedBudget; t.secured += r.securedIncome;
-    t.actual += r.actualExpense; t.unsecuredGap += r.unsecuredGap;
+    t.actual += r.actualExpense;
     t.weighted += r.weightedIncome || 0; t.weightedFY += r.weightedIncomeFY || 0;
     t.budgetFY += r.proposedBudgetFY; t.securedFY += r.securedIncomeFY;
-    t.actualFY += r.actualExpenseFY; t.unsecuredGapFY += r.unsecuredGapFY;
+    t.actualFY += r.actualExpenseFY;
   });
+  t.unsecuredGap = Math.max(0, t.budget - t.secured);
+  t.unsecuredGapFY = Math.max(0, t.budgetFY - t.securedFY);
   Object.keys(t).forEach(k => (t[k] = round_(t[k])));
   return t;
 }
