@@ -818,6 +818,47 @@ function runTests() {
   check('contribution: organisation totals do not move',
     Object.keys(cMoves).reduce(function (t, k) { return t + cMoves[k]; }, 0) === 0);
 
+  // ---- aggregateBudgets_: the budget side of the Overview, reachable by a test ----
+  // It ran inline in buildSnapshot, behind Drive and Xero, so nothing could test which
+  // project is credited with which money. These pin what it does.
+  function agSrc(name, status, meta, lines) {
+    return { name: name, status: status, projectFolder: 'Spyfish Aotearoa', metadata: meta,
+      forecast: { cost: {}, income: {}, comments: {} }, lines: lines };
+  }
+  function agLine(project, mile, code, cost, income) {
+    return { project: project, milestone: mile, item: code + ' - ' + mile,
+      start: d(2026, 4, 1), end: d(2027, 3, 31), cost: cost, income: income };
+  }
+  var agBudgets = [
+    agSrc('XXX_27_A', 'secured', {}, [
+      agLine('Spyfish Aotearoa', 'M1', 'XXX_27_A_001', 6000, 10000),
+      agLine('General', 'GM', 'XXX_27_A_002', 2000, 2000)]),
+    agSrc('XXX_28_B', 'proposed', { probability: '50', 'exclusivity group': 'G' },
+      [agLine('Spyfish Aotearoa', 'M2', 'XXX_28_B_001', 5000, 8000)]),
+    agSrc('XXX_28_C', 'proposed', { probability: '30', 'exclusivity group': 'G' },
+      [agLine('Spyfish Aotearoa', 'M2', 'XXX_28_C_001', 5000, 5000)])
+  ];
+  var agReps = chooseExclusivityReps_(agBudgets);
+  var ag = aggregateBudgets_(agBudgets, fyBounds_(d(2026, 9, 26)), agReps);
+  function agSum(map) {
+    return Object.keys(map || {}).reduce(function (t, k) { return t + map[k]; }, 0);
+  }
+  check('aggregate: income is credited to each line\'s own project',
+    ag.budgetByKey['Spyfish Aotearoa||XXX_27_A||M1'].income === 10000 &&
+    ag.budgetByKey['General||XXX_27_A||GM'].income === 2000);
+  check('aggregate: item codes map to their milestone',
+    ag.itemToMilestone['XXX_27_A||XXX_27_A_001'] === 'M1');
+  var agLoser = agReps.G === 'XXX_28_B' ? 'XXX_28_C' : 'XXX_28_B';
+  check('aggregate: a competing application keeps its ask but not the work',
+    ag.budgetByKey['Spyfish Aotearoa||' + agLoser + '||M2'].budget === 0 &&
+    ag.budgetByKey['Spyfish Aotearoa||' + agLoser + '||M2'].income > 0 &&
+    ag.costSuppressed[agLoser].countedIn === agReps.G);
+  check('aggregate: expected income weights a proposal by its probability',
+    Math.abs(agSum(ag.budgetByKey['Spyfish Aotearoa||XXX_28_B||M2'].weightedByQ) - 4000) < 1);
+  check('aggregate: the project rollup totals what the entries total',
+    Math.abs(Object.keys(ag.projects).reduce(function (t, p) {
+      return t + ag.projects[p].securedIncome; }, 0) - 12000) < 1);
+
   // ---- serve-time health: staleness and the trigger ------------------------
   // Judged when a cached snapshot is served, because inside a refresh the snapshot is
   // fresh by definition and a dead trigger runs no refresh to notice itself.
