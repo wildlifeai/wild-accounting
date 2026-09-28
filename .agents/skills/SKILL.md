@@ -467,19 +467,28 @@ they are fixed.
 
 ## Overhead / General contribution
 
-Projects contribute a share of income to `General` — Spyfish 40% by default, `WW_26_SALES` 40%,
-`WW_25_TOI` split per line via its `Project` column, and most Wildlife Watcher grants nothing
-because they disallow overheads.
+Projects contribute a share of their income to `General`, at the rate each funding source
+declares in its `Contribution policy`; most Wildlife Watcher grants contribute nothing because
+they disallow overheads. The rates live in each sheet's `Funding_info`, not here, because a
+list copied into this file drifts from the sheets: `reportContributions()` prints the current
+ones.
 
-**This rule exists nowhere as data.** In the General budget it appears as quarterly negative-cost
-lines (`Overheads from projects, −$30,000`) with the split written as prose in a Comments cell
-(`Spyfish Aotearoa: $12,000 Wildlife Watcher: $18,000`, figures invented). Every quarter someone
-recomputes it;
-nothing can read it; project and General budgets drift apart.
+Until 2026-09-28 the rule existed nowhere as data. The General budget carried it as quarterly
+negative-cost lines (`Overheads from projects, −$30,000`) with the split written as prose in a
+Comments cell (`Spyfish Aotearoa: $12,000 Wildlife Watcher: $18,000`, figures invented),
+recomputed by hand every quarter, and project and General budgets drifted apart.
 
-Target state: declare a contribution policy per funding source (`none`,
-`percent_of_income: 40`, `per_line`) and **derive** the General inflow. Delete the mirrored
-negative-cost lines. Until then, treat any overhead figure as hand-maintained and verify it.
+**Derived since 2026-09-28.** Each funding source declares a `Contribution policy` (`none`,
+`percent_of_income:40`, `per_line`), and the cockpit derives General's inflow from it:
+`contributionRate_` and `lineContribution_` in `Aggregator.js` are the one statement of the
+rule, used by the Overview, the five-year plan, the planner, General's tracking view and G1.
+`percent_of_income` takes its share from lines not already on General; `per_line` derives
+nothing because its General lines are General's already. Organisation totals and runway do
+not move; only the split between projects does. `reportContributions()` in `Probe.js` is a
+dry run of the split.
+
+Any negative-cost "Overheads from projects" lines left in a General budget now count the
+overhead twice, and must be deleted.
 
 ## Double-funding
 

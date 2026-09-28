@@ -66,7 +66,7 @@ Status as at 14 August 2026. This table is the test specification: "does the coc
 | # | What | Freq | Persona | Source of truth | Today |
 |---|---|---|---|---|---|
 | 1 | Forecast reported to Board | Q | Board | Cockpit: secured + weighted pipeline, frozen | Weighting now exists: `Probability` per proposed source drives a "gap after pipeline" figure. **Freezing still does not**: `storeSnapshot_` overwrites one Drive file and the trigger runs every 6 hours, so August's number is gone by November |
-| 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | The unreadable pre-migration sheets were archived on 13 August. **The contribution rollup that feeds General its overhead from other projects still exists only in the Project planner**, not in the Overview or quarterly tracking, so those two views disagree about General |
+| 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | The unreadable pre-migration sheets were archived on 13 August. General's overhead from other projects is derived from each sheet's `Contribution policy` and shown the same way in the Overview, five-year plan, planner and General's tracking view |
 | 3 | P&L (income and expenses) | Q | Board | Xero | Derived from bank and invoices only. Payroll posts as manual journals, which **are** reachable (`GET /ManualJournals?page=1`, `LineAmount` signed) and carry Tracking, but have **no `ItemCode`**, so payroll cannot reach milestone grain |
 | 4 | Working capital balance and forecast | Q | Board, Treasurer | Xero balance sheet + deferred grants | Absent. No scope, no endpoint called |
 | 5 | Bill payments | M | Bookkeeper | Xero | Native Xero. Deliberately out of scope for the cockpit |

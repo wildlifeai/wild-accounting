@@ -118,9 +118,10 @@ const HEALTH_CATALOGUE = {
       'description, reword one: an Exclusivity group would zero one side\'s cost and ' +
       'understate the budget.' },
   G1: { severity: 'warning', category: 'Funding',
-    title: 'Secured funding exceeds the budgeted cost',
-    action: 'Either two applications for the same work both landed, in which case ' +
-      'reallocate the surplus, or income is filed against the wrong milestone.' },
+    title: 'Overhead is off its Contribution policy',
+    action: 'Above the policy: two applications for the same work both landed, income is ' +
+      'on the wrong milestone, or work is underspent. Below it: costs are eating the ' +
+      'overhead. Fix the budget or the Forecast tab, or change the policy.' },
   G2: { severity: 'info', category: 'Funding',
     title: 'Proposed source with no Probability',
     action: 'Add Probability to Funding_info (0-100). Without it this ask is left out ' +
@@ -298,17 +299,48 @@ function buildHealth(budgets, actualLines, ctx) {
       add('C7', withBase_(base, { detail: 'no "decision date"' }));
     }
 
-    // --- G1: secured income beyond the work it pays for ---
-    // Two applications for the same thing both landing is a good problem, but it has to
-    // surface or the surplus is never reallocated. The same check catches income filed
-    // against the wrong milestone, and projected revenue misfiled as secured.
-    if (b.status === 'secured') {
-      var cost = 0, income = 0;
-      (b.lines || []).forEach(l => { cost += l.cost || 0; income += l.income || 0; });
-      if (income - cost > 1) {
-        add('G1', withBase_(base, { amount: Math.round(income - cost),
-          detail: 'secured income ' + Math.round(income) + ' exceeds budgeted cost ' +
-            Math.round(cost) + ' by ' + Math.round(income - cost) }));
+    // --- G1: overhead off its Contribution policy ---
+    // A source's margin over the cost of its own work is its overhead to General, judged on
+    // the lines not already General's, as a share of their income, against the policy's
+    // rate with CONTRIBUTION_TOLERANCE either side: at 40%, anything from 30 to 50 is fine.
+    //
+    // Planned is the budget. Actual is judged two ways. While the work continues, only
+    // when spend has already taken the overhead below the band, since no restraint from
+    // then on brings it back. Once every one of those lines has ended, in both directions.
+    // The Forecast tab is deliberately not used: a lead who moves work to later quarters
+    // and leaves the old ones blank has, under the grid's blank-means-budget rule, planned
+    // it twice, and G1 would report the double count as an overrun.
+    //
+    // Above the band, two applications for the same work both landed, income is misfiled,
+    // or the work is underspent. Below it, costs are eating the overhead. G1 used to call
+    // any margin at all a surplus, so it fired on every contributing source for exactly its
+    // policy's share and taught people to ignore it.
+    if (b.status === 'secured' || b.status === 'proposed') {
+      const rate = contributionRate_(b);
+      const own = (b.lines || []).filter(l =>
+        (l.project || CONFIG.DEFAULT_PROJECT) !== CONFIG.GENERAL_PROJECT);
+      const income = own.reduce((t, l) => t + (l.income || 0), 0);
+      if (income > 0) {
+        const tol = CONFIG.CONTRIBUTION_TOLERANCE === undefined ? 0.1 :
+          CONFIG.CONTRIBUTION_TOLERANCE;
+        const planned = own.reduce((t, l) => t + (l.cost || 0), 0);
+        const actual = ownActualCost_(b, actualLines);
+        const done = !!now && own.every(l => l.end && new Date(l.end) < now);
+        const share = c => (income - c) / income;
+        const off = c => Math.abs(share(c) - rate) > tol + 1e-9;
+        const eaten = actual > income * (1 - rate + tol) + 1e-6;
+        const actualOff = eaten || (done && off(actual));
+        if (off(planned) || actualOff) {
+          const worst = actualOff ? actual : planned;
+          const pct = x => Math.round(x * 100) + '%';
+          add('G1', withBase_(base, {
+            amount: Math.round(Math.abs(share(worst) - rate) * income),
+            detail: 'overhead ' + pct(share(planned)) + ' of income planned' +
+              (done ? ', ' + pct(share(actual)) + ' actual'
+                : (eaten ? ', already ' + pct(share(actual)) + ' on spend to date' : '')) +
+              ', against a policy of ' + pct(rate) + ' (' + pct(rate - tol) + ' to ' +
+              pct(rate + tol) + ' is fine)' }));
+        }
       }
     }
 
@@ -521,6 +553,25 @@ function buildHealth(budgets, actualLines, ctx) {
 
   out.sort(healthOrder_);
   return out;
+}
+
+/**
+ * Actual spend on a source's own work: its expense lines, less those on item codes whose
+ * budget lines are all General's, which is General's work the source happens to pay for.
+ * Spend with no item code stays in: it is still this source's money.
+ */
+function ownActualCost_(b, actualLines) {
+  const byCode = {};
+  (b.lines || []).forEach(l => {
+    const code = itemCode_(l.item);
+    if (!code) return;
+    const general = (l.project || CONFIG.DEFAULT_PROJECT) === CONFIG.GENERAL_PROJECT;
+    byCode[code] = byCode[code] === undefined ? general : (byCode[code] && general);
+  });
+  return (actualLines || []).reduce((t, l) => {
+    if (l.kind !== 'expense' || clean_(l.fundingSource || '') !== b.name) return t;
+    return byCode[itemCode_(l.item)] === true ? t : t + (Number(l.amount) || 0);
+  }, 0);
 }
 
 /** One finding in the shape the panel renders, or null for an id not in the catalogue. */

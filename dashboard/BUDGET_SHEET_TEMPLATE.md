@@ -93,11 +93,16 @@ as prose into a Comments cell, which nothing can read and which drifts from the 
 | Value | Meaning |
 |---|---|
 | `none` | Project-specific grant that disallows overheads. Contributes nothing to General. |
-| `percent_of_income:40` | 40% of this source's income funds General. The cockpit derives the amount. |
-| `per_line` | The split is expressed per budget line via the `Project` column — used where some lines are General work and others are project work (e.g. `WW_25_TOI`). |
+| `percent_of_income:40` | 40% of the income on this source's lines that are not already on General funds General. The cockpit derives the amount and shows it as a `<source> (contribution)` row under General. `n` runs 0 to 100. |
+| `per_line` | The split is expressed per budget line via the `Project` column, used where some lines are General work and others are project work (e.g. `WW_25_TOI`). Nothing further is derived: those lines are General's already. |
 
-Once this field is populated, the mirrored negative-cost "Overheads from projects" lines in the
-General budget should be deleted. They are a hand-maintained duplicate of a derivable number.
+The margin a budget actually leaves need not match the policy exactly: health check G1 allows
+ten points either side, on the budget and on actual spend, so a 40% policy is satisfied by
+anything from 30 to 50.
+
+**Delete any negative-cost "Overheads from projects" lines in a General budget.** They are a
+hand-maintained copy of the derived number, and now that the cockpit derives it, keeping them
+counts General's overhead twice.
 
 ## Column definitions
 

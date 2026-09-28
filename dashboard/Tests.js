@@ -859,6 +859,154 @@ function runTests() {
     Math.abs(Object.keys(ag.projects).reduce(function (t, p) {
       return t + ag.projects[p].securedIncome; }, 0) - 12000) < 1);
 
+  // ---- deriving contribution: General's income comes from the policy ----------
+  var cBudgets = [
+    agSrc('XXX_27_P', 'secured', { 'contribution policy': 'percent_of_income:40' }, [
+      agLine('Spyfish Aotearoa', 'M1', 'XXX_27_P_001', 6000, 10000),
+      agLine('General', 'GM', 'XXX_27_P_002', 2000, 2000)]),
+    agSrc('XXX_28_Q', 'proposed', { 'contribution policy': 'percent_of_income:40',
+      probability: '50' }, [agLine('Spyfish Aotearoa', 'M3', 'XXX_28_Q_001', 3000, 5000)]),
+    agSrc('XXX_27_N', 'secured', { 'contribution policy': 'per_line' },
+      [agLine('Spyfish Aotearoa', 'M4', 'XXX_27_N_001', 4000, 4000)])
+  ];
+  var cg = aggregateBudgets_(cBudgets, fyBounds_(d(2026, 9, 26)),
+    chooseExclusivityReps_(cBudgets));
+  var cRow = cg.budgetByKey['General||XXX_27_P||' + contributionMilestone_('XXX_27_P')];
+  var qRow = cg.budgetByKey['General||XXX_28_Q||' + contributionMilestone_('XXX_28_Q')];
+  check('derive: the project keeps what its policy leaves it',
+    Math.abs(cg.budgetByKey['Spyfish Aotearoa||XXX_27_P||M1'].income - 6000) < 1e-6);
+  check('derive: General receives the rest as this source\'s contribution, as income',
+    cRow && Math.abs(cRow.income - 4000) < 1e-6 && cRow.budget === 0 &&
+    cRow.status === 'secured');
+  check('derive: a line already on General is not charged overhead',
+    cg.budgetByKey['General||XXX_27_P||GM'].income === 2000);
+  check('derive: the contribution follows the line quarter by quarter',
+    !!cRow && Math.abs(agSum(cRow.incomeByQ) - 4000) < 1 &&
+    Object.keys(cRow.incomeByQ).length === 4);
+  check('derive: a source still totals exactly what its funder gives',
+    !!cRow && Math.abs(cg.budgetByKey['Spyfish Aotearoa||XXX_27_P||M1'].income +
+      cg.budgetByKey['General||XXX_27_P||GM'].income + cRow.income - 12000) < 1e-6);
+  check('derive: an application contributes as proposed, at its probability',
+    qRow && qRow.status === 'proposed' && Math.abs(agSum(qRow.weightedByQ) - 1000) < 1);
+  check('derive: per_line and none add no contribution row',
+    !cg.budgetByKey['General||XXX_27_N||' + contributionMilestone_('XXX_27_N')]);
+  // The rollup splits a source's income by cost share, 75/25 here, and then moves the
+  // policy's share of the non-General part.
+  check('derive: the project rollup moves the same way, and totals do not',
+    Math.abs(cg.projects['General'].securedIncome - 6600) < 1e-6 &&
+    Math.abs(cg.projects['Spyfish Aotearoa'].securedIncome - 9400) < 1e-6);
+
+  // The planner: General's contribution is income, one row per contributing source.
+  var tl = buildTimeline_(cBudgets, [], {}, fyBounds_(d(2026, 9, 26)), d(2026, 9, 26));
+  var tlRow = tl.filter(function (r) {
+    return r.milestone === contributionMilestone_('XXX_27_P'); })[0];
+  check('planner: a contribution is income to General, not cost',
+    tlRow && tlRow.project === 'General' && tlRow.segments[0].cost === 0 &&
+    tlRow.segments[0].income === 4000 && tlRow.totalBudget === 0);
+  check('planner: only a percent policy gets a contribution row',
+    tl.filter(function (r) {
+      return r.milestone === contributionMilestone_('XXX_27_N'); }).length === 0);
+
+  // General's tracking view: income layers only, by each milestone's own forecast rule.
+  var tm = contributionMilestones_([
+    { source: 'XXX_27_P', contributionRate: 0.4, milestones: [
+      { project: 'Spyfish Aotearoa', incomeBaseline: { '26/27 Q1': 1000, '26/27 Q2': 1000 },
+        incomeActual: { '26/27 Q1': 900 }, incomeForecast: { '26/27 Q2': 500 } },
+      { project: 'Spyfish Aotearoa', incomeBaseline: { '26/27 Q2': 2000 },
+        incomeActual: {}, incomeForecast: {} },
+      { project: 'General', incomeBaseline: { '26/27 Q1': 9999 }, incomeActual: {},
+        incomeForecast: {} }] },
+    { source: 'XXX_27_N', contributionRate: 0, milestones: [
+      { project: 'Spyfish Aotearoa', incomeBaseline: { '26/27 Q1': 5000 } }] }
+  ]);
+  check('tracking: one contribution row per contributing source',
+    tm.length === 1 && tm[0].milestone === contributionMilestone_('XXX_27_P'));
+  check('tracking: no cost layers, so General\'s spend is not counted twice',
+    !!tm[0] && Object.keys(tm[0].baseline).length === 0 &&
+    Object.keys(tm[0].actual).length === 0 && Object.keys(tm[0].costForecast).length === 0);
+  check('tracking: the policy share of income on non-General milestones',
+    !!tm[0] && tm[0].incomeBaseline['26/27 Q1'] === 400 &&
+    tm[0].incomeBaseline['26/27 Q2'] === 1200 && tm[0].incomeActual['26/27 Q1'] === 360);
+  // One milestone's forecast must not erase another's budget in the same quarter.
+  check('tracking: forecasts fall back per milestone before they are summed',
+    !!tm[0] && tm[0].incomeForecast['26/27 Q2'] === 1000);
+
+  // G1: overhead within ten points of the policy is fine, either side.
+  function g1Line(cost, income, end) {
+    return [{ description: 'Delivery lead', milestone: 'Delivery',
+      item: 'XXX_27_GOOD_001 - Delivery', project: 'Spyfish Aotearoa', start: d(2026, 4, 1),
+      end: end || d(2027, 3, 31), cost: cost, income: income, contribution: income - cost }];
+  }
+  function g1Sheet(policy, cost, income, over) {
+    var o = { metadata: { 'contribution policy': policy }, lines: g1Line(cost, income) };
+    Object.keys(over || {}).forEach(function (k) { o[k] = over[k]; });
+    return sheet_(o);
+  }
+  function g1For(sheet, actuals) {
+    return buildHealth([sheet], actuals || [spend_(5000, '2026-07-01')],
+      { now: NOW, xeroConnected: true }).filter(function (f) { return f.id === 'G1'; })[0];
+  }
+  var P40 = 'percent_of_income:40';
+  // Mirrors SPY_27_MAINT: 55,000 of income, cost a little over half, a 40% policy.
+  check('G1 quiet for a 45% overhead against a 40% policy',
+    !g1For(g1Sheet(P40, 29984, 55000)));
+  check('G1 quiet at exactly the policy',
+    !g1For(g1Sheet(P40, 6000, 10000)));
+  check('G1 quiet at either edge of the band, 30% and 50%',
+    !g1For(g1Sheet(P40, 7000, 10000)) && !g1For(g1Sheet(P40, 5000, 10000)));
+  check('G1 fires above the band',
+    !!g1For(g1Sheet(P40, 4000, 10000)));
+  check('G1 fires below the band, when costs eat the overhead',
+    !!g1For(g1Sheet(P40, 8000, 10000)));
+  var g1Detail = g1For(g1Sheet(P40, 4000, 10000));
+  check('G1 says the planned overhead, the policy and its band, and the money off it',
+    !!g1Detail && g1Detail.detail.indexOf('60% of income planned') !== -1 &&
+    g1Detail.detail.indexOf('policy of 40% (30% to 50% is fine)') !== -1 &&
+    g1Detail.amount === 2000);
+  check('G1 still reports a margin on a source that owes no overhead',
+    !!g1For(g1Sheet('none', 6000, 10000)) && !g1For(g1Sheet('none', 9500, 10000)));
+  check('G1 covers applications as well as secured funding',
+    !!g1For(g1Sheet(P40, 4000, 10000, { status: 'proposed' })));
+  // A line already on General pays for General's work and is left out of the share.
+  check('G1 leaves General lines out of the share',
+    !g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000).concat([{
+      description: 'GM', milestone: 'GM', item: 'XXX_27_GOOD_002 - GM', project: 'General',
+      start: d(2026, 4, 1), end: d(2027, 3, 31), cost: 5000, income: 5000,
+      contribution: 0 }]) })));
+  // Actual, while the work continues: only spend that has already eaten the overhead.
+  // A 40% plan on 10,000 can absorb 7,000 of spend before it drops under 30%.
+  check('G1 quiet while spend to date leaves the overhead in the band',
+    !g1For(g1Sheet(P40, 6000, 10000), [spend_(7000, '2026-07-01')]));
+  var g1Eaten = g1For(g1Sheet(P40, 6000, 10000), [spend_(7500, '2026-07-01')]);
+  check('G1 fires once spend to date has already taken the overhead below the band',
+    !!g1Eaten && g1Eaten.detail.indexOf('already 25% on spend to date') !== -1 &&
+    g1Eaten.amount === 1500);
+  // Actual, once the work is done: both directions, because now it is final.
+  var g1Done = g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000, d(2026, 6, 30)) }),
+    [spend_(4000, '2026-06-01')]);
+  check('G1 judges the actual overhead once the work is done',
+    !!g1Done && g1Done.detail.indexOf('60% actual') !== -1);
+  check('G1 quiet when finished work lands inside the band',
+    !g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000, d(2026, 6, 30)) }),
+      [spend_(5500, '2026-06-01')]));
+  // Spend on an item whose lines are all General's is General's work, not this source's.
+  check('G1 leaves spend on General lines out of the actual',
+    !g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000).concat([{
+      description: 'GM', milestone: 'GM', item: 'XXX_27_GOOD_002 - GM', project: 'General',
+      start: d(2026, 4, 1), end: d(2027, 3, 31), cost: 9000, income: 9000,
+      contribution: 0 }]) }), [spend_(5000, '2026-07-01'),
+      spend_(9000, '2026-07-01', { item: 'XXX_27_GOOD_002 - GM', project: 'General' })]));
+
+  // The organisation's gap is taken on its totals, so one project's surplus offsets
+  // another's shortfall.
+  var ot = orgTotals_([
+    { proposedBudget: 100, securedIncome: 60, actualExpense: 0,
+      proposedBudgetFY: 100, securedIncomeFY: 60, actualExpenseFY: 0 },
+    { proposedBudget: 50, securedIncome: 80, actualExpense: 0,
+      proposedBudgetFY: 50, securedIncomeFY: 80, actualExpenseFY: 0 }]);
+  check('totals: the gap is the organisation\'s, not a sum of floored gaps',
+    ot.unsecuredGap === 10 && ot.unsecuredGapFY === 10);
+
   // ---- serve-time health: staleness and the trigger ------------------------
   // Judged when a cached snapshot is served, because inside a refresh the snapshot is
   // fresh by definition and a dead trigger runs no refresh to notice itself.

@@ -80,6 +80,9 @@ const CONFIG = {
   // receives, and the derivation would otherwise have to ignore it silently.
   CONTRIBUTION_POLICIES: [/^none$/, /^per_line$/,
     /^percent_of_income:(100(\.0+)?|\d{1,2}(\.\d+)?)$/],
+  // G1: how far a source's overhead may sit from its Contribution policy, as a share of its
+  // income, before it is reported. 0.1 is ten points either side: at 40%, 30 to 50 is fine.
+  CONTRIBUTION_TOLERANCE: 0.1,
 
   // ---- Funding_info keys read by code -------------------------------------
   // Metadata keys are lower-cased by parseFundingInfoTab_, so these are the lower-case

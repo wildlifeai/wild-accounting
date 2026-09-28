@@ -10,9 +10,11 @@
  *                       (month secured income stops covering forecast spend).
  *
  * Project-level attribution of a funding source's expense uses each project's
- * day-weighted share of that source's operating expense; income and overhead are
- * allocated by the same share. Actuals come pre-split by Xero's Projects tracking
- * category, so actual numbers are exact, not approximated.
+ * day-weighted share of that source's operating expense, and the rollup allocates income
+ * by the same share; the Overview breakdown credits income to each line's own project.
+ * General's overhead is derived from each source's Contribution policy, see
+ * contributionRate_. Actuals come pre-split by Xero's Projects tracking category, so
+ * actual numbers are exact, not approximated.
  */
 
 /**
@@ -288,28 +290,39 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
     const expenseFY = sumMonthsInFY_(fc.expenseByMonth, fy);
     const incomeFY = sumMonthsInFY_(fc.incomeByMonth, fy);
 
-    // Project-level rollups (unchanged — used for org totals cards)
+    // The share of this source's income its Contribution policy sends to General.
+    const rate = contributionRate_(src);
+
+    // Income into a project's rollup, in every form the rollup keeps. Expected income:
+    // secured counts in full, proposed at its stated probability. A proposed source with
+    // no probability contributes nothing here rather than being guessed at, and check G2
+    // asks for the number.
+    const creditIncome = (p, inc, incFY) => {
+      p.proposedIncome += inc;
+      p.proposedIncomeFY += incFY;
+      if (src.status === 'secured') {
+        p.securedIncome += inc;
+        p.securedIncomeFY += incFY;
+      }
+      if (probability !== null) {
+        p.weightedIncome += inc * probability;
+        p.weightedIncomeFY += incFY * probability;
+      }
+    };
+
+    // Project-level rollups, for the org totals and a project lead's totals. Income
+    // follows the cost share, and the policy's share of it is General's.
     Object.keys(shares).forEach(pName => {
       const share = shares[pName];
       const p = project_(pName);
-      const expTotal = fc.totalBudgetExpense * share;
+      const toGeneral = pName === CONFIG.GENERAL_PROJECT ? 0 : rate;
       const incTotal = fc.totalBudgetIncome * share;
-      const expFY = expenseFY * share;
       const incFY = incomeFY * share;
-      p.proposedBudget += expTotal * costFactor;
-      p.proposedIncome += incTotal;
-      p.proposedBudgetFY += expFY * costFactor;
-      p.proposedIncomeFY += incFY;
-      if (src.status === 'secured') {
-        p.securedIncome += incTotal;
-        p.securedIncomeFY += incFY;
-      }
-      // Expected income: secured counts in full, proposed at its stated probability. A
-      // proposed source with no probability contributes nothing here rather than being
-      // guessed at, and check G2 asks for the number.
-      if (probability !== null) {
-        p.weightedIncome += incTotal * probability;
-        p.weightedIncomeFY += incFY * probability;
+      p.proposedBudget += fc.totalBudgetExpense * share * costFactor;
+      p.proposedBudgetFY += expenseFY * share * costFactor;
+      creditIncome(p, incTotal * (1 - toGeneral), incFY * (1 - toGeneral));
+      if (toGeneral) {
+        creditIncome(project_(CONFIG.GENERAL_PROJECT), incTotal * toGeneral, incFY * toGeneral);
       }
     });
 
@@ -330,34 +343,31 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
       const lineCostFY = sumMonthsInFY_(lineCostByMonth, fy);
       const lineIncFY = sumMonthsInFY_(lineIncByMonth, fy);
 
-      if (!budgetByKey[bkey]) {
-        budgetByKey[bkey] = { budget: 0, income: 0, status: src.status,
-          budgetFY: 0, incomeFY: 0, budgetByQ: {}, incomeByQ: {}, weightedByQ: {},
-          comment: '', start: null, end: null };
-      }
-      const entry = budgetByKey[bkey];
+      const entry = budgetByKey[bkey] || (budgetByKey[bkey] = newBudgetEntry_(src.status));
       // costFactor is 0 when a competing application in the same exclusivity group carries
       // the work. The ask still shows; the work is counted once, on the representative.
       entry.budget += l.cost * costFactor;
-      entry.income += l.income;
       entry.budgetFY += lineCostFY * costFactor;
-      entry.incomeFY += lineIncFY;
       // Per-quarter as well as per-FY, so the Overview can be shown for any financial
       // year rather than only the current one. The day-weighted month buckets already
       // exist; bucketToQuarters just folds them into FY quarters.
       addInto_(entry.budgetByQ, scaleMap_(bucketToQuarters(lineCostByMonth), costFactor));
-      addInto_(entry.incomeByQ, bucketToQuarters(lineIncByMonth));
-      if (probability !== null) {
-        addInto_(entry.weightedByQ,
-                 scaleMap_(bucketToQuarters(lineIncByMonth), probability));
+
+      // The policy's share of this line's income is General's, and shows under General as
+      // this source's contribution; the project keeps the rest. lineContribution_ is what
+      // the dry run used, so what it reported is what this does.
+      const toGeneral = lineContribution_(l, rate) ? rate : 0;
+      creditLineIncome_(entry, l, lineIncByMonth, lineIncFY, probability, 1 - toGeneral);
+      if (toGeneral) {
+        const gkey = CONFIG.GENERAL_PROJECT + '||' + src.name + '||' +
+          contributionMilestone_(src.name);
+        const g = budgetByKey[gkey] || (budgetByKey[gkey] = newBudgetEntry_(src.status));
+        creditLineIncome_(g, l, lineIncByMonth, lineIncFY, probability, toGeneral);
       }
+
       if (!entry.comment && code && src.forecast && src.forecast.comments) {
         entry.comment = src.forecast.comments[code] || '';
       }
-      if (l.start && (!entry.start || l.start < new Date(entry.start)))
-        entry.start = isoOrNull_(l.start);
-      if (l.end && (!entry.end || l.end > new Date(entry.end)))
-        entry.end = isoOrNull_(l.end);
     });
 
     sourceStatus[src.name] = src.status;
@@ -379,6 +389,28 @@ function newProjectRollup_(name) {
     proposedIncome: 0, actualExpense: 0, weightedIncome: 0,
     proposedBudgetFY: 0, securedIncomeFY: 0, proposedIncomeFY: 0, actualExpenseFY: 0,
     weightedIncomeFY: 0 };
+}
+
+function newBudgetEntry_(status) {
+  return { budget: 0, income: 0, status: status, budgetFY: 0, incomeFY: 0,
+    budgetByQ: {}, incomeByQ: {}, weightedByQ: {}, comment: '', start: null, end: null };
+}
+
+/**
+ * Credit `share` of one budget line's income to an entry, in every form it keeps: total,
+ * this FY, by quarter, and expected. One function, so the part a project keeps and the
+ * part General receives cannot be computed two different ways.
+ */
+function creditLineIncome_(entry, l, lineIncByMonth, lineIncFY, probability, share) {
+  const byQ = scaleMap_(bucketToQuarters(lineIncByMonth), share);
+  entry.income += l.income * share;
+  entry.incomeFY += lineIncFY * share;
+  addInto_(entry.incomeByQ, byQ);
+  if (probability !== null) addInto_(entry.weightedByQ, scaleMap_(byQ, probability));
+  if (l.start && (!entry.start || l.start < new Date(entry.start)))
+    entry.start = isoOrNull_(l.start);
+  if (l.end && (!entry.end || l.end > new Date(entry.end)))
+    entry.end = isoOrNull_(l.end);
 }
 
 /**
@@ -548,57 +580,29 @@ function buildTimeline_(budgets, actualLines, itemToMilestone, fy, now) {
     }
   });
 
-  // For General project: add contribution entries from non-General sources.
-  // Each source's net (income − cost) per month represents what flows to General.
-  budgets.forEach(function (src) {
-    if (src.projectFolder === CONFIG.GENERAL_PROJECT) return;
-
-    var monthlyInc = distributeByMonth_(src.lines, 'income');
-    var monthlyCst = distributeByMonth_(src.lines, 'cost');
-
-    // Compute monthly net = income − cost
-    var allMks = {};
-    Object.keys(monthlyInc).forEach(function (mk) { allMks[mk] = true; });
-    Object.keys(monthlyCst).forEach(function (mk) { allMks[mk] = true; });
-    var monthlyNet = {};
-    var netTotal = 0;
-    Object.keys(allMks).forEach(function (mk) {
-      monthlyNet[mk] = (monthlyInc[mk] || 0) - (monthlyCst[mk] || 0);
-      netTotal += monthlyNet[mk];
+  // General's contribution: one row per contributing source, carrying the share of that
+  // source's income its Contribution policy sends to General, from lines not already on
+  // General. One row per source rather than one row of many segments, because the
+  // planner reads each month from a single segment and overlapping sources would hide
+  // one another. Income, not cost: this used to be every source's whole margin entered
+  // as cost, which both ignored the policy and turned General's inflow into spend.
+  budgets.forEach(src => {
+    const rate = contributionRate_(src);
+    if (!rate) return;
+    const monthly = {};
+    src.lines.forEach(l => {
+      if (lineContribution_(l, rate)) addInto_(monthly, scaleMap_(distributeByMonth_([l], 'income'), rate));
     });
-
-    var sortedMks = Object.keys(allMks).sort();
-    if (!sortedMks.length) return;
-
-    var pmKey = CONFIG.GENERAL_PROJECT + '||' + src.name + ' (contribution)';
-    byProjMile[pmKey] = {
-      project: CONFIG.GENERAL_PROJECT,
-      milestone: src.name + ' (contribution)',
-      segments: [{
-        source: src.name,
-        status: src.status,
-        start: sortedMks[0],
-        end: sortedMks[sortedMks.length - 1],
-        cost: round_(netTotal),
-        monthlyCost: roundMapValues_(monthlyNet)
-      }],
-      actualExpense: 0
+    const months = Object.keys(monthly).sort();
+    if (!months.length) return;
+    const mile = contributionMilestone_(src.name);
+    const total = months.reduce((t, mk) => t + monthly[mk], 0);
+    byProjMile[CONFIG.GENERAL_PROJECT + '||' + mile] = {
+      project: CONFIG.GENERAL_PROJECT, milestone: mile, actualExpense: 0,
+      segments: [{ source: src.name, status: src.status, start: months[0],
+        end: months[months.length - 1], cost: 0, income: round_(total),
+        monthlyCost: {}, monthlyIncome: roundMapValues_(monthly) }]
     };
-  });
-
-  // Compute actual net per source for contribution entries
-  var sourceActualNet = {};
-  actualLines.forEach(function (l) {
-    if (!l.fundingSource || isArchivedSource_(l.fundingSource)) return;
-    if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
-    var pmKey = CONFIG.GENERAL_PROJECT + '||' + l.fundingSource + ' (contribution)';
-    if (!byProjMile[pmKey]) return;
-    // Income adds to contribution, expense subtracts
-    if (l.kind === 'income') {
-      byProjMile[pmKey].actualExpense += l.amount;
-    } else {
-      byProjMile[pmKey].actualExpense -= l.amount;
-    }
   });
 
   // Horizon: FY start through today + 16 months.
@@ -871,7 +875,9 @@ function buildTracking_(budgets, actualLines) {
       .forEach(map => Object.keys(map).forEach(q => (quarterSet[q] = true))));
     const quarters = Object.keys(quarterSet).sort((a, b) => quarterSortNum(a) - quarterSortNum(b));
     return { source: src.name, status: src.status, project: src.projectFolder,
-      quarters: quarters, milestones: milestones, sheetUrl: src.sheetUrl || null };
+      quarters: quarters, milestones: milestones, sheetUrl: src.sheetUrl || null,
+      // So General's tracking view can show its contribution by the same policy.
+      contributionRate: contributionRate_(src) };
   });
 }
 
@@ -937,16 +943,26 @@ function latestBudgetEnd_(budgets) {
 
 function isoOrNull_(d) { return d ? d.toISOString() : null; }
 
+/**
+ * Totals across the rows given: the whole organisation, or a project lead's projects.
+ *
+ * The gap is taken on the totals, not summed from each row's gap. Each row's gap is
+ * floored at zero, so summing them let no project's surplus offset another's shortfall.
+ * Once General receives its contribution it can end a period in surplus, and summed
+ * gaps would then report the organisation short of money that its own figures show it has.
+ */
 function orgTotals_(rows) {
   const t = { budget: 0, secured: 0, actual: 0, unsecuredGap: 0, weighted: 0,
               budgetFY: 0, securedFY: 0, actualFY: 0, unsecuredGapFY: 0, weightedFY: 0 };
-  rows.forEach(r => {
+  (rows || []).forEach(r => {
     t.budget += r.proposedBudget; t.secured += r.securedIncome;
-    t.actual += r.actualExpense; t.unsecuredGap += r.unsecuredGap;
+    t.actual += r.actualExpense;
     t.weighted += r.weightedIncome || 0; t.weightedFY += r.weightedIncomeFY || 0;
     t.budgetFY += r.proposedBudgetFY; t.securedFY += r.securedIncomeFY;
-    t.actualFY += r.actualExpenseFY; t.unsecuredGapFY += r.unsecuredGapFY;
+    t.actualFY += r.actualExpenseFY;
   });
+  t.unsecuredGap = Math.max(0, t.budget - t.secured);
+  t.unsecuredGapFY = Math.max(0, t.budgetFY - t.securedFY);
   Object.keys(t).forEach(k => (t[k] = round_(t[k])));
   return t;
 }

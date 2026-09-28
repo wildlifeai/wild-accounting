@@ -65,6 +65,7 @@ Drive and Xero, not the dashboard.
 | Budget (Cost / Income per milestone) | The funding source's **`Budget` tab** | Budgets GDrive |
 | Secured vs proposed | Which **folder** the budget sits in (`secured/` vs `proposed/`) | Budgets GDrive |
 | Which project a line counts toward | The optional **`Project` column** on the `Budget` tab; blank = the budget's parent project folder | Budgets GDrive |
+| General's overhead from other projects, the `(contribution)` rows under General | Each sheet's **`Contribution policy`**: `percent_of_income:40` sends 40% of that source's income to General | `Funding_info` tab |
 | Actual spent | **Xero transactions**, split by the *Projects* and *Funding source* tracking categories | Xero |
 | Milestone-level actuals | The **product/service** code on each Xero transaction (`WW_25_TOI_002` etc.) | Xero |
 

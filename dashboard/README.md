@@ -204,8 +204,12 @@ GM's URL stays the same.
   chart-of-accounts. Columns read: `Start, End, Cost, Income, Contribution, Milestone,
   Xero Inventory Item` (+ optional `Project`). Matching is case-insensitive/trimmed and
   strips stray zero-width spaces. Forecast spend = day-weighted `Cost`; secured income =
-  day-weighted `Income`. `Contribution` (= Income − Cost) is the margin funding
-  General/overhead and is already inside `Income`, so it is not double-counted.
+  day-weighted `Income`. What General receives is decided by each sheet's
+  `Contribution policy`, not by the `Contribution` column: `percent_of_income:<n>` moves
+  that share of the income on lines not already on General into a
+  `<source> (contribution)` row under General, in the Overview, five-year plan, planner
+  and General's tracking view alike. The `Contribution` column (= Income − Cost) is the
+  sheet's own arithmetic, checked by B5, and G1 reports any margin beyond the policy.
   (The account-based overhead/grant-recognition logic from
   `create_xero_budget_project.js` does not apply here — that script reads a different,
   account-keyed sheet.)

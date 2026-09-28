@@ -125,7 +125,7 @@ duplication you *did* declare, via `Exclusivity group`.
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
-| G1 | warning | A `secured` source's income exceeds its budgeted cost | Two applications for the same work both landed, so reallocate the surplus, or income is filed against the wrong milestone. Also catches projected revenue misfiled as secured, which is the live `WW_26_SALES` case. |
+| G1 | warning | A source's overhead, its margin over the cost of its own work as a share of the income on lines not already General's, is more than `CONTRIBUTION_TOLERANCE` (10 points) from its `Contribution policy` | At 40%, anything from 30 to 50 is fine. Judged on the budget; on actual spend while work continues only once it has already taken the overhead below the band; and on actual spend in both directions once every one of those lines has ended. The Forecast tab is deliberately not used: work moved to later quarters with the old ones left blank is, under the grid's blank-means-budget rule, planned twice. Above the band: two applications for the same work both landed, income is on the wrong milestone, or work is underspent. Below it: costs are eating the overhead. Secured and proposed sources both, so an application's budget is checked before it goes in. |
 | G2 | info | A `proposed` source with no `Probability` in `Funding_info` | That ask is left out of expected income entirely rather than guessed at. "Unknown" is deliberately not "zero". |
 | G3 | info | Cost suppressed because a competing application in the same `Exclusivity group` carries it | Expected, and reported so the suppression is never invisible arithmetic. Remove the group value if these are genuinely separate work. |
 
