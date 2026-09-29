@@ -49,6 +49,10 @@ const HEALTH_CATALOGUE = {
     title: 'Two forecast rows share one label',
     action: 'Usually a sorted Budget tab: the label formulas now point at the ' +
       'wrong lines. Re-point them and do not sort the Budget tab.' },
+  A12: { severity: 'warning', category: 'Sheet structure',
+    title: 'Negative amount on the Forecast tab',
+    action: 'Enter costs and income as positive amounts. A negative cost is read as ' +
+      'money coming in, so it lowers spend instead of adding to it.' },
   A11: { severity: 'warning', category: 'Sheet structure',
     title: 'Cost forecast with no income forecast',
     action: 'Fill in the milestone\'s Revenue row on the Forecast tab. Until then its ' +

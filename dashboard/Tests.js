@@ -1171,6 +1171,22 @@ function runTests() {
   check('A11: quiet for a milestone that budgets no income',
     a11For(costOnly, [ml('Cost only', d(2026, 8, 1), d(2026, 9, 1), 500, 0, 'SPY_27_HAN_001', 'Dashboard')]).length === 0);
 
+  // A12: a minus sign on the Forecast tab, as WW_26_SALES had on its costs.
+  var negGrid = [
+    ['Expenses'].concat(hdr),
+    ['Dashboard', '', -1500, -1500, 6067, ''],
+    ['Machine learning models', '', 0, 4200, '', '']
+  ];
+  var negSs = { getUrl: function () { return 'u'; },
+    getSheetByName: function () { return { getDataRange: function () {
+      return { getValues: function () { return negGrid; } }; } }; } };
+  var negIssues = parseForecastTab_(negSs, mLines).issues.filter(function (x) { return x.check === 'A12'; });
+  check('A12: a negative Forecast entry is named, with its row and quarters',
+    negIssues.length === 1 && negIssues[0].row === 2 &&
+    /26\/27 Q3, 26\/27 Q4/.test(negIssues[0].detail));
+  check('A12: a 0 is not negative',
+    !negIssues.some(function (x) { return /Machine learning/.test(x.detail); }));
+
   Logger.log(results.join('\n'));
   return results;
 }
