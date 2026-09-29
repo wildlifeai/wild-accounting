@@ -1,212 +1,144 @@
 /**
- * Probe.js — one-off, READ-ONLY diagnostics. Delete once the questions are answered.
+ * Probe.js
+ * Read-only diagnostics, run by hand from the Apps Script editor. Nothing in a refresh
+ * calls them, and none of them writes to Drive, the snapshot or Xero.
  *
- * Answers, in one run each:
- *   probeManualJournals()  – is the scope enough? does paging return JournalLines?
- *                            do payroll journal lines carry Projects + Funding source?
- *                            does the milestone survive via codeFromDescription_?
- *   probePayrollSources()  – is salary spend arriving as journals, or as bank
- *                            payments / bills (which the cockpit ALREADY sees)?
+ *   reportContributions()  – what deriving General's overhead from each sheet's
+ *                            Contribution policy moves between projects.
+ *   reportForecastPlan()   – what planning from each sheet's Forecast tab, instead of
+ *                            the Budget tab's dates, moves on the Overview and runway.
  *
- * Both make GET calls only. Nothing in Xero or Drive is modified.
+ * One-off probes are deleted once their question is answered. The two that asked whether
+ * payroll reached the cockpit went on 2026-09-29: payroll posts as Xero Payroll bills,
+ * which the cockpit already reads, and a live refresh showed every line tagged.
  */
 
-// Accounts that carry labour cost. Codes, not labels, so a Xero rename can't hide them.
-const PROBE_LABOUR_CODES = ['477', '478', '410'];
 
-// How many pages to walk before giving up (guards the 6-minute Apps Script limit).
-const PROBE_MAX_PAGES = 10;
-
-
-/** MAIN PROBE — run this first. */
-function probeManualJournals() {
+/**
+ * DRY RUN: what deriving General's overhead from each sheet's Contribution policy would
+ * move between projects on the Overview. Reads the budget sheets the way a refresh does
+ * and changes nothing: not the snapshot, not a sheet, not Xero. Drive only, no Xero call.
+ */
+function reportContributions() {
   const out = [];
   const say = (s) => { out.push(s); Logger.log(s); };
+  const money = n => (n < 0 ? '-' : '') + Math.round(Math.abs(n)).toLocaleString('en-NZ');
+  const pad = (s, w) => { s = String(s); while (s.length < w) s += ' '; return s + ' '; };
 
-  say('==================== MANUAL JOURNAL PROBE ====================');
+  say('==================== CONTRIBUTION DRY RUN ====================');
+  say('Nothing is changed. Organisation totals and runway do not move; only the split');
+  say('of income between projects does.');
 
-  if (!isXeroConnected()) {
-    say('NOT CONNECTED. Run logXeroAuthUrl(), open the URL, then re-run.');
-    return out.join('\n');
-  }
-  say('Connected. Tenant id: ' + getXeroTenantId());
+  const r = contributionMoves_(readAllBudgets());
+  const valid = p => (CONFIG.CONTRIBUTION_POLICIES || []).some(re => re.test(normalisePolicy_(p)));
 
-  // ---- [1] Scope, and what an UNPAGED call returns -------------------------
-  let unpaged;
-  try {
-    unpaged = xeroGet_('/ManualJournals');
-    say('\n[1] SCOPE OK — GET /ManualJournals succeeded with the current scope.');
-    say('    No scope change, no re-consent needed.');
-  } catch (e) {
-    say('\n[1] SCOPE FAILED — ' + e.message);
-    say('    A 403 here means CONFIG.XERO.SCOPE needs accounting.manualjournals.read,');
-    say('    then resetXeroConnection() + logXeroAuthUrl() + re-consent as the deploying user.');
-    return out.join('\n');
-  }
-  const unpagedRows = unpaged.ManualJournals || [];
-  const unpagedHasLines = unpagedRows.length > 0 &&
-    Object.prototype.hasOwnProperty.call(unpagedRows[0], 'JournalLines');
-  say('    Unpaged returned ' + unpagedRows.length + ' journals; JournalLines key present: ' +
-      (unpagedHasLines ? 'YES' : 'NO'));
-
-  // ---- [2] The load-bearing question: does ?page=1 return lines? -----------
-  const paged = xeroGet_('/ManualJournals', { page: 1 });
-  const rows = paged.ManualJournals || [];
-  say('\n[2] PAGED (?page=1) returned ' + rows.length + ' journals.');
-  say('    pagination: ' + (paged.pagination ? JSON.stringify(paged.pagination) : 'ABSENT'));
-  const withLines = rows.filter(j => (j.JournalLines || []).length > 0).length;
-  say('    journals with populated JournalLines: ' + withLines + ' of ' + rows.length);
-  if (withLines === 0) {
-    say('    >>> VERDICT: paging does NOT return lines on this tenant.');
-    say('    >>> fetchManualJournalLines_ must do list-then-detail (N+1) or use /Journals.');
-  } else {
-    say('    >>> VERDICT: paging DOES return lines. A single-pass fetcher works.');
-  }
-
-  // ---- [3] Which statuses come back --------------------------------------
-  const statuses = {};
-  rows.forEach(j => { statuses[j.Status] = (statuses[j.Status] || 0) + 1; });
-  say('\n[3] STATUSES on page 1: ' + JSON.stringify(statuses));
-  say('    Anything other than POSTED confirms the fetcher needs a POSTED whitelist.');
-
-  // ---- [4] Line-level anatomy of the most recent POSTED journals ----------
-  const posted = rows
-    .filter(j => j.Status === 'POSTED' && (j.JournalLines || []).length > 0)
-    .sort((a, b) => (parseXeroDate_(b.Date) || 0) - (parseXeroDate_(a.Date) || 0))
-    .slice(0, 3);
-
-  say('\n[4] LINE ANATOMY — ' + posted.length + ' most recent POSTED journals');
-
-  const excluded = {};
-  (CONFIG.EXCLUDED_ACCOUNTS || []).forEach(a => { excluded[a] = true; });
-  let nLines = 0, nProj = 0, nFund = 0, nMilestone = 0, nNegative = 0, nItemField = 0;
-
-  posted.forEach((j, idx) => {
-    const d = parseXeroDate_(j.Date);
-    say('\n  --- [' + (idx + 1) + '] ' + (d ? Utilities.formatDate(d, 'UTC', 'yyyy-MM-dd') : '?') +
-        ' | ' + (j.Narration || '(no narration)') + ' ---');
-    (j.JournalLines || []).forEach(jl => {
-      nLines++;
-      const label = accountLabelFromCode_(jl.AccountCode);
-      const proj  = trackingValue_(jl.Tracking, CONFIG.XERO.PROJECT_TRACKING_CATEGORY);
-      const fund  = trackingValue_(jl.Tracking, CONFIG.XERO.FUNDING_TRACKING_CATEGORY);
-      const code  = codeFromDescription_(jl.Description);
-      const amt   = Number(jl.LineAmount);
-      if (proj) nProj++;
-      if (fund) nFund++;
-      if (code) nMilestone++;
-      if (amt < 0) nNegative++;
-      const hasItem = Object.prototype.hasOwnProperty.call(jl, 'Item') ||
-                      Object.prototype.hasOwnProperty.call(jl, 'ItemCode');
-      if (hasItem) nItemField++;
-
-      say('   ' + (amt >= 0 ? 'DR' : 'CR') + ' ' + amt +
-          '  ' + (label || '(no account)') + (excluded[label] ? '   <-- on EXCLUDED_ACCOUNTS' : ''));
-      say('        description : "' + (jl.Description || '') + '"');
-      say('        milestone   : ' + (code || 'NONE (codeFromDescription_ did not match)'));
-      say('        Projects    : ' + (proj || '*** MISSING ***'));
-      say('        Funding src : ' + (fund || '*** MISSING ***'));
-      say('        Tracking raw: ' + JSON.stringify(jl.Tracking || []));
-      if (hasItem) say('        !!! Item/ItemCode field present: ' +
-                       JSON.stringify(jl.Item !== undefined ? jl.Item : jl.ItemCode));
-    });
+  say('\nPer source:');
+  r.sources.forEach(s => {
+    let what;
+    if (s.rate) {
+      what = Math.round(s.rate * 1000) / 10 + '% of income on non-General lines, ' +
+        money(s.toGeneral) + ' to General';
+    } else if (!s.policy) {
+      what = 'nothing derived: no policy set (C6)';
+    } else if (!valid(s.policy)) {
+      what = 'nothing derived: not a policy the code understands (C6)';
+    } else if (normalisePolicy_(s.policy) === 'per_line') {
+      what = 'nothing derived: its General lines are already on General';
+    } else {
+      what = 'nothing derived';
+    }
+    say('  ' + pad(s.name, 14) + pad(s.status, 9) + pad('"' + s.policy + '"', 24) + what);
   });
 
-  // ---- [5] Verdicts -------------------------------------------------------
-  say('\n[5] VERDICTS over ' + nLines + ' sampled lines');
-  say('    with Projects tracking      : ' + nProj + '/' + nLines);
-  say('    with Funding source tracking: ' + nFund + '/' + nLines);
-  say('    with parseable milestone    : ' + nMilestone + '/' + nLines);
-  say('    negative (credit) amounts   : ' + nNegative + '/' + nLines +
-      (nNegative ? '   -> signed amounts confirmed; do NOT Math.abs()' : ''));
-  say('    lines exposing an Item field: ' + nItemField + '/' + nLines +
-      (nItemField === 0 ? '   -> confirms milestone must come from the description' : ''));
-
-  if (nLines > 0 && nProj < nLines) {
-    say('\n    ACTION: lines without Projects tracking are DROPPED at Aggregator.js:96.');
-  }
-  if (nLines > 0 && nMilestone < nLines) {
-    say('    ACTION: prefix each line description with "<CODE> - " e.g.');
-    say('            "WW_25_TOI_002 - Salaries, <name>"  (pattern: XX_25_YYY_001)');
-  }
+  say('\nIncome moved, by status and project:');
+  const keys = Object.keys(r.moves).sort();
+  if (!keys.length) say('  none: no sheet has a percent_of_income policy');
+  keys.forEach(k => {
+    const p = k.split('||');
+    say('  ' + pad(p[0], 9) + pad(p[1], 20) + (r.moves[k] > 0 ? '+' : '') + money(r.moves[k]));
+  });
   return out.join('\n');
 }
 
 
 /**
- * SECOND PROBE — settles where salary cost is actually coming from.
- * Compares labour spend the cockpit ALREADY sees (bank + invoices) against
- * labour spend sitting in manual journals it currently ignores.
- *
- * @param {string=} sinceISO e.g. '2026-01-01'. Defaults to 1 Apr of the current FY.
+ * DRY RUN: what planning from each sheet's Forecast tab would move, against the Budget
+ * tab's dates used today (CONFIG.PLAN_FROM_FORECAST). Reads the budget sheets the way a
+ * refresh does and, when Xero is connected, the actuals for runway. Changes nothing: not
+ * the snapshot, not a sheet, not Xero.
  */
-function probePayrollSources(sinceISO) {
+function reportForecastPlan() {
   const out = [];
   const say = (s) => { out.push(s); Logger.log(s); };
+  const money = n => (n < 0 ? '-' : '') + Math.round(Math.abs(n)).toLocaleString('en-NZ');
+  const pad = (s, w) => { s = String(s); while (s.length < w) s += ' '; return s + ' '; };
+  const lpad = (s, w) => { s = String(s); while (s.length < w) s = ' ' + s; return s + ' '; };
 
-  if (!isXeroConnected()) { say('NOT CONNECTED.'); return out.join('\n'); }
+  const now = new Date();
+  const fy = fyBounds_(now);
+  const next = fyBounds_(new Date(fy.end.getFullYear(), fy.end.getMonth() + 1, 1));
+  setArchivedSourceNames_(readArchivedSourceNames());
+  const budgets = readAllBudgets();
+  const planned = planBudgets_(budgets);
+  const reps = chooseExclusivityReps_(budgets);
 
-  const since = sinceISO ? new Date(sinceISO) : new Date(new Date().getFullYear(), 3, 1);
-  say('==================== PAYROLL SOURCE PROBE ====================');
-  say('Window: everything modified since ' + Utilities.formatDate(since, 'UTC', 'yyyy-MM-dd'));
+  say('==================== FORECAST PLAN DRY RUN ====================');
+  say('Nothing is changed. "budget" is what the cockpit shows today, from the Budget tab');
+  say('dates; "plan" is the Forecast tab where a row has an entry, its blanks then 0.');
 
-  const labour = {};
-  PROBE_LABOUR_CODES.forEach(c => { labour[accountLabelFromCode_(c)] = c; });
-  say('Labour accounts watched: ' + Object.keys(labour).join(', '));
-
-  // --- what the cockpit sees today (bank transactions + invoices) ---
-  const seen = fetchXeroActuals(since);
-  let seenTotal = 0, seenCount = 0;
-  seen.forEach(l => {
-    if (labour[l.account] && l.kind === 'expense') { seenTotal += l.amount; seenCount++; }
-  });
-  say('\n[A] ALREADY VISIBLE via bank + invoices:');
-  say('    ' + seenCount + ' lines, total ' + seenTotal.toFixed(2));
-
-  // --- what is sitting in manual journals ---
-  let mjTotal = 0, mjCount = 0, mjNoProject = 0, mjNoMilestone = 0, page = 1, journals = 0;
-  const byAccount = {};
-  while (page <= PROBE_MAX_PAGES) {
-    const data = xeroGet_('/ManualJournals', { page: page });
-    const rows = data.ManualJournals || [];
-    if (!rows.length) break;
-    rows.forEach(j => {
-      journals++;
-      if (j.Status !== 'POSTED') return;
-      (j.JournalLines || []).forEach(jl => {
-        const label = accountLabelFromCode_(jl.AccountCode);
-        if (!labour[label]) return;
-        const amt = Number(jl.LineAmount) || 0;
-        mjTotal += amt;
-        mjCount++;
-        byAccount[label] = (byAccount[label] || 0) + amt;
-        if (!trackingValue_(jl.Tracking, CONFIG.XERO.PROJECT_TRACKING_CATEGORY)) mjNoProject++;
-        if (!codeFromDescription_(jl.Description)) mjNoMilestone++;
-      });
+  const fyOf = (lines, kind, b) => sumMonthsInFY_(distributeByMonth_(lines, kind), b);
+  const total = (lines, kind) => lines.reduce((t, l) => t + (Number(l[kind]) || 0), 0);
+  say('\nPer source that moves (' + fy.label + ' and ' + next.label + ', then all time):');
+  say('  ' + pad('source', 14) + pad('', 7) + lpad(fy.label + ' budget', 13) +
+    lpad('plan', 9) + lpad(next.label + ' budget', 13) + lpad('plan', 9) +
+    lpad('all budget', 11) + lpad('plan', 9));
+  let moved = 0;
+  budgets.forEach((b, i) => {
+    const p = planned[i];
+    ['cost', 'income'].forEach(kind => {
+      const v = [fyOf(b.lines, kind, fy), fyOf(p.lines, kind, fy),
+        fyOf(b.lines, kind, next), fyOf(p.lines, kind, next),
+        total(b.lines, kind), total(p.lines, kind)];
+      if (Math.abs(v[0] - v[1]) < 1 && Math.abs(v[2] - v[3]) < 1 && Math.abs(v[4] - v[5]) < 1) return;
+      moved++;
+      say('  ' + pad(b.name, 14) + pad(kind, 7) + lpad(money(v[0]), 13) + lpad(money(v[1]), 9) +
+        lpad(money(v[2]), 13) + lpad(money(v[3]), 9) + lpad(money(v[4]), 11) + lpad(money(v[5]), 9));
     });
-    if (rows.length < 100) break;
-    page++;
-  }
+  });
+  if (!moved) say('  none: no Forecast tab changes any figure');
 
-  say('\n[B] IN MANUAL JOURNALS (currently ignored by the cockpit):');
-  say('    scanned ' + journals + ' journals across ' + page + ' page(s)');
-  say('    ' + mjCount + ' labour lines, net total ' + mjTotal.toFixed(2));
-  Object.keys(byAccount).forEach(k => say('      ' + k + ': ' + byAccount[k].toFixed(2)));
-  say('    lines missing Projects tracking : ' + mjNoProject + '/' + mjCount);
-  say('    lines missing a milestone code  : ' + mjNoMilestone + '/' + mjCount);
+  const cards = (bs) => {
+    const agg = aggregateBudgets_(bs, fy, reps);
+    const t = { cost: 0, secured: 0, weighted: 0 };
+    Object.keys(agg.projects).forEach(k => {
+      const r = agg.projects[k];
+      t.cost += r.proposedBudgetFY; t.secured += r.securedIncomeFY; t.weighted += r.weightedIncomeFY;
+    });
+    return t;
+  };
+  const a = cards(budgets), z = cards(planned);
+  say('\nOverview cards, ' + fy.label + ' (budget -> plan):');
+  say('  forecast budget   ' + money(a.cost) + ' -> ' + money(z.cost));
+  say('  secured funding   ' + money(a.secured) + ' -> ' + money(z.secured));
+  say('  expected income   ' + money(a.weighted) + ' -> ' + money(z.weighted));
+  say('  secured minus cost ' + money(a.secured - a.cost) + ' -> ' + money(z.secured - z.cost));
 
-  say('\n[C] READ THIS AS:');
-  if (mjCount === 0) {
-    say('    No labour cost in manual journals. Payroll is reaching the cockpit already');
-    say('    via bank/bills — the journal gap is PROSPECTIVE, and wiring up');
-    say('    EXCLUDED_ACCOUNTS is the more urgent fix.');
-  } else if (Math.abs(mjTotal) < 1) {
-    say('    Journal labour lines net to ~zero — these are accruals and their reversals,');
-    say('    not pay runs. Preserve signs so they keep netting to zero.');
-    say('    Payroll itself is arriving via bank/bills.');
+  if (isXeroConnected()) {
+    const actual = fetchXeroActuals(earliestBudgetStart_(budgets));
+    const ra = buildRunway_(budgets, actual, now, reps), rz = buildRunway_(planned, actual, now, reps);
+    const when = r => ['secured', 'weighted', 'proposed'].map(k =>
+      k + ' ' + (r.crossover[k] || 'none')).join(', ');
+    say('\nRunway, first month short (budget -> plan):');
+    say('  budget: ' + when(ra));
+    say('  plan:   ' + when(rz));
   } else {
-    say('    ' + mjTotal.toFixed(2) + ' of labour cost is invisible to the dashboard today.');
-    say('    Compare against [A]: that is the scale of the understatement.');
+    say('\nRunway not compared: Xero is not connected.');
   }
+
+  const a11 = buildHealth(budgets.map(b => Object.assign({}, b, {
+    forecast: ownedForecast_(b.forecast) })), [], {}).filter(f => f.id === 'A11');
+  say('\nMilestones with a cost forecast and no income forecast (A11):');
+  if (!a11.length) say('  none');
+  a11.forEach(f => say('  ' + pad(f.fundingSource, 14) + f.detail));
   return out.join('\n');
 }

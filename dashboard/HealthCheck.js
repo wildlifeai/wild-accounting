@@ -8,7 +8,7 @@
  * every total without trace. Every finding here states what is wrong, where, who
  * owns it and what to do.
  *
- * Check ids and severities match dashboard/HEALTH_CHECKS.md.
+ * Check ids and severities match docs/HEALTH_CHECKS.md.
  *   error   - a number on the dashboard is wrong right now
  *   warning - a number may be wrong, or will be soon
  *   info    - hygiene; nothing is wrong yet
@@ -49,6 +49,14 @@ const HEALTH_CATALOGUE = {
     title: 'Two forecast rows share one label',
     action: 'Usually a sorted Budget tab: the label formulas now point at the ' +
       'wrong lines. Re-point them and do not sort the Budget tab.' },
+  A12: { severity: 'warning', category: 'Sheet structure',
+    title: 'Negative amount on the Forecast tab',
+    action: 'Enter costs and income as positive amounts. A negative cost is read as ' +
+      'money coming in, so it lowers spend instead of adding to it.' },
+  A11: { severity: 'warning', category: 'Sheet structure',
+    title: 'Cost forecast with no income forecast',
+    action: 'Fill in the milestone\'s Revenue row on the Forecast tab. Until then its ' +
+      'income keeps the Budget tab\'s timing while its cost follows the forecast.' },
   B1: { severity: 'warning', category: 'Data quality',
     title: 'Lines skipped as empty',
     action: 'Set Cost/Income deliberately, or delete the row.' },
@@ -94,8 +102,9 @@ const HEALTH_CATALOGUE = {
     title: 'Actuals coded to a funding source with no budget sheet',
     action: 'Either the sheet is missing, or the Xero tag is a typo.' },
   D5: { severity: 'warning', category: 'Xero coding',
-    title: 'Secured grant under way with no actuals at all',
-    action: 'Nothing is being coded to it. Usually a missing or misspelt Xero tag.' },
+    title: 'Spend was expected, nothing is coded',
+    action: 'Usually a missing or misspelt Xero tag. If the work has slipped, enter 0 ' +
+      'for those quarters on the Forecast tab.' },
   D6: { severity: 'error', category: 'Xero coding',
     title: 'Actuals dated after the grant ended',
     action: 'Almost always a stale repeating journal or template still pointing here.' },
@@ -104,7 +113,8 @@ const HEALTH_CATALOGUE = {
     action: 'Re-budget, or explain the overspend to the funder.' },
   E2: { severity: 'warning', category: 'Reconciliation',
     title: 'Underspend risk',
-    action: 'Funders care about underspend as much as overspend. Re-profile or spend.' },
+    action: 'Funders care about underspend as much as overspend. If the work has ' +
+      'slipped, move it to later quarters on the Forecast tab; otherwise re-profile or spend.' },
   E3: { severity: 'error', category: 'Reconciliation',
     title: 'Same item code in two funding sources',
     action: 'One cost is billed to two funders. Item codes are {SOURCE}_{NNN} for a reason.' },
@@ -116,9 +126,10 @@ const HEALTH_CATALOGUE = {
       'description, reword one: an Exclusivity group would zero one side\'s cost and ' +
       'understate the budget.' },
   G1: { severity: 'warning', category: 'Funding',
-    title: 'Secured funding exceeds the budgeted cost',
-    action: 'Either two applications for the same work both landed, in which case ' +
-      'reallocate the surplus, or income is filed against the wrong milestone.' },
+    title: 'Overhead is off its Contribution policy',
+    action: 'Above the policy: two applications for the same work both landed, income is ' +
+      'on the wrong milestone, or work is underspent. Below it: costs are eating the ' +
+      'overhead. Fix the budget or the Forecast tab, or change the policy.' },
   G2: { severity: 'info', category: 'Funding',
     title: 'Proposed source with no Probability',
     action: 'Add Probability to Funding_info (0-100). Without it this ask is left out ' +
@@ -235,6 +246,24 @@ function buildHealth(budgets, actualLines, ctx) {
       }
     });
 
+    // --- A11: cost forecast with no income forecast beside it ---
+    // A forecast moves a milestone's spend; with nothing on its Revenue row the income
+    // keeps the Budget tab's timing, and the two drift apart on every view that plans.
+    const incomeBudget = {};
+    (b.lines || []).forEach(l => {
+      const code = itemCode_(l.item);
+      if (code) incomeBudget[code] = (incomeBudget[code] || 0) + (Number(l.income) || 0);
+    });
+    const hasEntry = (map, code) => Object.keys(map || {}).some(k => k.split('||')[0] === code);
+    const fc = b.forecast || {};
+    const noIncome = Object.keys(incomeBudget).filter(code => incomeBudget[code] > 0 &&
+      hasEntry(fc.cost, code) && !hasEntry(fc.income, code)).sort();
+    if (noIncome.length) {
+      add('A11', withBase_(base, {
+        amount: Math.round(noIncome.reduce((t, c) => t + incomeBudget[c], 0)),
+        detail: noIncome.join(', ') + ' forecast cost but no income' }));
+    }
+
     // --- B5: contribution arithmetic ---
     var b5 = 0;
     (b.lines || []).forEach(l => {
@@ -296,17 +325,48 @@ function buildHealth(budgets, actualLines, ctx) {
       add('C7', withBase_(base, { detail: 'no "decision date"' }));
     }
 
-    // --- G1: secured income beyond the work it pays for ---
-    // Two applications for the same thing both landing is a good problem, but it has to
-    // surface or the surplus is never reallocated. The same check catches income filed
-    // against the wrong milestone, and projected revenue misfiled as secured.
-    if (b.status === 'secured') {
-      var cost = 0, income = 0;
-      (b.lines || []).forEach(l => { cost += l.cost || 0; income += l.income || 0; });
-      if (income - cost > 1) {
-        add('G1', withBase_(base, { amount: Math.round(income - cost),
-          detail: 'secured income ' + Math.round(income) + ' exceeds budgeted cost ' +
-            Math.round(cost) + ' by ' + Math.round(income - cost) }));
+    // --- G1: overhead off its Contribution policy ---
+    // A source's margin over the cost of its own work is its overhead to General, judged on
+    // the lines not already General's, as a share of their income, against the policy's
+    // rate with CONTRIBUTION_TOLERANCE either side: at 40%, anything from 30 to 50 is fine.
+    //
+    // Planned is the budget. Actual is judged two ways. While the work continues, only
+    // when spend has already taken the overhead below the band, since no restraint from
+    // then on brings it back. Once every one of those lines has ended, in both directions.
+    // The Forecast tab is deliberately not used: a lead who moves work to later quarters
+    // and leaves the old ones blank has, under the grid's blank-means-budget rule, planned
+    // it twice, and G1 would report the double count as an overrun.
+    //
+    // Above the band, two applications for the same work both landed, income is misfiled,
+    // or the work is underspent. Below it, costs are eating the overhead. G1 used to call
+    // any margin at all a surplus, so it fired on every contributing source for exactly its
+    // policy's share and taught people to ignore it.
+    if (b.status === 'secured' || b.status === 'proposed') {
+      const rate = contributionRate_(b);
+      const own = (b.lines || []).filter(l =>
+        (l.project || CONFIG.DEFAULT_PROJECT) !== CONFIG.GENERAL_PROJECT);
+      const income = own.reduce((t, l) => t + (l.income || 0), 0);
+      if (income > 0) {
+        const tol = CONFIG.CONTRIBUTION_TOLERANCE === undefined ? 0.1 :
+          CONFIG.CONTRIBUTION_TOLERANCE;
+        const planned = own.reduce((t, l) => t + (l.cost || 0), 0);
+        const actual = ownActualCost_(b, actualLines);
+        const done = !!now && own.every(l => l.end && new Date(l.end) < now);
+        const share = c => (income - c) / income;
+        const off = c => Math.abs(share(c) - rate) > tol + 1e-9;
+        const eaten = actual > income * (1 - rate + tol) + 1e-6;
+        const actualOff = eaten || (done && off(actual));
+        if (off(planned) || actualOff) {
+          const worst = actualOff ? actual : planned;
+          const pct = x => Math.round(x * 100) + '%';
+          add('G1', withBase_(base, {
+            amount: Math.round(Math.abs(share(worst) - rate) * income),
+            detail: 'overhead ' + pct(share(planned)) + ' of income planned' +
+              (done ? ', ' + pct(share(actual)) + ' actual'
+                : (eaten ? ', already ' + pct(share(actual)) + ' on spend to date' : '')) +
+              ', against a policy of ' + pct(rate) + ' (' + pct(rate - tol) + ' to ' +
+              pct(rate + tol) + ' is fine)' }));
+        }
       }
     }
 
@@ -388,14 +448,28 @@ function buildHealth(budgets, actualLines, ctx) {
         owner: meta['owner'] || '', link: b.sheetUrl || '' };
       const cost = (b.lines || []).reduce((a, l) => a + (l.cost || 0), 0);
       const actual = spend[b.name] || 0;
-      const start = parseSheetDate_(meta['funding start']);
-      const end = parseSheetDate_(meta['funding end']);
 
-      // D5: a secured grant that has started and had nothing coded to it is almost
-      // always a Xero tag that does not match the sheet name.
-      if (b.status === 'secured' && start && now && start < now && actual === 0) {
-        add('D5', withBase_(bse, { amount: Math.round(cost),
-          detail: 'started ' + isoDate_(start) + ' with no actuals coded to it at all' }));
+      // What should have been spent by the end of the last finished quarter, by the
+      // tracking grid's own rule, forecastOrBaseline_: the Forecast entry where one was
+      // written, otherwise the budget baseline. D5 and E2 both judge against this. They
+      // used to judge against the funding dates instead, which flagged every grant whose
+      // work was scheduled later than its contract.
+      let due = 0, dueBy = '';
+      if (now) {
+        const curQi = qiOfDate_(now);
+        const exp = expectedCostByQuarter_(b);
+        due = Object.keys(exp).reduce((t, q) => (qiOfLabel_(q) < curQi ? t + exp[q] : t), 0);
+        const qs = quarterStartDate_(curQi);
+        dueBy = isoDate_(new Date(qs.getFullYear(), qs.getMonth(), 0));
+      }
+
+      // D5: a secured grant that should have spent something by now, with nothing coded
+      // to it, is almost always a Xero tag that does not match the sheet name. Finished
+      // quarters only, so it stays quiet while the first quarter of spend is under way;
+      // a misspelt tag is caught sooner than that, by D4.
+      if (b.status === 'secured' && actual === 0 && due >= 1) {
+        add('D5', withBase_(bse, { amount: Math.round(due),
+          detail: Math.round(due) + ' expected by ' + dueBy + ', nothing coded to it at all' }));
       }
 
       // E1: overspend against the sheet's own budget.
@@ -404,16 +478,18 @@ function buildHealth(budgets, actualLines, ctx) {
           detail: 'actual ' + Math.round(actual) + ' against budget ' + Math.round(cost) }));
       }
 
-      // E2: underspend. Only once a grant is meaningfully under way, and only when the
-      // gap between elapsed time and spent money is wide enough to be worth acting on.
-      if (cost > 0 && start && end && now && end > start) {
-        const elapsed = Math.min(1, Math.max(0, (now - start) / (end - start)));
-        const spent = actual / cost;
-        if (elapsed >= (CONFIG.UNDERSPEND_MIN_ELAPSED || 0.5) &&
-            (elapsed - spent) >= (CONFIG.UNDERSPEND_GAP || 0.25)) {
-          add('E2', withBase_(bse, { amount: Math.round(cost - actual),
-            detail: Math.round(elapsed * 100) + '% of the period elapsed, ' +
-              Math.round(spent * 100) + '% of the budget spent' }));
+      // E2: underspend against the same expected-to-date figure as D5, once at least half
+      // the budget should have been spent and only when the shortfall is wide enough to
+      // act on. Secured only, as D5: an application not yet won has nothing to underspend.
+      // Spend so far this quarter counts, so a source that has since caught up is not
+      // flagged for last quarter's lag.
+      if (b.status === 'secured' && cost > 0 && due >= 1) {
+        const dueShare = due / cost, spentShare = actual / cost;
+        if (dueShare >= (CONFIG.UNDERSPEND_MIN_DUE || 0.5) &&
+            (dueShare - spentShare) >= (CONFIG.UNDERSPEND_GAP || 0.25)) {
+          add('E2', withBase_(bse, { amount: Math.round(due - actual),
+            detail: Math.round(dueShare * 100) + '% of the budget was expected by ' + dueBy +
+              ', ' + Math.round(spentShare * 100) + '% has been spent' }));
         }
       }
     });
@@ -503,6 +579,25 @@ function buildHealth(budgets, actualLines, ctx) {
 
   out.sort(healthOrder_);
   return out;
+}
+
+/**
+ * Actual spend on a source's own work: its expense lines, less those on item codes whose
+ * budget lines are all General's, which is General's work the source happens to pay for.
+ * Spend with no item code stays in: it is still this source's money.
+ */
+function ownActualCost_(b, actualLines) {
+  const byCode = {};
+  (b.lines || []).forEach(l => {
+    const code = itemCode_(l.item);
+    if (!code) return;
+    const general = (l.project || CONFIG.DEFAULT_PROJECT) === CONFIG.GENERAL_PROJECT;
+    byCode[code] = byCode[code] === undefined ? general : (byCode[code] && general);
+  });
+  return (actualLines || []).reduce((t, l) => {
+    if (l.kind !== 'expense' || clean_(l.fundingSource || '') !== b.name) return t;
+    return byCode[itemCode_(l.item)] === true ? t : t + (Number(l.amount) || 0);
+  }, 0);
 }
 
 /** One finding in the shape the panel renders, or null for an id not in the catalogue. */

@@ -70,12 +70,19 @@ const CONFIG = {
                   'funding start', 'funding end', 'owner'],
   // C4: a sheet nobody has looked at in this long is probably no longer true.
   STALE_REVIEW_DAYS: 90,
-  // E2: only worth asking about underspend once a grant is meaningfully under way, and
-  // only when the gap between time elapsed and money spent is wide enough to act on.
-  UNDERSPEND_MIN_ELAPSED: 0.5,
+  // E2: only worth asking about underspend once at least this share of the budget should
+  // have been spent, by the tracking grid's rule, and only when the shortfall is at
+  // least UNDERSPEND_GAP of the whole budget.
+  UNDERSPEND_MIN_DUE: 0.5,
   UNDERSPEND_GAP: 0.25,
   // Contribution policy values the code understands. Anything else is C6.
-  CONTRIBUTION_POLICIES: [/^none$/, /^per_line$/, /^percent_of_income:\d+(\.\d+)?$/],
+  // A percentage runs 0 to 100: above that it would send General more than the source
+  // receives, and the derivation would otherwise have to ignore it silently.
+  CONTRIBUTION_POLICIES: [/^none$/, /^per_line$/,
+    /^percent_of_income:(100(\.0+)?|\d{1,2}(\.\d+)?)$/],
+  // G1: how far a source's overhead may sit from its Contribution policy, as a share of its
+  // income, before it is reported. 0.1 is ten points either side: at 40%, 30 to 50 is fine.
+  CONTRIBUTION_TOLERANCE: 0.1,
 
   // ---- Funding_info keys read by code -------------------------------------
   // Metadata keys are lower-cased by parseFundingInfoTab_, so these are the lower-case
@@ -94,11 +101,9 @@ const CONFIG = {
   DEFAULT_PROJECT: 'Unallocated',
   GENERAL_PROJECT: 'General',
 
-  // ---- Chart of accounts: ported from create_xero_budget_project.js --------
-  REVENUE_ACCOUNTS: ['Grants (102)', 'Project Contract Income (181)'],
-  OVERHEAD_ACCOUNT: 'Overhead Allocation (500)',
-  DEFERRED_ACCOUNT: 'Unused Donations and Grants with Conditions (835)',
-  // Balance-sheet / non-operational accounts excluded from spend + forecast.
+  // ---- Chart of accounts ------------------------------------------------------
+  // Balance-sheet / non-operational accounts excluded from spend + forecast. Matched on
+  // the code in brackets, so renaming an account in Xero changes nothing here.
   EXCLUDED_ACCOUNTS: [
     'Accounts Payable (800)', 'Accounts Receivable (610)', 'ANZ Term Deposit (605)',
     'Computer Equipment (720)', 'GST (820)', 'Historical Adjustment (840)',
@@ -151,6 +156,10 @@ const CONFIG = {
   FINANCIAL_YEAR_START_MONTH: 4,
   // How far ahead the General project view forecasts (quarters past current).
   GENERAL_FORECAST_QUARTERS: 6, // 1.5 years
+  // The plan every view shows: false is the Budget tab's own dates; true is each sheet's
+  // Forecast tab where it has an entry, a row's blanks then counting as 0 (planBudgets_).
+  // Held false until reportForecastPlan's dry run has been read.
+  PLAN_FROM_FORECAST: false,
 
   // ---- Caching ------------------------------------------------------------
   // The snapshot is stored as a JSON file in Drive (no size ceiling, unlike

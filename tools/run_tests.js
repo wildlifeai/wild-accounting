@@ -17,7 +17,7 @@ const DASH = path.join(__dirname, '..', 'dashboard');
 // Apps Script has no modules: every file shares one global scope. `const CONFIG = {...}`
 // at the top level of one file is visible to all the others. Under Node each eval'd
 // string gets its own scope, so those two declarations are promoted to globals by hand.
-const ORDER = ['Config.js', 'ForecastEngine.js', 'ForecastStore.js', 'BudgetReader.js',
+const ORDER = ['Config.js', 'ForecastEngine.js', 'Permissions.js', 'BudgetReader.js',
   'XeroClient.js', 'HealthCheck.js', 'TrackingBuilder.js', 'Aggregator.js',
   'WebApp.js', 'Snapshot.js', 'Tests.js'];
 

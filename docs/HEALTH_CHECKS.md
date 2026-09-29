@@ -1,27 +1,25 @@
-# Self-policing and system health checks
+# Health checks
 
 The cockpit's numbers are only as good as the budgets in Drive and the coding in Xero, and both
-fail **silently** today. `BudgetReader` skips a malformed line with a `Logger.log` nobody reads; an
-untagged Xero transaction vanishes from every total without a trace. The purpose of health checks is
-to convert silent wrongness into a named, owned, actionable item that the GM or a project lead can
-fix themselves.
+can fail silently: a malformed budget line, or an untagged Xero transaction, simply vanishes from
+every total. Health checks turn that silent wrongness into a named, owned, actionable item that the
+GM or a project lead can fix themselves.
 
 Design principle: **every finding names what is wrong, where, who owns it, and what to do.** A
 check that only says "something looks off" creates work instead of removing it.
 
-## Where it plugs in
+## How findings reach you
 
-There is already a mechanism: `Aggregator.buildSnapshot()` produces `dataFlags`, and
-`JavaScript.html` renders them into `#flags`. Extend that rather than inventing a parallel path.
+Every refresh runs the checks over what it has just read and stores the findings in the snapshot
+with everything else, so they cost nothing to display. Two checks, F2 and F7, are judged instead
+each time the page loads, because a stale snapshot or a dead refresh trigger cannot be noticed by
+the refresh that is not running.
 
-```
-BudgetReader ──┐
-XeroClient   ──┼──► Aggregator.buildSnapshot() ──► snapshot.health[] ──► Health panel
-metadata     ──┘                                                        (grouped by owner)
-```
-
-Findings belong in the snapshot so they are cached with everything else and cost nothing to
-display. `snapshot.dataFlags` becomes the legacy alias for `health` filtered to `severity=error`.
+The **Health** tab lists them most severe first, then by the amount at stake, so a large
+misattribution outranks a missing description. Each shows what is wrong, where, the amount, what
+to do and a link to the sheet. The tab's badge is red when there are errors, amber when there are
+only warnings, and absent when nothing is wrong; info findings are listed underneath and never
+badged. A project lead sees the findings for their own projects, plus F1, F2, F3 and F7.
 
 ## Finding shape
 
@@ -64,14 +62,16 @@ their projects, the GM sees everything.
 | A2 | error | `Budget` tab missing `Start`, `End` or `Cost` | Whole file is invisible. Add the column. |
 | A3 | warning | Tabs beyond `Funding_info` / `Budget` / `Forecast` / `Submitted_budget` | Retire the extra tab; actuals live in Xero. |
 | A4 | warning | No `Project` column | Lines cannot be split across projects. |
-| ~~A5~~ | — | ~~No `*Account` column~~ | **Retired 2026-08-11.** Budgets are set at milestone level, not per account, so its absence is expected. Nothing in the code read a budget line's account in any case. |
+| ~~A5~~ | - | ~~No `*Account` column~~ | **Retired 2026-08-11.** Budgets are set at milestone level, not per account, so its absence is expected. Nothing in the code read a budget line's account in any case. |
 | A6 | info | No `Submitted_budget` tab | No frozen record of what the funder was given. |
 | A7 | error | `Forecast` tab column header does not match `MMM-MMM YY Forecast` | That quarter's forecast is silently discarded. Name the column exactly, e.g. `Jul-Sep 26 Forecast`. |
 | A8 | warning | `Forecast` tab row whose column A resolves to no budget line, or to more than one | That row's forecast is discarded. Label it with the milestone, or `Description - Milestone`. |
 | A9 | warning | `Forecast` entry for an item code absent from the `Budget` tab | Forecasting a milestone that no longer exists. Should now be unreachable, since labels are resolved against the `Budget` tab at read time; if it appears, a forecast key reached the snapshot without passing `resolveForecastLabel_`. |
 | A10 | warning | Two `Forecast` rows in one section carry the same label | Usually a sorted `Budget` tab: the label formulas held their positions while the values moved underneath them. Amounts are still summed, so nothing is lost, but other lines have silently lost their forecast. |
+| A11 | warning | A milestone that budgets income has a cost forecast on the `Forecast` tab and nothing on its Revenue row | Fill in the Revenue row. Until then the milestone's income keeps the `Budget` tab's timing while its cost follows the forecast, so the two drift apart. The amount is the milestone's budgeted income. |
+| A12 | warning | A negative number in a `Forecast` tab row | Costs and income are both entered as positive amounts. A negative cost is read as money coming in, so it lowers planned spend instead of adding to it. The amount is kept as entered, so the fix is on the sheet. |
 
-A missing or empty `Forecast` tab is **not** a finding — a quarter with no override falls back to
+A missing or empty `Forecast` tab is **not** a finding: a quarter with no override falls back to
 the budget baseline, so an absent tab legitimately means "the budget is still our best estimate".
 
 ### B. Data quality
@@ -80,7 +80,7 @@ the budget baseline, so an absent tab legitimately means "the budget is still ou
 |---|---|---|---|
 | B1 | warning | Lines skipped because `Cost` and `Income` are both 0 | Report count. Use 0 deliberately or delete the row. |
 | B2 | error | Unparseable `Start` or `End` | Line is invisible. Use `DD/MMM/YY`. |
-| B3 | error | `End` before `Start` | Check the year — `30/Jun/01` parses as 2001. |
+| B3 | error | `End` before `Start` | Check the year: `30/Jun/01` parses as 2001. |
 | B4 | error | Blank `Xero Inventory Item` | Line falls out of the tracking grid. Report count **and share of budget value**. |
 | B5 | warning | `Contribution` ≠ `Income − Cost` | Recompute or explain. |
 
@@ -88,16 +88,15 @@ the budget baseline, so an absent tab legitimately means "the budget is still ou
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
-| _(none implemented yet, see below)_ | | | |
 | C1 | error | Required metadata key missing | Name the key. |
-| C2 | error | `Status` disagrees with the folder | Move the file or fix the value — the cockpit trusts the folder for forecasts. |
+| C2 | error | `Status` disagrees with the folder | Move the file or fix the value; the cockpit trusts the folder for forecasts. |
 | C3 | error | `Funding source` ≠ file name | Budgets and actuals will not join. |
 | C4 | warning | `Last reviewed` older than 90 days | Review it, then update the date. |
 | C5 | warning | `Funding end` in the past, sheet still in `secured/` | Archive it, or extend the end date. |
-| C6 | error | `Contribution policy` missing or unparseable | General's income cannot be derived. The three values are `none`, `per_line` and `percent_of_income:<n>`. Case, surrounding spaces, hyphens for underscores and a space after the colon are all normalised before matching, so `None` and `Percent of income: 40` pass. The finding quotes the value back exactly as typed. `40%` is still rejected: it is a different statement, and guessing which was meant is not the checker's job. |
+| C6 | error | `Contribution policy` missing or unparseable | General's income cannot be derived. The three values are `none`, `per_line` and `percent_of_income:<n>`, with `n` from 0 to 100. Case, surrounding spaces, hyphens for underscores and a space after the colon are all normalised before matching, so `None` and `Percent of income: 40` pass. The finding quotes the value back exactly as typed. `40%` is still rejected: it is a different statement, and guessing which was meant is not the checker's job. |
 | C7 | warning | `proposed` with no `Decision date` | Needed for pipeline forecasting and funder forms. |
 
-### D. Xero coding — aimed at the bookkeeper
+### D. Xero coding, aimed at the bookkeeper
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
@@ -105,31 +104,30 @@ the budget baseline, so an absent tab legitimately means "the budget is still ou
 | D2 | warning | Actual lines with no `Funding source` tag | Land in `(unassigned)`. |
 | D3 | warning | Actual lines with no item code | Outside the tracking grid. |
 | D4 | error | Actuals coded to a `Funding source` with no budget sheet | Either the sheet is missing or the tag is a typo. |
-| D5 | warning | Budget sheet with zero actuals though its period has started | Nothing is being coded to it. |
+| D5 | warning | A secured source was expected to spend something by the end of the last finished quarter, and nothing is coded to it | Usually a missing or misspelt Xero tag. "Expected" is the tracking grid's rule: the `Forecast` entry where one was written, a 0 included, otherwise the `Budget` baseline. A blank cell is not a 0. If the work has slipped, enter 0 for those quarters. Finished quarters only, so it stays quiet while the first quarter of spend is under way; D4 catches a misspelt tag sooner. |
 | D6 | error | Actuals against a funding source whose `Funding end` has passed, or whose sheet is archived | Almost always a stale recurring journal or template. |
 
 ### E. Reconciliation
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
-| _(none implemented yet, see below)_ | | | |
 | E1 | warning | Actuals exceed budget for a funding source | Re-budget or explain to the funder. |
-| E2 | warning | Under-spend risk: proportion spent well below proportion of period elapsed | Funders care about underspend as much as overspend. |
+| E2 | warning | A secured source has spent well below what was expected by the end of the last finished quarter, by the same rule as D5 | Funders care about underspend as much as overspend. Fires once at least half the budget was due (`UNDERSPEND_MIN_DUE`) and the shortfall is a quarter of the budget or more (`UNDERSPEND_GAP`). Spend so far this quarter counts toward catching up. If the work has slipped, move it to later quarters on the `Forecast` tab. |
 | E3 | error | Same item code in two funding sources | One cost billed twice. |
-| E4 | warning | Same `*Account` + `Description` in two sources with overlapping dates | Double-funding signal — e.g. the same FTE in two grants. |
+| E4 | warning | Same `Description` in two sources with overlapping dates | Double-funding signal, for example the same FTE in two grants. |
 
-### G. Funding pipeline — implemented 2026-08-13
+### G. Funding pipeline
 
-Complements the planned **E4**: that one detects duplication nobody declared, these handle
-duplication you *did* declare, via `Exclusivity group`.
+Complements **E4**: that one detects duplication nobody declared, these handle duplication you
+*did* declare, via `Exclusivity group`.
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
-| G1 | warning | A `secured` source's income exceeds its budgeted cost | Two applications for the same work both landed, so reallocate the surplus, or income is filed against the wrong milestone. Also catches projected revenue misfiled as secured, which is the live `WW_26_SALES` case. |
+| G1 | warning | A source's overhead, its margin over the cost of its own work as a share of the income on lines not already General's, is more than `CONTRIBUTION_TOLERANCE` (10 points) from its `Contribution policy` | At 40%, anything from 30 to 50 is fine. Judged on the budget; on actual spend while work continues only once it has already taken the overhead below the band; and on actual spend in both directions once every one of those lines has ended. The Forecast tab is deliberately not used: work moved to later quarters with the old ones left blank is, under the grid's blank-means-budget rule, planned twice. Above the band: two applications for the same work both landed, income is on the wrong milestone, or work is underspent. Below it: costs are eating the overhead. Secured and proposed sources both, so an application's budget is checked before it goes in. |
 | G2 | info | A `proposed` source with no `Probability` in `Funding_info` | That ask is left out of expected income entirely rather than guessed at. "Unknown" is deliberately not "zero". |
 | G3 | info | Cost suppressed because a competing application in the same `Exclusivity group` carries it | Expected, and reported so the suppression is never invisible arithmetic. Remove the group value if these are genuinely separate work. |
 
-### F. System health — aimed at the GM and maintainer
+### F. System health, aimed at the GM and maintainer
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
@@ -142,47 +140,6 @@ duplication you *did* declare, via `Exclusivity group`.
 
 F2 and F7 are the only findings a project-scoped user sees besides F1 and F3, because each
 one means the numbers they are looking at are old.
-
-## UI
-
-A **Health** panel on the Overview tab, collapsed by default, showing counts by severity
-(`3 errors · 11 warnings · 6 info`) and expanding to a list grouped by category. Each row shows
-title, where, the value at risk if any, and the action. Errors also surface as a persistent banner,
-because an error means a number on screen is wrong right now.
-
-Filter controls: **mine / all** (by `owner`), and by project. Project leads land on *mine*.
-
-Do not sort purely by severity — sort by **value at risk** within severity, so a $40,000
-misattribution outranks a missing description.
-
-## Implementation notes
-
-* Put the checks in a new `HealthCheck.js`, pure functions over `(budgets, actualLines, metadata)`
-  returning findings. Keep it free of `DriveApp`/`UrlFetchApp` so `Tests.js` can cover it offline —
-  it is the first part of this codebase that is genuinely unit-testable, so take the opportunity.
-* `BudgetReader` must **report** what it currently discards. Today it `continue`s past bad rows;
-  it needs to collect `{file, row, reason}` and return them alongside the lines. This is the single
-  biggest change, and most of A and B depend on it.
-* D1–D3 need the count **and** the summed value of affected lines; a count alone doesn't convey
-  whether it matters.
-* Cap each check's findings (say 20) and report the overflow count — never truncate silently, which
-  is the failure mode the checks exist to prevent.
-* Checks must never throw. A failing check reports itself as an `info` finding and the rest proceed.
-
-## Sequencing
-
-Two things gate this work:
-
-1. **`sync-from-apps-script` must merge first.** It holds ~1,030 lines of `Aggregator.js`,
-   `WebApp.js` and `JavaScript.html` changes. Building the health panel on a third branch before it
-   lands guarantees conflicts in exactly those files.
-2. **The metadata template drives categories C and much of D and E.** Those checks are
-   were unimplementable until sheets carried `Owner`, `Status`, `Funding end` and
-   `Contribution policy`. They now do, and C1 to C7 were built on 2026-08-14 as a result.
-
-So: merge the sync branch, then implement the `BudgetReader` reporting change plus categories A, B
-and F — which need no new sheet data and would surface real problems today. Categories C, D6, E4 and
-E5 follow as the metadata block rolls out.
 
 ---
 
@@ -197,12 +154,12 @@ Ids are reserved, so implementing one means moving its row up rather than renumb
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
-| ~~B6~~ | — | ~~`*Account` not in the Xero chart of accounts~~ | **Moot.** The `*Account` column was retired with A5 on 2026-08-11: budgets are set at milestone level, so there is no account label to validate. |
-| ~~D7~~ | — | ~~Spend counted on an excluded balance-sheet account~~ | **Superseded.** `EXCLUDED_ACCOUNTS` was wired up on 2026-08-11, so this can no longer happen. The exclusion count and total are reported by **F5**. |
+| ~~B6~~ | - | ~~`*Account` not in the Xero chart of accounts~~ | **Moot.** The `*Account` column was retired with A5 on 2026-08-11: budgets are set at milestone level, so there is no account label to validate. |
+| ~~D7~~ | - | ~~Spend counted on an excluded balance-sheet account~~ | **Superseded.** `EXCLUDED_ACCOUNTS` was wired up on 2026-08-11, so this can no longer happen. The exclusion count and total are reported by **F5**. |
 | E5 | warning | Salary actuals attributed differently from budgeted salary lines | **Blocked, and worth unblocking.** The payroll-template drift detector. It needs budgets at account level to compare against, and budgets are now at milestone level by design, so there is nothing to compare. **D6** catches part of the same failure by a different route: spend still arriving after a grant has ended is usually a stale repeating journal. |
 | E6 | info | Residual hand-entered overhead lines alongside a derived `Contribution policy` | **Blocked.** Identifying an overhead line reliably needs the `*Account` column, which is retired. Matching on description text would be guesswork. |
 | F4 | warning | A Xero scope needed by a feature in use is absent | Not built. `accounting.transactions.read` covers everything currently fetched, so there is nothing to detect yet. Worth adding when a feature needs a scope beyond it. |
 
-`dashboard/check_docs.js` fails if any id above appears in `HEALTH_CATALOGUE`, or if any
+`tools/check_docs.js` fails if any id above appears in `HEALTH_CATALOGUE`, or if any
 id in the catalogue is missing from the tables above it. That is what keeps this split
 honest rather than aspirational.

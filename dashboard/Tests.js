@@ -77,7 +77,7 @@ function runTests() {
   check('keeps an unknown code', !isExcludedAccount_('Something New (999)'));
 
   // Health findings: severity order, value at risk, and the checks the reader
-  // cannot make for itself. See dashboard/HEALTH_CHECKS.md.
+  // cannot make for itself. See docs/HEALTH_CHECKS.md.
   var hBudgets = [{
     name: 'WW_25_TOI', status: 'secured', projectFolder: 'Wildlife Watcher', sheetUrl: '',
     metadata: { owner: 'someone@wildlife.ai' },
@@ -320,18 +320,90 @@ function runTests() {
       .indexOf('D4') !== -1);
   check('D5 catches a started grant with nothing coded to it',
     idsFor([sheet_()], []).indexOf('D5') !== -1);
+
+  // D5 asks whether spend was expected in a finished quarter, by the grid's own rule,
+  // not whether Funding start has passed. Mirrors SPY_27_MAINT: contract from August,
+  // work scheduled later, nothing coded, which is correct and must stay quiet.
+  function d5Line(start) {
+    return [{ description: 'Delivery lead', milestone: 'Delivery',
+      item: 'XXX_27_GOOD_001 - Delivery', project: 'General', start: start,
+      end: d(2027, 3, 31), cost: 10000, income: 10000, contribution: 0 }];
+  }
+  function d5Fc(amount) {
+    var c = {}; c['XXX_27_GOOD_001||26/27 Q1'] = amount;
+    return { cost: c, income: {}, comments: {} };
+  }
+  check('D5 quiet when the work is scheduled after the funding start',
+    idsFor([sheet_({ lines: d5Line(d(2026, 10, 1)) })], []).indexOf('D5') === -1);
+  // A written 0 is a statement: nothing that quarter. D5 takes it at its word.
+  check('D5 quiet when the Forecast says 0 for the finished quarter',
+    idsFor([sheet_({ forecast: d5Fc(0) })], []).indexOf('D5') === -1);
+  // The forecast wins both ways: spend moved into a finished quarter counts.
+  check('D5 fires when the Forecast moved spend into a finished quarter',
+    idsFor([sheet_({ lines: d5Line(d(2026, 10, 1)), forecast: d5Fc(500) })], [])
+      .indexOf('D5') !== -1);
+  // Quiet through the quarter in which spend begins, however late in it we are.
+  check('D5 quiet during the first quarter spend is expected',
+    idsFor([sheet_({ lines: d5Line(d(2026, 7, 1)) })], []).indexOf('D5') === -1);
+  var d5 = buildHealth([sheet_()], [], { now: NOW, xeroConnected: true })
+    .filter(function (f) { return f.id === 'D5'; })[0];
+  check('D5 amount is the spend expected to date, not the whole budget',
+    d5 && d5.amount > 0 && d5.amount < 10000);
+  check('D5 detail names the end of the last finished quarter',
+    d5 && d5.detail.indexOf('2026-06-30') !== -1);
+
+  check('forecastOrBaseline_: an entry wins, a 0 included',
+    forecastOrBaseline_({ q: 0 }, { q: 900 }, 'q') === 0 &&
+    forecastOrBaseline_({ q: 400 }, { q: 900 }, 'q') === 400);
+  check('forecastOrBaseline_: a blank falls back to the baseline',
+    forecastOrBaseline_({}, { q: 900 }, 'q') === 900 &&
+    forecastOrBaseline_(undefined, undefined, 'q') === 0);
+  check('quarterStartDate_ rolls Q4 into the next calendar year',
+    isoDate_(quarterStartDate_(qiOfDate_(d(2027, 2, 10)))) === '2027-01-01');
   // The stale repeating-journal detector: nothing in Xero reports one.
   check('D6 catches spend dated after the grant ended',
     idsFor([sheet_()], [spend_(500, '2027-06-01')]).indexOf('D6') !== -1);
 
   check('E1 catches overspend',
     idsFor([sheet_()], [spend_(12000, '2026-07-01')]).indexOf('E1') !== -1);
-  // Under half the period elapsed, so it stays quiet even though almost nothing is spent.
-  check('E2 stays quiet before the halfway point',
+  // Under half the budget due by the end of June, so quiet though almost nothing is spent.
+  check('E2 stays quiet before half the budget is due',
     idsFor([sheet_()], [spend_(100, '2026-07-01')]).indexOf('E2') === -1);
-  check('E2 fires once a grant is over half elapsed and well underspent',
+  // E2 judges the schedule, not the funding dates, the same way D5 does. Under the old
+  // rule this fired: the contract "ends" in September while the budget runs to March, so
+  // three quarters of the period looked elapsed with a quarter of the money due.
+  check('E2 quiet when the funding dates run ahead of the schedule',
     idsFor([sheet_({ metadata: { 'funding end': '30/Sep/26' } })],
-           [spend_(100, '2026-05-01')]).indexOf('E2') !== -1);
+           [spend_(100, '2026-05-01')]).indexOf('E2') === -1);
+  // Twelve months to September: three quarters of it was due by the end of June.
+  function e2Sheet(over) {
+    var o = { lines: [{ description: 'Delivery lead', milestone: 'Delivery',
+      item: 'XXX_27_GOOD_001 - Delivery', project: 'General', start: d(2025, 10, 1),
+      end: d(2026, 9, 30), cost: 12000, income: 12000, contribution: 0 }] };
+    Object.keys(over || {}).forEach(function (k) { o[k] = over[k]; });
+    return sheet_(o);
+  }
+  check('E2 fires when well under what the schedule expected',
+    idsFor([e2Sheet()], [spend_(2000, '2026-03-01')]).indexOf('E2') !== -1);
+  check('E2 counts this quarter\'s spend toward catching up',
+    idsFor([e2Sheet()], [spend_(2000, '2026-03-01'), spend_(6000, '2026-08-01')])
+      .indexOf('E2') === -1);
+  var e2Slipped = { cost: {}, income: {}, comments: {} };
+  ['25/26 Q3', '25/26 Q4', '26/27 Q1'].forEach(function (q) {
+    e2Slipped.cost['XXX_27_GOOD_001||' + q] = 0;
+  });
+  check('E2 respects a Forecast that moved the work later',
+    idsFor([e2Sheet({ forecast: e2Slipped })], [spend_(2000, '2026-03-01')])
+      .indexOf('E2') === -1);
+  check('E2 ignores an application that has not been won',
+    idsFor([e2Sheet({ status: 'proposed' })], [spend_(2000, '2026-03-01')])
+      .indexOf('E2') === -1);
+  var e2 = buildHealth([e2Sheet()], [spend_(2000, '2026-03-01')],
+    { now: NOW, xeroConnected: true }).filter(function (f) { return f.id === 'E2'; })[0];
+  check('E2 amount is the shortfall against the schedule, not the unspent budget',
+    e2 && e2.amount > 0 && e2.amount < 12000 - 2000);
+  check('E2 detail names the date the spend was expected by',
+    e2 && e2.detail.indexOf('2026-06-30') !== -1);
 
   check('E3 catches one item code in two sources',
     idsFor([sheet_(), sheet_({ name: 'XXX_27_OTHER',
@@ -704,6 +776,236 @@ function runTests() {
     policyOk('') === false);
   check('policy: a percentage still needs a number',
     policyOk('percent_of_income:') === false && policyOk('percent_of_income:abc') === false);
+  // Above 100 it would send General more than the source receives.
+  check('policy: a percentage runs 0 to 100',
+    policyOk('percent_of_income:100') && policyOk('percent_of_income:0') &&
+    policyOk('percent_of_income:150') === false);
+
+  // ---- contribution: which share of a source's income funds General ------------
+  function cSrc(policy, status, lines) {
+    return { name: 'XXX_27_C', status: status || 'secured', projectFolder: 'Spyfish Aotearoa',
+      metadata: policy === undefined ? {} : { 'contribution policy': policy },
+      lines: lines || [] };
+  }
+  check('contribution: percent_of_income:40 is a rate of 0.4',
+    contributionRate_(cSrc('percent_of_income:40')) === 0.4);
+  check('contribution: read through the same normalising as C6',
+    contributionRate_(cSrc('Percent of income: 12.5')) === 0.125);
+  // per_line lines are already on General through the Project column; deriving on top
+  // would count them twice.
+  check('contribution: none and per_line derive nothing',
+    contributionRate_(cSrc('none')) === 0 && contributionRate_(cSrc('per_line')) === 0);
+  check('contribution: a missing or unreadable policy derives nothing',
+    contributionRate_(cSrc(undefined)) === 0 && contributionRate_(cSrc('40%')) === 0 &&
+    contributionRate_(cSrc('percent_of_income:150')) === 0);
+  check('contribution: a line already on General owes nothing',
+    lineContribution_({ project: 'General', income: 1000 }, 0.4) === 0 &&
+    lineContribution_({ project: 'Spyfish Aotearoa', income: 1000 }, 0.4) === 400 &&
+    lineContribution_({ project: 'Spyfish Aotearoa', income: 1000 }, 0) === 0);
+
+  var cMoves = contributionMoves_([
+    cSrc('percent_of_income:40', 'secured', [
+      { project: 'Spyfish Aotearoa', income: 10000, cost: 6000 },
+      { project: 'General', income: 2000, cost: 2000 }]),
+    cSrc('percent_of_income:40', 'proposed', [
+      { project: 'Wildlife Watcher', income: 5000, cost: 3000 }]),
+    cSrc('per_line', 'secured', [{ project: 'General', income: 3000, cost: 3000 }])
+  ]).moves;
+  check('contribution: secured income moves from the project to General',
+    cMoves['secured||Spyfish Aotearoa'] === -4000 && cMoves['secured||General'] === 4000);
+  check('contribution: an application moves as proposed, not secured',
+    cMoves['proposed||Wildlife Watcher'] === -2000 && cMoves['proposed||General'] === 2000);
+  check('contribution: organisation totals do not move',
+    Object.keys(cMoves).reduce(function (t, k) { return t + cMoves[k]; }, 0) === 0);
+
+  // ---- aggregateBudgets_: the budget side of the Overview, reachable by a test ----
+  // It ran inline in buildSnapshot, behind Drive and Xero, so nothing could test which
+  // project is credited with which money. These pin what it does.
+  function agSrc(name, status, meta, lines) {
+    return { name: name, status: status, projectFolder: 'Spyfish Aotearoa', metadata: meta,
+      forecast: { cost: {}, income: {}, comments: {} }, lines: lines };
+  }
+  function agLine(project, mile, code, cost, income) {
+    return { project: project, milestone: mile, item: code + ' - ' + mile,
+      start: d(2026, 4, 1), end: d(2027, 3, 31), cost: cost, income: income };
+  }
+  var agBudgets = [
+    agSrc('XXX_27_A', 'secured', {}, [
+      agLine('Spyfish Aotearoa', 'M1', 'XXX_27_A_001', 6000, 10000),
+      agLine('General', 'GM', 'XXX_27_A_002', 2000, 2000)]),
+    agSrc('XXX_28_B', 'proposed', { probability: '50', 'exclusivity group': 'G' },
+      [agLine('Spyfish Aotearoa', 'M2', 'XXX_28_B_001', 5000, 8000)]),
+    agSrc('XXX_28_C', 'proposed', { probability: '30', 'exclusivity group': 'G' },
+      [agLine('Spyfish Aotearoa', 'M2', 'XXX_28_C_001', 5000, 5000)])
+  ];
+  var agReps = chooseExclusivityReps_(agBudgets);
+  var ag = aggregateBudgets_(agBudgets, fyBounds_(d(2026, 9, 26)), agReps);
+  function agSum(map) {
+    return Object.keys(map || {}).reduce(function (t, k) { return t + map[k]; }, 0);
+  }
+  check('aggregate: income is credited to each line\'s own project',
+    ag.budgetByKey['Spyfish Aotearoa||XXX_27_A||M1'].income === 10000 &&
+    ag.budgetByKey['General||XXX_27_A||GM'].income === 2000);
+  check('aggregate: item codes map to their milestone',
+    ag.itemToMilestone['XXX_27_A||XXX_27_A_001'] === 'M1');
+  var agLoser = agReps.G === 'XXX_28_B' ? 'XXX_28_C' : 'XXX_28_B';
+  check('aggregate: a competing application keeps its ask but not the work',
+    ag.budgetByKey['Spyfish Aotearoa||' + agLoser + '||M2'].budget === 0 &&
+    ag.budgetByKey['Spyfish Aotearoa||' + agLoser + '||M2'].income > 0 &&
+    ag.costSuppressed[agLoser].countedIn === agReps.G);
+  check('aggregate: expected income weights a proposal by its probability',
+    Math.abs(agSum(ag.budgetByKey['Spyfish Aotearoa||XXX_28_B||M2'].weightedByQ) - 4000) < 1);
+  check('aggregate: the project rollup totals what the entries total',
+    Math.abs(Object.keys(ag.projects).reduce(function (t, p) {
+      return t + ag.projects[p].securedIncome; }, 0) - 12000) < 1);
+
+  // ---- deriving contribution: General's income comes from the policy ----------
+  var cBudgets = [
+    agSrc('XXX_27_P', 'secured', { 'contribution policy': 'percent_of_income:40' }, [
+      agLine('Spyfish Aotearoa', 'M1', 'XXX_27_P_001', 6000, 10000),
+      agLine('General', 'GM', 'XXX_27_P_002', 2000, 2000)]),
+    agSrc('XXX_28_Q', 'proposed', { 'contribution policy': 'percent_of_income:40',
+      probability: '50' }, [agLine('Spyfish Aotearoa', 'M3', 'XXX_28_Q_001', 3000, 5000)]),
+    agSrc('XXX_27_N', 'secured', { 'contribution policy': 'per_line' },
+      [agLine('Spyfish Aotearoa', 'M4', 'XXX_27_N_001', 4000, 4000)])
+  ];
+  var cg = aggregateBudgets_(cBudgets, fyBounds_(d(2026, 9, 26)),
+    chooseExclusivityReps_(cBudgets));
+  var cRow = cg.budgetByKey['General||XXX_27_P||' + contributionMilestone_('XXX_27_P')];
+  var qRow = cg.budgetByKey['General||XXX_28_Q||' + contributionMilestone_('XXX_28_Q')];
+  check('derive: the project keeps what its policy leaves it',
+    Math.abs(cg.budgetByKey['Spyfish Aotearoa||XXX_27_P||M1'].income - 6000) < 1e-6);
+  check('derive: General receives the rest as this source\'s contribution, as income',
+    cRow && Math.abs(cRow.income - 4000) < 1e-6 && cRow.budget === 0 &&
+    cRow.status === 'secured');
+  check('derive: a line already on General is not charged overhead',
+    cg.budgetByKey['General||XXX_27_P||GM'].income === 2000);
+  check('derive: the contribution follows the line quarter by quarter',
+    !!cRow && Math.abs(agSum(cRow.incomeByQ) - 4000) < 1 &&
+    Object.keys(cRow.incomeByQ).length === 4);
+  check('derive: a source still totals exactly what its funder gives',
+    !!cRow && Math.abs(cg.budgetByKey['Spyfish Aotearoa||XXX_27_P||M1'].income +
+      cg.budgetByKey['General||XXX_27_P||GM'].income + cRow.income - 12000) < 1e-6);
+  check('derive: an application contributes as proposed, at its probability',
+    qRow && qRow.status === 'proposed' && Math.abs(agSum(qRow.weightedByQ) - 1000) < 1);
+  check('derive: per_line and none add no contribution row',
+    !cg.budgetByKey['General||XXX_27_N||' + contributionMilestone_('XXX_27_N')]);
+  // The rollup splits a source's income by cost share, 75/25 here, and then moves the
+  // policy's share of the non-General part.
+  check('derive: the project rollup moves the same way, and totals do not',
+    Math.abs(cg.projects['General'].securedIncome - 6600) < 1e-6 &&
+    Math.abs(cg.projects['Spyfish Aotearoa'].securedIncome - 9400) < 1e-6);
+
+  // The planner: General's contribution is income, one row per contributing source.
+  var tl = buildTimeline_(cBudgets, [], {}, fyBounds_(d(2026, 9, 26)), d(2026, 9, 26));
+  var tlRow = tl.filter(function (r) {
+    return r.milestone === contributionMilestone_('XXX_27_P'); })[0];
+  check('planner: a contribution is income to General, not cost',
+    tlRow && tlRow.project === 'General' && tlRow.segments[0].cost === 0 &&
+    tlRow.segments[0].income === 4000 && tlRow.totalBudget === 0);
+  check('planner: only a percent policy gets a contribution row',
+    tl.filter(function (r) {
+      return r.milestone === contributionMilestone_('XXX_27_N'); }).length === 0);
+
+  // General's tracking view: income layers only, by each milestone's own forecast rule.
+  var tm = contributionMilestones_([
+    { source: 'XXX_27_P', contributionRate: 0.4, milestones: [
+      { project: 'Spyfish Aotearoa', incomeBaseline: { '26/27 Q1': 1000, '26/27 Q2': 1000 },
+        incomeActual: { '26/27 Q1': 900 }, incomeForecast: { '26/27 Q2': 500 } },
+      { project: 'Spyfish Aotearoa', incomeBaseline: { '26/27 Q2': 2000 },
+        incomeActual: {}, incomeForecast: {} },
+      { project: 'General', incomeBaseline: { '26/27 Q1': 9999 }, incomeActual: {},
+        incomeForecast: {} }] },
+    { source: 'XXX_27_N', contributionRate: 0, milestones: [
+      { project: 'Spyfish Aotearoa', incomeBaseline: { '26/27 Q1': 5000 } }] }
+  ]);
+  check('tracking: one contribution row per contributing source',
+    tm.length === 1 && tm[0].milestone === contributionMilestone_('XXX_27_P'));
+  check('tracking: no cost layers, so General\'s spend is not counted twice',
+    !!tm[0] && Object.keys(tm[0].baseline).length === 0 &&
+    Object.keys(tm[0].actual).length === 0 && Object.keys(tm[0].costForecast).length === 0);
+  check('tracking: the policy share of income on non-General milestones',
+    !!tm[0] && tm[0].incomeBaseline['26/27 Q1'] === 400 &&
+    tm[0].incomeBaseline['26/27 Q2'] === 1200 && tm[0].incomeActual['26/27 Q1'] === 360);
+  // One milestone's forecast must not erase another's budget in the same quarter.
+  check('tracking: forecasts fall back per milestone before they are summed',
+    !!tm[0] && tm[0].incomeForecast['26/27 Q2'] === 1000);
+
+  // G1: overhead within ten points of the policy is fine, either side.
+  function g1Line(cost, income, end) {
+    return [{ description: 'Delivery lead', milestone: 'Delivery',
+      item: 'XXX_27_GOOD_001 - Delivery', project: 'Spyfish Aotearoa', start: d(2026, 4, 1),
+      end: end || d(2027, 3, 31), cost: cost, income: income, contribution: income - cost }];
+  }
+  function g1Sheet(policy, cost, income, over) {
+    var o = { metadata: { 'contribution policy': policy }, lines: g1Line(cost, income) };
+    Object.keys(over || {}).forEach(function (k) { o[k] = over[k]; });
+    return sheet_(o);
+  }
+  function g1For(sheet, actuals) {
+    return buildHealth([sheet], actuals || [spend_(5000, '2026-07-01')],
+      { now: NOW, xeroConnected: true }).filter(function (f) { return f.id === 'G1'; })[0];
+  }
+  var P40 = 'percent_of_income:40';
+  // Mirrors SPY_27_MAINT: 55,000 of income, cost a little over half, a 40% policy.
+  check('G1 quiet for a 45% overhead against a 40% policy',
+    !g1For(g1Sheet(P40, 29984, 55000)));
+  check('G1 quiet at exactly the policy',
+    !g1For(g1Sheet(P40, 6000, 10000)));
+  check('G1 quiet at either edge of the band, 30% and 50%',
+    !g1For(g1Sheet(P40, 7000, 10000)) && !g1For(g1Sheet(P40, 5000, 10000)));
+  check('G1 fires above the band',
+    !!g1For(g1Sheet(P40, 4000, 10000)));
+  check('G1 fires below the band, when costs eat the overhead',
+    !!g1For(g1Sheet(P40, 8000, 10000)));
+  var g1Detail = g1For(g1Sheet(P40, 4000, 10000));
+  check('G1 says the planned overhead, the policy and its band, and the money off it',
+    !!g1Detail && g1Detail.detail.indexOf('60% of income planned') !== -1 &&
+    g1Detail.detail.indexOf('policy of 40% (30% to 50% is fine)') !== -1 &&
+    g1Detail.amount === 2000);
+  check('G1 still reports a margin on a source that owes no overhead',
+    !!g1For(g1Sheet('none', 6000, 10000)) && !g1For(g1Sheet('none', 9500, 10000)));
+  check('G1 covers applications as well as secured funding',
+    !!g1For(g1Sheet(P40, 4000, 10000, { status: 'proposed' })));
+  // A line already on General pays for General's work and is left out of the share.
+  check('G1 leaves General lines out of the share',
+    !g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000).concat([{
+      description: 'GM', milestone: 'GM', item: 'XXX_27_GOOD_002 - GM', project: 'General',
+      start: d(2026, 4, 1), end: d(2027, 3, 31), cost: 5000, income: 5000,
+      contribution: 0 }]) })));
+  // Actual, while the work continues: only spend that has already eaten the overhead.
+  // A 40% plan on 10,000 can absorb 7,000 of spend before it drops under 30%.
+  check('G1 quiet while spend to date leaves the overhead in the band',
+    !g1For(g1Sheet(P40, 6000, 10000), [spend_(7000, '2026-07-01')]));
+  var g1Eaten = g1For(g1Sheet(P40, 6000, 10000), [spend_(7500, '2026-07-01')]);
+  check('G1 fires once spend to date has already taken the overhead below the band',
+    !!g1Eaten && g1Eaten.detail.indexOf('already 25% on spend to date') !== -1 &&
+    g1Eaten.amount === 1500);
+  // Actual, once the work is done: both directions, because now it is final.
+  var g1Done = g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000, d(2026, 6, 30)) }),
+    [spend_(4000, '2026-06-01')]);
+  check('G1 judges the actual overhead once the work is done',
+    !!g1Done && g1Done.detail.indexOf('60% actual') !== -1);
+  check('G1 quiet when finished work lands inside the band',
+    !g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000, d(2026, 6, 30)) }),
+      [spend_(5500, '2026-06-01')]));
+  // Spend on an item whose lines are all General's is General's work, not this source's.
+  check('G1 leaves spend on General lines out of the actual',
+    !g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000).concat([{
+      description: 'GM', milestone: 'GM', item: 'XXX_27_GOOD_002 - GM', project: 'General',
+      start: d(2026, 4, 1), end: d(2027, 3, 31), cost: 9000, income: 9000,
+      contribution: 0 }]) }), [spend_(5000, '2026-07-01'),
+      spend_(9000, '2026-07-01', { item: 'XXX_27_GOOD_002 - GM', project: 'General' })]));
+
+  // The organisation's gap is taken on its totals, so one project's surplus offsets
+  // another's shortfall.
+  var ot = orgTotals_([
+    { proposedBudget: 100, securedIncome: 60, actualExpense: 0,
+      proposedBudgetFY: 100, securedIncomeFY: 60, actualExpenseFY: 0 },
+    { proposedBudget: 50, securedIncome: 80, actualExpense: 0,
+      proposedBudgetFY: 50, securedIncomeFY: 80, actualExpenseFY: 0 }]);
+  check('totals: the gap is the organisation\'s, not a sum of floored gaps',
+    ot.unsecuredGap === 10 && ot.unsecuredGapFY === 10);
 
   // ---- serve-time health: staleness and the trigger ------------------------
   // Judged when a cached snapshot is served, because inside a refresh the snapshot is
@@ -779,6 +1081,111 @@ function runTests() {
     filterSnapshotForProjects_(rwSnap, ['Spyfish Aotearoa']).runway === undefined);
   check('runway: no access does not receive it',
     filterSnapshotForProjects_(rwSnap, []).runway === undefined);
+
+  // ---- Planning from the Forecast tab (planBudgets_) ----
+  // Mirrors SPY_27_MAINT: everything re-phased to Oct-Jun, Jul-Sep left blank, meaning
+  // nothing happens then. Under blank-means-budget the Jul-Sep budget was counted as well.
+  var ml = function (desc, s, e, cost, income, code, mile) {
+    return { description: desc, start: s, end: e, cost: cost, income: income,
+      contribution: income - cost, milestone: mile, item: code + ' - ' + mile,
+      project: 'Spyfish Aotearoa' };
+  };
+  var mLines = [
+    ml('Dashboard', d(2026, 8, 1), d(2027, 2, 1), 18200, 30000, 'SPY_27_HAN_001', 'Dashboard'),
+    ml('Run models', d(2026, 8, 1), d(2026, 10, 1), 5600, 10000, 'SPY_27_HAN_002', 'Machine learning models'),
+    ml('Tune models', d(2026, 12, 1), d(2027, 1, 1), 2800, 5000, 'SPY_27_HAN_002', 'Machine learning models'),
+    ml('Project manager', d(2026, 8, 1), d(2027, 6, 30), 3384, 10000, 'SPY_27_HAN_004', 'Maintenance and support')
+  ];
+  var hdr = ['Jul-Sep 26 Forecast', 'Oct-Dec 26 Forecast', 'Jan-Mar 27 Forecast', 'Apr-Jun 27 Forecast', 'Comments'];
+  var grid = [
+    ['Revenue'].concat(hdr),
+    ['Dashboard', '', 10000, 10000, 10000, ''],
+    ['Machine learning models', '', 5000, 5000, 5000, ''],
+    ['Maintenance and support', '', 10000 / 3, 10000 / 3, 10000 / 3, ''],
+    ['', '', '', '', '', ''],
+    ['Expenses'].concat(hdr),
+    ['Dashboard', '', 6067, 6067, 6067, ''],
+    ['Machine learning models', '', 4200, 4200, '', ''],
+    ['Maintenance and support', '', '', '', '', '']
+  ];
+  var fakeSs = { getUrl: function () { return 'u'; },
+    getSheetByName: function () { return { getDataRange: function () {
+      return { getValues: function () { return grid; } }; } }; } };
+  var parsedFc = parseForecastTab_(fakeSs, mLines).data;
+  var rqc = parsedFc.rowQuarters || { cost: {}, income: {} };
+  check('Forecast tab: a row with an entry records every column it sat under, blanks too',
+    (rqc.income.SPY_27_HAN_001 || []).indexOf('26/27 Q2') !== -1 &&
+    (rqc.cost.SPY_27_HAN_002 || []).length === 4);
+  check('Forecast tab: a row left entirely blank records nothing',
+    !rqc.cost.SPY_27_HAN_004);
+
+  var owned = ownedForecast_(parsedFc);
+  check('ownedForecast_: a blank in a row with entries becomes 0',
+    owned.income['SPY_27_HAN_001||26/27 Q2'] === 0 && owned.cost['SPY_27_HAN_002||27/28 Q1'] === 0);
+  check('ownedForecast_: a row left entirely blank gains nothing, so its budget stands',
+    owned.cost['SPY_27_HAN_004||26/27 Q2'] === undefined);
+  check('ownedForecast_: without rowQuarters the forecast is unchanged',
+    Object.keys(ownedForecast_({ cost: { 'X||26/27 Q3': 5 }, income: {} }).cost).length === 1);
+
+  var planL = plannedLines_(mLines, owned);
+  var fyQ = function (ls, kind, q) {
+    return ls.reduce(function (t, l) {
+      var m = bucketToQuarters(distributeByMonth_([l], kind));
+      return t + (m[q] || 0);
+    }, 0);
+  };
+  var sumK = function (ls, kind) { return ls.reduce(function (t, l) { return t + l[kind]; }, 0); };
+  check('plan: income totals the forecast, 55,000, with nothing in Jul-Sep',
+    Math.abs(sumK(planL, 'income') - 55000) < 1 && Math.abs(fyQ(planL, 'income', '26/27 Q2')) < 1);
+  check('plan: each quarter carries its forecast, 18,333 of income from Oct',
+    Math.abs(fyQ(planL, 'income', '26/27 Q3') - 18333.33) < 1 &&
+    Math.abs(fyQ(planL, 'income', '27/28 Q1') - 18333.33) < 1);
+  check('plan: a milestone row left blank keeps its Budget-tab cost, Jul-Sep included',
+    Math.abs(fyQ(planL.filter(function (l) { return l.item.indexOf('SPY_27_HAN_004') === 0; }), 'cost', '26/27 Q2') -
+      fyQ([mLines[3]], 'cost', '26/27 Q2')) < 1 && fyQ([mLines[3]], 'cost', '26/27 Q2') > 0);
+  check('plan: a quarter is shared across a milestone\'s lines by their budget, 2:1',
+    Math.abs(sumK(planL.filter(function (l) { return l.description === 'Run models'; }), 'cost') - 5600) < 1 &&
+    Math.abs(sumK(planL.filter(function (l) { return l.description === 'Tune models'; }), 'cost') - 2800) < 1);
+  check('plan: a forecast quarter becomes a line spanning the whole quarter',
+    planL.some(function (l) { return l.start.getTime() === d(2027, 4, 1).getTime() &&
+      l.end.getTime() === d(2027, 6, 30).getTime() && l.income > 0; }));
+  var noFc = plannedLines_(mLines, { cost: {}, income: {} });
+  check('plan: with no forecast the Budget tab\'s own lines come back untouched',
+    noFc.length === mLines.length && noFc.every(function (l, i) { return l === mLines[i]; }));
+  var pb = planBudgets_([{ name: 'S', lines: mLines, forecast: parsedFc }])[0];
+  check('planBudgets_: plans from the resolved forecast and keeps the Budget tab on budgetLines',
+    pb.budgetLines === mLines && Math.abs(sumK(pb.lines, 'income') - 55000) < 1 &&
+    pb.forecast.income['SPY_27_HAN_001||26/27 Q2'] === 0);
+
+  // A11: cost forecast with no income forecast beside it.
+  var a11For = function (fcst, ls) {
+    return buildHealth([{ name: 'S', projectFolder: 'P', metadata: {}, tabs: [], issues: [],
+      lines: ls || mLines, forecast: fcst }], [], {}).filter(function (f) { return f.id === 'A11'; });
+  };
+  var costOnly = { cost: { 'SPY_27_HAN_001||26/27 Q3': 6067 }, income: {}, comments: {} };
+  var a11 = a11For(costOnly);
+  check('A11: a cost forecast with no income forecast is flagged, with the income at stake',
+    a11.length === 1 && a11[0].amount === 30000 && /SPY_27_HAN_001/.test(a11[0].detail));
+  check('A11: quiet once the income row has an entry',
+    a11For({ cost: costOnly.cost, income: { 'SPY_27_HAN_001||26/27 Q3': 0 }, comments: {} }).length === 0);
+  check('A11: quiet for a milestone that budgets no income',
+    a11For(costOnly, [ml('Cost only', d(2026, 8, 1), d(2026, 9, 1), 500, 0, 'SPY_27_HAN_001', 'Dashboard')]).length === 0);
+
+  // A12: a minus sign on the Forecast tab, as WW_26_SALES had on its costs.
+  var negGrid = [
+    ['Expenses'].concat(hdr),
+    ['Dashboard', '', -1500, -1500, 6067, ''],
+    ['Machine learning models', '', 0, 4200, '', '']
+  ];
+  var negSs = { getUrl: function () { return 'u'; },
+    getSheetByName: function () { return { getDataRange: function () {
+      return { getValues: function () { return negGrid; } }; } }; } };
+  var negIssues = parseForecastTab_(negSs, mLines).issues.filter(function (x) { return x.check === 'A12'; });
+  check('A12: a negative Forecast entry is named, with its row and quarters',
+    negIssues.length === 1 && negIssues[0].row === 2 &&
+    /26\/27 Q3, 26\/27 Q4/.test(negIssues[0].detail));
+  check('A12: a 0 is not negative',
+    !negIssues.some(function (x) { return /Machine learning/.test(x.detail); }));
 
   Logger.log(results.join('\n'));
   return results;
