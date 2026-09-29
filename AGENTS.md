@@ -113,9 +113,6 @@ rule rather than three that drift.
 |---|---|
 | Deep guide | [`.agents/skills/SKILL.md`](.agents/skills/SKILL.md) |
 | Funding Cockpit dashboard | [`dashboard/`](dashboard/) — `README.md`, `GM_GUIDE.md`, `BUDGET_PROCEDURES_ADDENDUM.md` |
-| `PROJECT_overview` sheet aggregator | [`project_reports/`](project_reports/) — predates the cockpit and overlaps requirement 10. Quarterly budget generation was retired 2026-08-11 |
-| Chart-of-accounts helpers | `general_valid_accounts.js`, `variance_funding_source.js` (root) |
-| Account-keyed budget/overhead logic | `create_xero_budget_project.js` (root) |
 | Budgets (the actual data) | Google Drive `Budgets` folder — id `10105co6S5qHFSVVg0pb0fkoPidN3ScJZ` |
 
 ## Apps Script projects
@@ -123,7 +120,6 @@ rule rather than three that drift.
 | Project | Script ID | Kind |
 |---|---|---|
 | Funding Cockpit | `1L4ilqypO-LyLmY4Vyv6TwxjsUwH3d8x0cr54hIgkyU1bch7pQ4xAurVW` | standalone web app |
-| PROJECT_overview | not listed by clasp | bound to a spreadsheet |
 
 `quarterly_budgets` was deleted from script.google.com on 2026-08-11 when quarterly budget
 generation moved into the cockpit. Its id is deliberately not recorded here: a live-looking

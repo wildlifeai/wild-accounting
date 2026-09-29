@@ -19,7 +19,6 @@ funders.
 > * `dashboard/README.md` — Funding Cockpit architecture, setup, maintenance
 > * `dashboard/GM_GUIDE.md` — what each dashboard panel means, for non-technical users
 > * `dashboard/BUDGET_PROCEDURES_ADDENDUM.md` — how the dashboard changes budget procedures
-> * `project_reports/README.md` — quarterly budget generation and deployment
 
 **The most important thing to understand about this repo: it is not the running system.** Every
 script executes as an Apps Script project in the cloud, and those projects can be — and have
@@ -424,15 +423,16 @@ they are fixed.
   OAuth2 client per project and two independent crawlers of the same Drive tree, each a place the
   definition of a budget could drift. `dashboard/XeroClient.js` is now the only Xero client:
   quarterly generation was retired on 2026-08-11 and `funding_reports/` was deleted on 2026-08-14.
-  What remains is the root-level chart-of-accounts helpers. See §8 for why the projects are separate.
+  The root-level chart-of-accounts helpers went on 2026-09-29. See §8 for why the projects were separate.
 * ~~**A third remote loader is still present.**~~ **Resolved 2026-08-14.** It lived in
   `funding_reports/`, cached under `XERO_SCRIPT_CACHE`, and fetched its code from a GitHub raw URL
   at runtime. The whole directory was deleted: its Xero client was superseded by the cockpit's, and
   it read two tabs the sheet schema now rejects outright (checked by A3). That also removed a
   misnamed `,gitignore` — a comma instead of a dot — which meant the file meant to stop credentials
   being committed had never done anything.
-* **`general_valid_accounts.js` and `variance_funding_source.js`** both define
-  `updateAccountValidation()` and differ by ~29 lines. Near-duplicates sharing a global name.
+* ~~**`general_valid_accounts.js` and `variance_funding_source.js`** both define
+  `updateAccountValidation()`.~~ **Resolved 2026-09-29**: both deleted, with the
+  `*Account` column they served already retired.
 * **Working capital and cash are not modelled at all**, and the current scopes cannot reach the
   balance sheet. Board reporting needs both.
 * **Runway is not computed.** Decided 2026-09-21: the cockpit will report *funded* runway, not cash
@@ -593,11 +593,10 @@ Order of work:
    `appsscript.json` scaffolding. Retire the `quarterly_budgets` Apps Script project
    (`18LAH4KW…`) with it. Nothing needs porting — see the resolution above. Merge
    `fix/remove-remote-loaders` first, since it touches the same files.
-2. Retire the other legacy generation while you are there: `create_xero_budget_project.js` (948
-   lines, the ancestor the cockpit's overhead logic was ported from) and the near-duplicate
-   `general_valid_accounts.js` / `variance_funding_source.js`, which both define
-   `updateAccountValidation()` and differ by ~29 lines. Confirm nothing deployed still runs them
-   before deleting.
+2. ~~Retire the other legacy generation.~~ Done 2026-09-29: `create_xero_budget_project.js`,
+   `general_valid_accounts.js` and `variance_funding_source.js` deleted, and the
+   `PROJECT_overview` aggregator (`funding-aggregator.js`) with them. None existed as a
+   standalone Apps Script project in Drive.
 3. ~~Remove the third remote loader.~~ Done 2026-08-14: `funding_reports/` deleted entirely.
 4. Once the legacy paths are gone, the duplication in §5 largely resolves itself — the chart of
    accounts id, the FY-quarter maths and the Xero client end up defined once, in the cockpit. Only

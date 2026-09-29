@@ -103,7 +103,6 @@ Ranked by how badly they hurt the persona who depends on them:
 | — how to lay out a budget sheet | [`dashboard/BUDGET_SHEET_TEMPLATE.md`](dashboard/BUDGET_SHEET_TEMPLATE.md) |
 | — effect on budget procedures | [`dashboard/BUDGET_PROCEDURES_ADDENDUM.md`](dashboard/BUDGET_PROCEDURES_ADDENDUM.md) |
 | Importable sheet templates | [`budget_templates/README.md`](budget_templates/README.md) |
-| `PROJECT_overview` sheet aggregator | [`project_reports/README.md`](project_reports/README.md) — predates the cockpit and overlaps requirement 10 |
 
 `CLAUDE.md` is just `@AGENTS.md`, so AI assistants and developers read the same guide.
 

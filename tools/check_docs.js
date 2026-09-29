@@ -133,7 +133,11 @@ function ok(what) { console.log('  ok    ' + what); }
   const RETIRED_FILES = new Set([
     'create_quarterly_budgets.js',   // retired 2026-08-11, quarterly generation moved into the cockpit
     'loader-budgets-template.js',    // remote code loader, removed 2026-08-10
-    'loader_template.js'             // remote code loader, removed 2026-08-10
+    'loader_template.js',            // remote code loader, removed 2026-08-10
+    'create_xero_budget_project.js', // removed 2026-09-29, the cockpit ported what it needed
+    'general_valid_accounts.js',     // removed 2026-09-29, served the retired *Account column
+    'variance_funding_source.js',    // removed 2026-09-29, served the retired *Account column
+    'funding-aggregator.js'          // removed 2026-09-29, the cockpit's Overview replaced it
   ]);
 
   // Every file in the repo, by basename, so a bare mention in prose resolves.
