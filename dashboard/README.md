@@ -12,8 +12,7 @@ Google Sheets**, **actuals in Xero**, and the existing **Apps Script** glue. It 
 - a **quarterly tracking** screen where the GM maintains a forward forecast per milestone.
 
 It is a Google Apps Script web app. It reads **budgets from the Budgets GDrive** and pulls
-**actuals live from Xero** via the Xero API (OAuth2), reusing the same OAuth2 library the
-`funding_reports` script already depends on.
+**actuals live from Xero** via the Xero API (OAuth2), using the apps-script-oauth2 library.
 
 ### ▶ Live dashboard
 **<https://script.google.com/a/macros/wildlife.ai/s/AKfycbxCjtIS-xnIdySCtFF7vibrW0qhhnMcnzFs0GCPK0SXrzFzV5-WZtNnpkyTWfbLdAqs/exec>**
@@ -41,7 +40,7 @@ Apps Script Web App (HtmlService)  ──►  GM opens a URL, Google login
   Aggregator  ── joins ──┐
         │                │
   ForecastEngine         │   (day-weighted Cost/Income distribution + quarterly
-  (ported math)          │    helpers; date logic ported from create_xero_budget_project.js)
+  (pure maths)           │    helpers)
         │                │
    ┌────┴─────┐    ┌─────┴───────┐
    │ Budgets  │    │   Xero API   │
@@ -57,9 +56,9 @@ Apps Script Web App (HtmlService)  ──►  GM opens a URL, Google login
   rebuilt every 6h by a time trigger + manual "Refresh now"
         │
         ▼
-  Quarterly tracking screen  ──►  GM edits forward forecast (spend, per
-  (baseline + actual + forecast)   milestone × quarter), saved to a central
-                                   "Forecast" Google Sheet (read live)
+  Quarterly tracking screen  ──►  budget + Xero actuals + each funding
+  (baseline + actual + forecast)   source's own Forecast tab, per
+                                   milestone × quarter
 ```
 
 ### Why a cache
@@ -92,14 +91,14 @@ definitions are fixed in `Aggregator.js`: **secured = `secured/` only; proposed 
 | `BudgetReader.js` | Walk Drive, parse `Budget` tabs into budget lines |
 | `ForecastEngine.js` | Pure forecasting math + quarterly helpers, unit-testable |
 | `Aggregator.js` | Join budgets + actuals → snapshot; forecast definitions; breakdown rows; quarterly baseline+actual |
-| `ForecastStore.js` | Read/write the central Forecast Sheet (GM's forward forecast) |
+| `Permissions.js` | The Permissions tab of the Cockpit Settings sheet: which projects each person may see |
 | `TrackingBuilder.js` | Merge baseline + actual + forecast into the quarterly grid |
 | `HealthCheck.js` | Turns silent wrongness into named findings. Pure, so it runs offline |
 | `Snapshot.js` | Cache (JSON file in Drive), refresh trigger, and refresh-progress writes |
 | `WebApp.js` | `doGet`, client API (`google.script.run`), admin menu |
 | `Index/Stylesheet/JavaScript.html` | The dashboard UI |
 | `Tests.js` | `runTests()` — checks the math with no Drive/Xero |
-| `Probe.js` | Read-only Xero diagnostics, run by hand from the editor. Never on a trigger |
+| `Probe.js` | Read-only diagnostics run by hand from the editor, currently the contribution dry run. Never on a trigger |
 | `check_docs.js` | Node, not Apps Script. Fails when these docs disagree with the code |
 
 ---
@@ -191,8 +190,7 @@ forecasting math independently of Drive/Xero.
 
 ### Common adjustments (all in `Config.js`)
 - New balance-sheet account to exclude → add to `EXCLUDED_ACCOUNTS`.
-- Chart-of-accounts rename → update `REVENUE_ACCOUNTS` / `OVERHEAD_ACCOUNT` /
-  `DEFERRED_ACCOUNT`.
+- Chart-of-accounts rename → nothing to change: excluded accounts match on the code.
 - Refresh frequency → `REFRESH_TRIGGER_HOURS` (re-run `installRefreshTrigger` after changing).
 
 ### Deploying code changes
@@ -210,9 +208,6 @@ GM's URL stays the same.
   `<source> (contribution)` row under General, in the Overview, five-year plan, planner
   and General's tracking view alike. The `Contribution` column (= Income − Cost) is the
   sheet's own arithmetic, checked by B5, and G1 reports any margin beyond the policy.
-  (The account-based overhead/grant-recognition logic from
-  `create_xero_budget_project.js` does not apply here — that script reads a different,
-  account-keyed sheet.)
 - **Budget → project split**: per line via an optional `Project` column. A line uses its
   `Project` value when set; if there's no column or the cell is blank, the line belongs to
   its parent project folder. This lets one funding source (e.g. `WW_25_TOI`, folder

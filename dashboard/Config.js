@@ -101,11 +101,9 @@ const CONFIG = {
   DEFAULT_PROJECT: 'Unallocated',
   GENERAL_PROJECT: 'General',
 
-  // ---- Chart of accounts: ported from create_xero_budget_project.js --------
-  REVENUE_ACCOUNTS: ['Grants (102)', 'Project Contract Income (181)'],
-  OVERHEAD_ACCOUNT: 'Overhead Allocation (500)',
-  DEFERRED_ACCOUNT: 'Unused Donations and Grants with Conditions (835)',
-  // Balance-sheet / non-operational accounts excluded from spend + forecast.
+  // ---- Chart of accounts ------------------------------------------------------
+  // Balance-sheet / non-operational accounts excluded from spend + forecast. Matched on
+  // the code in brackets, so renaming an account in Xero changes nothing here.
   EXCLUDED_ACCOUNTS: [
     'Accounts Payable (800)', 'Accounts Receivable (610)', 'ANZ Term Deposit (605)',
     'Computer Equipment (720)', 'GST (820)', 'Historical Adjustment (840)',

@@ -255,7 +255,7 @@ come live from Xero; a per-sheet copy of them is a second version of the truth.
 
 **Forecasts are per-sheet, not central.** An earlier design kept them in one central Cockpit
 Forecast sheet, and `BUDGET_PROCEDURES_ADDENDUM.md` still describes it that way — that is stale.
-`ForecastStore.js` now states plainly that "legacy forecast storage has been removed"; the central
+The old store is gone and its file is now `Permissions.js`; the central
 sheet is **Cockpit Settings**, holding only the Permissions tab, and forecasts are read from each
 funding source's own `Forecast` tab by `BudgetReader.parseForecastTab_`.
 
@@ -402,8 +402,8 @@ they are fixed.
   silently un-exclude. `lastExclusionSummary()` reports what was dropped. **Expect published spend
   figures to fall when this first deploys** — that is the miscounting being removed, not a
   regression, so capture the before/after.
-* **`OVERHEAD_ACCOUNT`, `REVENUE_ACCOUNTS` and `DEFERRED_ACCOUNT` are still dead configuration** —
-  declared, never read.
+* ~~**`OVERHEAD_ACCOUNT`, `REVENUE_ACCOUNTS` and `DEFERRED_ACCOUNT` are dead configuration.**~~
+  **Removed 2026-09-29.**
 * ~~**Payroll manual journals are not fetched.**~~ **Superseded 2026-09-21**: payroll moved to
   Xero Payroll bills, which are fetched. Whether those bills carry `Projects` tracking is
   unconfirmed, and D1 is the check that answers it (§4).

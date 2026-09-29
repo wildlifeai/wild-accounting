@@ -1,10 +1,11 @@
 /**
- * ForecastStore.js
- * Manages the central "Cockpit Settings" Google Sheet which contains the
- * Permissions tab for role-based access control.
+ * Permissions.js
+ * Who may see what: the Permissions tab of the "Cockpit Settings" spreadsheet, which
+ * getUserPermissions reads on every page load to scope the snapshot to a person's projects.
  *
- * Legacy forecast storage has been removed — forecasts are now read directly
- * from each funding source's own Forecast tab (see BudgetReader.parseForecastTab_).
+ * This was ForecastStore.js until 2026-09-29. Forecasts were once stored centrally here;
+ * they are now read from each funding source's own Forecast tab
+ * (BudgetReader.parseForecastTab_), and only the settings sheet remained.
  */
 
 // ---- Settings spreadsheet management ----
