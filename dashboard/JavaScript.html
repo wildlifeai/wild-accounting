@@ -1318,9 +1318,13 @@
         if (!seg.start || !seg.end) return;
         monthRange(seg.start, seg.end).forEach(function (mk) {
           if (mk >= hStart && mk <= hEnd) {
-            coverage[mk] = { source: seg.source, status: seg.status,
-              cost: (seg.monthlyCost || {})[mk] || 0,
-              income: (seg.monthlyIncome || {})[mk] || 0 };
+            var c = (seg.monthlyCost || {})[mk] || 0;
+            var inc = (seg.monthlyIncome || {})[mk] || 0;
+            // Two lines of one milestone from the same source in the same month add up;
+            // the second used to replace the first, halving what the tooltip showed.
+            var prev = coverage[mk];
+            if (prev && prev.source === seg.source) { prev.cost += c; prev.income += inc; }
+            else coverage[mk] = { source: seg.source, status: seg.status, cost: c, income: inc };
           }
         });
       });

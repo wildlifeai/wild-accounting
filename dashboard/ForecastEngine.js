@@ -193,6 +193,131 @@ function expectedCostByQuarter_(src) {
 }
 
 /**
+ * A Forecast tab with its blanks resolved. A milestone row with any number in it is the
+ * whole plan for the quarters its section has columns for, so its blank cells become 0.
+ * A row left entirely blank keeps meaning "the budget still stands" and gains nothing.
+ *
+ * Needs `rowQuarters`, the columns each row with an entry sat under, which
+ * parseForecastTab_ records. Without it the forecast comes back unchanged.
+ */
+function ownedForecast_(forecast) {
+  const f = forecast || {};
+  const out = { cost: Object.assign({}, f.cost || {}), income: Object.assign({}, f.income || {}),
+    comments: f.comments || {}, rowQuarters: f.rowQuarters };
+  const rq = f.rowQuarters || {};
+  ['cost', 'income'].forEach(kind => {
+    const rows = rq[kind] || {};
+    Object.keys(rows).forEach(code => {
+      rows[code].forEach(q => {
+        const key = code + '||' + q;
+        if (out[kind][key] === undefined) out[kind][key] = 0;
+      });
+    });
+  });
+  return out;
+}
+
+/** First and last day of quarter index `qi`. */
+function quarterBounds_(qi) {
+  const s = quarterStartDate_(qi);
+  return { start: s, end: new Date(s.getFullYear(), s.getMonth() + 3, 0) };
+}
+
+/**
+ * The plan for one funding source as budget lines: the Budget tab's lines, with every
+ * quarter a Forecast entry covers replaced by that entry.
+ *
+ * The Budget tab is the budget as agreed with the funder and stays the baseline the
+ * tracking grid compares against. Once a source is under way its Forecast tab, quarter by
+ * quarter, is the plan, so everything that shows what is expected when (the Overview,
+ * runway, the planner and the five-year plan) reads these lines instead.
+ *
+ * A quarter's forecast is shared between a milestone's lines in proportion to each
+ * line's budget for that field, or evenly when the milestone budgets none of it, and
+ * becomes a line spanning the whole quarter. The rest of each line keeps its Budget-tab
+ * timing. A line with nothing forecast is returned untouched, so a source with no
+ * Forecast tab plans exactly what it budgeted.
+ *
+ * Pass a forecast already resolved by ownedForecast_; blanks are otherwise "budget".
+ */
+function plannedLines_(lines, forecast) {
+  const fc = forecast || {};
+  const byCode = {};
+  (lines || []).forEach(l => {
+    const code = itemCode_(l.item);
+    if (code) (byCode[code] = byCode[code] || []).push(l);
+  });
+  // code -> kind -> { quarter label: amount } for that code's forecast entries
+  const entries = {};
+  ['cost', 'income'].forEach(kind => {
+    Object.keys(fc[kind] || {}).forEach(k => {
+      const cut = k.indexOf('||');
+      const code = k.slice(0, cut);
+      if (!byCode[code]) return;
+      const e = (entries[code] = entries[code] || { cost: {}, income: {} });
+      e[kind][k.slice(cut + 2)] = fc[kind][k];
+    });
+  });
+
+  const out = [];
+  (lines || []).forEach(l => {
+    const code = itemCode_(l.item);
+    const e = entries[code];
+    if (!e || !l.start || !l.end) { out.push(l); return; }
+    const pieces = {}; // quarter index -> { cost, income } for the whole quarter or a part
+    const piece = (qi, start, end) => {
+      const key = qi + '|' + start.getTime() + '|' + end.getTime();
+      return pieces[key] || (pieces[key] = { qi: qi, start: start, end: end, cost: 0, income: 0 });
+    };
+    const totalDays = (l.end - l.start) / 86400000 + 1;
+    ['cost', 'income'].forEach(kind => {
+      const own = e[kind];
+      // The Budget-tab timing, for the quarters nothing was forecast in.
+      if (l[kind]) {
+        for (let qi = qiOfDate_(l.start); qi <= qiOfDate_(l.end); qi++) {
+          if (own[labelOfQi_(qi)] !== undefined) continue;
+          const b = quarterBounds_(qi);
+          const start = l.start > b.start ? l.start : b.start;
+          const end = l.end < b.end ? l.end : b.end;
+          const days = DateMath.overlapDays(l.start, l.end, b.start, b.end);
+          if (days > 0) piece(qi, start, end)[kind] += l[kind] * days / totalDays;
+        }
+      }
+      // The forecast, shared across the milestone's lines.
+      const siblings = byCode[code];
+      const budgeted = siblings.reduce((t, s) => t + (Number(s[kind]) || 0), 0);
+      const share = budgeted ? (Number(l[kind]) || 0) / budgeted : 1 / siblings.length;
+      Object.keys(own).forEach(q => {
+        const amount = own[q] * share;
+        if (!amount) return;
+        const qi = qiOfLabel_(q);
+        const b = quarterBounds_(qi);
+        piece(qi, b.start, b.end)[kind] += amount;
+      });
+    });
+    Object.keys(pieces).map(k => pieces[k]).sort((a, b) => a.start - b.start).forEach(p => {
+      if (!p.cost && !p.income) return;
+      out.push(Object.assign({}, l, { start: p.start, end: p.end, cost: p.cost,
+        income: p.income, contribution: p.income - p.cost }));
+    });
+  });
+  return out;
+}
+
+/**
+ * Budgets as planned: each source's lines through plannedLines_, and its forecast with
+ * blanks resolved. The Budget tab's own lines stay on `budgetLines` for anything that
+ * judges against the agreed budget.
+ */
+function planBudgets_(budgets) {
+  return (budgets || []).map(src => {
+    const forecast = ownedForecast_(src.forecast);
+    return Object.assign({}, src, { forecast: forecast, budgetLines: src.lines,
+      lines: plannedLines_(src.lines, forecast) });
+  });
+}
+
+/**
  * Top-level: compute the forecast bundle for one funding source's budget lines.
  * The funding-source `Budget` tab is keyed on milestone, not chart-of-accounts:
  *   expense = day-weighted `Cost`, income = day-weighted `Income`.

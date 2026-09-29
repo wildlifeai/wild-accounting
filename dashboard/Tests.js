@@ -1082,6 +1082,111 @@ function runTests() {
   check('runway: no access does not receive it',
     filterSnapshotForProjects_(rwSnap, []).runway === undefined);
 
+  // ---- Planning from the Forecast tab (planBudgets_) ----
+  // Mirrors SPY_27_MAINT: everything re-phased to Oct-Jun, Jul-Sep left blank, meaning
+  // nothing happens then. Under blank-means-budget the Jul-Sep budget was counted as well.
+  var ml = function (desc, s, e, cost, income, code, mile) {
+    return { description: desc, start: s, end: e, cost: cost, income: income,
+      contribution: income - cost, milestone: mile, item: code + ' - ' + mile,
+      project: 'Spyfish Aotearoa' };
+  };
+  var mLines = [
+    ml('Dashboard', d(2026, 8, 1), d(2027, 2, 1), 18200, 30000, 'SPY_27_HAN_001', 'Dashboard'),
+    ml('Run models', d(2026, 8, 1), d(2026, 10, 1), 5600, 10000, 'SPY_27_HAN_002', 'Machine learning models'),
+    ml('Tune models', d(2026, 12, 1), d(2027, 1, 1), 2800, 5000, 'SPY_27_HAN_002', 'Machine learning models'),
+    ml('Project manager', d(2026, 8, 1), d(2027, 6, 30), 3384, 10000, 'SPY_27_HAN_004', 'Maintenance and support')
+  ];
+  var hdr = ['Jul-Sep 26 Forecast', 'Oct-Dec 26 Forecast', 'Jan-Mar 27 Forecast', 'Apr-Jun 27 Forecast', 'Comments'];
+  var grid = [
+    ['Revenue'].concat(hdr),
+    ['Dashboard', '', 10000, 10000, 10000, ''],
+    ['Machine learning models', '', 5000, 5000, 5000, ''],
+    ['Maintenance and support', '', 10000 / 3, 10000 / 3, 10000 / 3, ''],
+    ['', '', '', '', '', ''],
+    ['Expenses'].concat(hdr),
+    ['Dashboard', '', 6067, 6067, 6067, ''],
+    ['Machine learning models', '', 4200, 4200, '', ''],
+    ['Maintenance and support', '', '', '', '', '']
+  ];
+  var fakeSs = { getUrl: function () { return 'u'; },
+    getSheetByName: function () { return { getDataRange: function () {
+      return { getValues: function () { return grid; } }; } }; } };
+  var parsedFc = parseForecastTab_(fakeSs, mLines).data;
+  var rqc = parsedFc.rowQuarters || { cost: {}, income: {} };
+  check('Forecast tab: a row with an entry records every column it sat under, blanks too',
+    (rqc.income.SPY_27_HAN_001 || []).indexOf('26/27 Q2') !== -1 &&
+    (rqc.cost.SPY_27_HAN_002 || []).length === 4);
+  check('Forecast tab: a row left entirely blank records nothing',
+    !rqc.cost.SPY_27_HAN_004);
+
+  var owned = ownedForecast_(parsedFc);
+  check('ownedForecast_: a blank in a row with entries becomes 0',
+    owned.income['SPY_27_HAN_001||26/27 Q2'] === 0 && owned.cost['SPY_27_HAN_002||27/28 Q1'] === 0);
+  check('ownedForecast_: a row left entirely blank gains nothing, so its budget stands',
+    owned.cost['SPY_27_HAN_004||26/27 Q2'] === undefined);
+  check('ownedForecast_: without rowQuarters the forecast is unchanged',
+    Object.keys(ownedForecast_({ cost: { 'X||26/27 Q3': 5 }, income: {} }).cost).length === 1);
+
+  var planL = plannedLines_(mLines, owned);
+  var fyQ = function (ls, kind, q) {
+    return ls.reduce(function (t, l) {
+      var m = bucketToQuarters(distributeByMonth_([l], kind));
+      return t + (m[q] || 0);
+    }, 0);
+  };
+  var sumK = function (ls, kind) { return ls.reduce(function (t, l) { return t + l[kind]; }, 0); };
+  check('plan: income totals the forecast, 55,000, with nothing in Jul-Sep',
+    Math.abs(sumK(planL, 'income') - 55000) < 1 && Math.abs(fyQ(planL, 'income', '26/27 Q2')) < 1);
+  check('plan: each quarter carries its forecast, 18,333 of income from Oct',
+    Math.abs(fyQ(planL, 'income', '26/27 Q3') - 18333.33) < 1 &&
+    Math.abs(fyQ(planL, 'income', '27/28 Q1') - 18333.33) < 1);
+  check('plan: a milestone row left blank keeps its Budget-tab cost, Jul-Sep included',
+    Math.abs(fyQ(planL.filter(function (l) { return l.item.indexOf('SPY_27_HAN_004') === 0; }), 'cost', '26/27 Q2') -
+      fyQ([mLines[3]], 'cost', '26/27 Q2')) < 1 && fyQ([mLines[3]], 'cost', '26/27 Q2') > 0);
+  check('plan: a quarter is shared across a milestone\'s lines by their budget, 2:1',
+    Math.abs(sumK(planL.filter(function (l) { return l.description === 'Run models'; }), 'cost') - 5600) < 1 &&
+    Math.abs(sumK(planL.filter(function (l) { return l.description === 'Tune models'; }), 'cost') - 2800) < 1);
+  check('plan: a forecast quarter becomes a line spanning the whole quarter',
+    planL.some(function (l) { return l.start.getTime() === d(2027, 4, 1).getTime() &&
+      l.end.getTime() === d(2027, 6, 30).getTime() && l.income > 0; }));
+  var noFc = plannedLines_(mLines, { cost: {}, income: {} });
+  check('plan: with no forecast the Budget tab\'s own lines come back untouched',
+    noFc.length === mLines.length && noFc.every(function (l, i) { return l === mLines[i]; }));
+  var pb = planBudgets_([{ name: 'S', lines: mLines, forecast: parsedFc }])[0];
+  check('planBudgets_: plans from the resolved forecast and keeps the Budget tab on budgetLines',
+    pb.budgetLines === mLines && Math.abs(sumK(pb.lines, 'income') - 55000) < 1 &&
+    pb.forecast.income['SPY_27_HAN_001||26/27 Q2'] === 0);
+
+  // A11: cost forecast with no income forecast beside it.
+  var a11For = function (fcst, ls) {
+    return buildHealth([{ name: 'S', projectFolder: 'P', metadata: {}, tabs: [], issues: [],
+      lines: ls || mLines, forecast: fcst }], [], {}).filter(function (f) { return f.id === 'A11'; });
+  };
+  var costOnly = { cost: { 'SPY_27_HAN_001||26/27 Q3': 6067 }, income: {}, comments: {} };
+  var a11 = a11For(costOnly);
+  check('A11: a cost forecast with no income forecast is flagged, with the income at stake',
+    a11.length === 1 && a11[0].amount === 30000 && /SPY_27_HAN_001/.test(a11[0].detail));
+  check('A11: quiet once the income row has an entry',
+    a11For({ cost: costOnly.cost, income: { 'SPY_27_HAN_001||26/27 Q3': 0 }, comments: {} }).length === 0);
+  check('A11: quiet for a milestone that budgets no income',
+    a11For(costOnly, [ml('Cost only', d(2026, 8, 1), d(2026, 9, 1), 500, 0, 'SPY_27_HAN_001', 'Dashboard')]).length === 0);
+
+  // A12: a minus sign on the Forecast tab, as WW_26_SALES had on its costs.
+  var negGrid = [
+    ['Expenses'].concat(hdr),
+    ['Dashboard', '', -1500, -1500, 6067, ''],
+    ['Machine learning models', '', 0, 4200, '', '']
+  ];
+  var negSs = { getUrl: function () { return 'u'; },
+    getSheetByName: function () { return { getDataRange: function () {
+      return { getValues: function () { return negGrid; } }; } }; } };
+  var negIssues = parseForecastTab_(negSs, mLines).issues.filter(function (x) { return x.check === 'A12'; });
+  check('A12: a negative Forecast entry is named, with its row and quarters',
+    negIssues.length === 1 && negIssues[0].row === 2 &&
+    /26\/27 Q3, 26\/27 Q4/.test(negIssues[0].detail));
+  check('A12: a 0 is not negative',
+    !negIssues.some(function (x) { return /Machine learning/.test(x.detail); }));
+
   Logger.log(results.join('\n'));
   return results;
 }

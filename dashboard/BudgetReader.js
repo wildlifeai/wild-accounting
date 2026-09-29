@@ -456,7 +456,7 @@ function parseForecastTab_(ss, budgetLines) {
     return empty;
   }
 
-  const result = { cost: {}, income: {}, comments: {} };
+  const result = { cost: {}, income: {}, comments: {}, rowQuarters: { cost: {}, income: {} } };
   const seenLabels = {}; // 'section||label' -> row number first seen on
   var section = null; // 'revenue' | 'expenses'
   var quarterCols = []; // [{ col, label }]
@@ -518,14 +518,34 @@ function parseForecastTab_(ss, budgetLines) {
       seenLabels[seenKey] = i + 1;
     }
 
-    var bucket = (section === 'revenue') ? result.income : result.cost;
+    var kind = (section === 'revenue') ? 'income' : 'cost';
+    var bucket = result[kind];
+    var wrote = false;
+    var negative = [];
     quarterCols.forEach(function (qc) {
       var val = data[i][qc.col];
       if (val !== null && val !== '' && !isNaN(Number(val))) {
         var key = code + '||' + qc.label;
         bucket[key] = (bucket[key] || 0) + Number(val);
+        wrote = true;
+        if (Number(val) < 0) negative.push(qc.label);
       }
     });
+    // Cost and income are both entered as positive amounts; a minus sign on a cost
+    // row turns spend into income. Kept as entered, but named.
+    if (negative.length) {
+      issues.push({ check: 'A12', row: i + 1, detail: (kind === 'cost' ? 'Expenses' :
+        'Revenue') + ' row "' + cellA + '" is negative in ' + negative.join(', ') });
+    }
+    // The columns a row with an entry sat under. Once a row has a number in it, its
+    // blanks mean 0 rather than "the budget stands"; see ownedForecast_.
+    if (wrote) {
+      var rq = result.rowQuarters[kind];
+      var seenQ = rq[code] || (rq[code] = []);
+      quarterCols.forEach(function (qc) {
+        if (seenQ.indexOf(qc.label) === -1) seenQ.push(qc.label);
+      });
+    }
 
     if (commentCol >= 0) {
       var comment = clean_(String(data[i][commentCol] || ''));

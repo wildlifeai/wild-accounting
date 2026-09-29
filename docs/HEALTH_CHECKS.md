@@ -68,6 +68,8 @@ their projects, the GM sees everything.
 | A8 | warning | `Forecast` tab row whose column A resolves to no budget line, or to more than one | That row's forecast is discarded. Label it with the milestone, or `Description - Milestone`. |
 | A9 | warning | `Forecast` entry for an item code absent from the `Budget` tab | Forecasting a milestone that no longer exists. Should now be unreachable, since labels are resolved against the `Budget` tab at read time; if it appears, a forecast key reached the snapshot without passing `resolveForecastLabel_`. |
 | A10 | warning | Two `Forecast` rows in one section carry the same label | Usually a sorted `Budget` tab: the label formulas held their positions while the values moved underneath them. Amounts are still summed, so nothing is lost, but other lines have silently lost their forecast. |
+| A11 | warning | A milestone that budgets income has a cost forecast on the `Forecast` tab and nothing on its Revenue row | Fill in the Revenue row. Until then the milestone's income keeps the `Budget` tab's timing while its cost follows the forecast, so the two drift apart. The amount is the milestone's budgeted income. |
+| A12 | warning | A negative number in a `Forecast` tab row | Costs and income are both entered as positive amounts. A negative cost is read as money coming in, so it lowers planned spend instead of adding to it. The amount is kept as entered, so the fix is on the sheet. |
 
 A missing or empty `Forecast` tab is **not** a finding: a quarter with no override falls back to
 the budget baseline, so an absent tab legitimately means "the budget is still our best estimate".

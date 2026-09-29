@@ -49,6 +49,14 @@ const HEALTH_CATALOGUE = {
     title: 'Two forecast rows share one label',
     action: 'Usually a sorted Budget tab: the label formulas now point at the ' +
       'wrong lines. Re-point them and do not sort the Budget tab.' },
+  A12: { severity: 'warning', category: 'Sheet structure',
+    title: 'Negative amount on the Forecast tab',
+    action: 'Enter costs and income as positive amounts. A negative cost is read as ' +
+      'money coming in, so it lowers spend instead of adding to it.' },
+  A11: { severity: 'warning', category: 'Sheet structure',
+    title: 'Cost forecast with no income forecast',
+    action: 'Fill in the milestone\'s Revenue row on the Forecast tab. Until then its ' +
+      'income keeps the Budget tab\'s timing while its cost follows the forecast.' },
   B1: { severity: 'warning', category: 'Data quality',
     title: 'Lines skipped as empty',
     action: 'Set Cost/Income deliberately, or delete the row.' },
@@ -237,6 +245,24 @@ function buildHealth(budgets, actualLines, ctx) {
           '", which has no line on the Budget tab' }));
       }
     });
+
+    // --- A11: cost forecast with no income forecast beside it ---
+    // A forecast moves a milestone's spend; with nothing on its Revenue row the income
+    // keeps the Budget tab's timing, and the two drift apart on every view that plans.
+    const incomeBudget = {};
+    (b.lines || []).forEach(l => {
+      const code = itemCode_(l.item);
+      if (code) incomeBudget[code] = (incomeBudget[code] || 0) + (Number(l.income) || 0);
+    });
+    const hasEntry = (map, code) => Object.keys(map || {}).some(k => k.split('||')[0] === code);
+    const fc = b.forecast || {};
+    const noIncome = Object.keys(incomeBudget).filter(code => incomeBudget[code] > 0 &&
+      hasEntry(fc.cost, code) && !hasEntry(fc.income, code)).sort();
+    if (noIncome.length) {
+      add('A11', withBase_(base, {
+        amount: Math.round(noIncome.reduce((t, c) => t + incomeBudget[c], 0)),
+        detail: noIncome.join(', ') + ' forecast cost but no income' }));
+    }
 
     // --- B5: contribution arithmetic ---
     var b5 = 0;
