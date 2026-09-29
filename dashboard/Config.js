@@ -156,6 +156,10 @@ const CONFIG = {
   FINANCIAL_YEAR_START_MONTH: 4,
   // How far ahead the General project view forecasts (quarters past current).
   GENERAL_FORECAST_QUARTERS: 6, // 1.5 years
+  // The plan every view shows: false is the Budget tab's own dates; true is each sheet's
+  // Forecast tab where it has an entry, a row's blanks then counting as 0 (planBudgets_).
+  // Held false until reportForecastPlan's dry run has been read.
+  PLAN_FROM_FORECAST: false,
 
   // ---- Caching ------------------------------------------------------------
   // The snapshot is stored as a JSON file in Drive (no size ceiling, unlike

@@ -104,6 +104,13 @@ function buildSnapshot() {
   // folder and file iterators are slow even though nothing is opened yet.
   setRefreshProgress_('Finding budget sheets', 0, 0, 2);
   const budgets = readAllBudgets();
+  // What is expected when: the Forecast tab where one was written, the Budget tab where
+  // not (planBudgets_). The Budget tab itself stays the baseline, so the tracking grid and
+  // the health checks keep the sheets' own lines and only gain the resolved forecast.
+  const planned = CONFIG.PLAN_FROM_FORECAST ? planBudgets_(budgets) : budgets;
+  const judged = CONFIG.PLAN_FROM_FORECAST
+    ? budgets.map(b => Object.assign({}, b, { forecast: ownedForecast_(b.forecast) }))
+    : budgets;
   const actualSince = earliestBudgetStart_(budgets);
   const actualLines = isXeroConnected() ? fetchXeroActuals(actualSince) : [];
   setRefreshProgress_('Aggregating ' + actualLines.length + ' actual line(s)', 0, 0, 90);
@@ -111,7 +118,7 @@ function buildSnapshot() {
   // Competing applications for the same work share an Exclusivity group, and only one
   // member of each group carries the cost. See chooseExclusivityReps_.
   const exclusivityReps = chooseExclusivityReps_(budgets);
-  const agg = aggregateBudgets_(budgets, fy, exclusivityReps);
+  const agg = aggregateBudgets_(planned, fy, exclusivityReps);
   const projects = agg.projects;             // name -> rollup accumulator
   const fundingSources = agg.fundingSources; // per-source summary
   const budgetByKey = agg.budgetByKey;       // 'project||source||milestone' -> entry
@@ -179,13 +186,13 @@ function buildSnapshot() {
   // Quarterly tracking grid (baseline + actual per funding source / milestone /
   // quarter). Forecast is layered on at view time from the live Forecast sheet,
   // so GM edits show immediately without a full refresh.
-  const tracking = buildTracking_(budgets, actualLines);
+  const tracking = buildTracking_(judged, actualLines);
 
   // Project planner timeline: milestone segments color-coded by funding status.
-  const timeline = buildTimeline_(budgets, actualLines, itemToMilestone, fy, now);
+  const timeline = buildTimeline_(planned, actualLines, itemToMilestone, fy, now);
 
   // Funded runway: cumulative income against cumulative spend, month by month.
-  const runway = buildRunway_(budgets, actualLines, now, exclusivityReps);
+  const runway = buildRunway_(planned, actualLines, now, exclusivityReps);
 
   // Per-project rollups (feed the summary cards / org totals).
   const rows = Object.keys(projects).map(name => {
@@ -211,8 +218,8 @@ function buildSnapshot() {
     fyLabel: fy.label,
     fyStart: fy.start.toISOString(),
     fyEnd: fy.end.toISOString(),
-    forecastStart: isoOrNull_(earliestBudgetStart_(budgets)),
-    forecastEnd: isoOrNull_(latestBudgetEnd_(budgets))
+    forecastStart: isoOrNull_(earliestBudgetStart_(planned)),
+    forecastEnd: isoOrNull_(latestBudgetEnd_(planned))
   };
 
   // Health findings. `dataFlags` was declared and never populated, so the warning
@@ -220,7 +227,7 @@ function buildSnapshot() {
   // summary of `health`.
   const xeroOk = isXeroConnected();
   const secretsMissing = ['XERO_CLIENT_ID', 'XERO_CLIENT_SECRET'].filter(k => !getSecret(k));
-  const health = buildHealth(budgets, actualLines, {
+  const health = buildHealth(judged, actualLines, {
     now: now,
     xeroConnected: xeroOk,
     exclusion: lastExclusionSummary(),
