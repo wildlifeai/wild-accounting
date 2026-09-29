@@ -250,12 +250,16 @@ changing code:
 * **Forecasts are per sheet**, on each funding source's own `Forecast` tab, read by
   `parseForecastTab_`. The central sheet, Cockpit Settings, holds only the Permissions tab
   (`Permissions.js`).
-* **A missing forecast falls back to the budget baseline**, never to zero. `forecastOrBaseline_`
-  in `ForecastEngine.js` is the one statement of that rule, used by the tracking grid, D5 and E2.
-  Reading zero made every source with an unmaintained `Forecast` tab look certain to underspend;
-  the fallback was lost once and restored with a regression test. Do not "simplify" it back. Its
-  price is that work moved to a later quarter must be zeroed where it left, or it counts twice
-  (see `docs/DESIGN.md`, open questions).
+* **A milestone row with no forecast falls back to the budget baseline**, never to zero.
+  `forecastOrBaseline_` in `ForecastEngine.js` is the one statement of that rule, used by the
+  tracking grid, D5 and E2. Reading zero made every source with an unmaintained `Forecast` tab look
+  certain to underspend; the fallback was lost once and restored with a regression test. Do not
+  "simplify" it back.
+* **A row with any entry owns its tab's quarters**: `ownedForecast_` fills its blanks with 0, and
+  with `CONFIG.PLAN_FROM_FORECAST` on, `planBudgets_` re-times the lines so every view (Overview,
+  runway, planners) follows the forecast. Quarters with no column keep the budget. `buildSnapshot`
+  passes `planned` budgets to the views and `judged` ones (original lines, owned forecast) to the
+  grid and health checks. See `docs/DESIGN.md`, decisions, 2026-09-30.
 
 **The parser reports rather than skips.** A line it cannot use becomes a health finding: both
 `Cost` and `Income` zero (B1), an unparseable date (B2), an end before its start (B3), no item

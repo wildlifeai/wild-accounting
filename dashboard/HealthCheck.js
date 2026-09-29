@@ -103,8 +103,8 @@ const HEALTH_CATALOGUE = {
     action: 'Either the sheet is missing, or the Xero tag is a typo.' },
   D5: { severity: 'warning', category: 'Xero coding',
     title: 'Spend was expected, nothing is coded',
-    action: 'Usually a missing or misspelt Xero tag. If the work has slipped, enter 0 ' +
-      'for those quarters on the Forecast tab.' },
+    action: 'Usually a missing or misspelt Xero tag. If the work has slipped, put its new ' +
+      'timing on the Forecast tab.' },
   D6: { severity: 'error', category: 'Xero coding',
     title: 'Actuals dated after the grant ended',
     action: 'Almost always a stale repeating journal or template still pointing here.' },
@@ -333,9 +333,8 @@ function buildHealth(budgets, actualLines, ctx) {
     // Planned is the budget. Actual is judged two ways. While the work continues, only
     // when spend has already taken the overhead below the band, since no restraint from
     // then on brings it back. Once every one of those lines has ended, in both directions.
-    // The Forecast tab is deliberately not used: a lead who moves work to later quarters
-    // and leaves the old ones blank has, under the grid's blank-means-budget rule, planned
-    // it twice, and G1 would report the double count as an overrun.
+    // The Forecast tab is deliberately not used: the budget is what was agreed with the
+    // funder, and moving work between quarters does not change its margin.
     //
     // Above the band, two applications for the same work both landed, income is misfiled,
     // or the work is underspent. Below it, costs are eating the overhead. G1 used to call

@@ -71,8 +71,9 @@ their projects, the GM sees everything.
 | A11 | warning | A milestone that budgets income has a cost forecast on the `Forecast` tab and nothing on its Revenue row | Fill in the Revenue row. Until then the milestone's income keeps the `Budget` tab's timing while its cost follows the forecast, so the two drift apart. The amount is the milestone's budgeted income. |
 | A12 | warning | A negative number in a `Forecast` tab row | Costs and income are both entered as positive amounts. A negative cost is read as money coming in, so it lowers planned spend instead of adding to it. The amount is kept as entered, so the fix is on the sheet. |
 
-A missing or empty `Forecast` tab is **not** a finding: a quarter with no override falls back to
+A missing or empty `Forecast` tab is **not** a finding: a milestone row with no entry falls back to
 the budget baseline, so an absent tab legitimately means "the budget is still our best estimate".
+Once a row has any entry, its blank cells count as 0 for every quarter the tab has a column for.
 
 ### B. Data quality
 
@@ -104,7 +105,7 @@ the budget baseline, so an absent tab legitimately means "the budget is still ou
 | D2 | warning | Actual lines with no `Funding source` tag | Land in `(unassigned)`. |
 | D3 | warning | Actual lines with no item code | Outside the tracking grid. |
 | D4 | error | Actuals coded to a `Funding source` with no budget sheet | Either the sheet is missing or the tag is a typo. |
-| D5 | warning | A secured source was expected to spend something by the end of the last finished quarter, and nothing is coded to it | Usually a missing or misspelt Xero tag. "Expected" is the tracking grid's rule: the `Forecast` entry where one was written, a 0 included, otherwise the `Budget` baseline. A blank cell is not a 0. If the work has slipped, enter 0 for those quarters. Finished quarters only, so it stays quiet while the first quarter of spend is under way; D4 catches a misspelt tag sooner. |
+| D5 | warning | A secured source was expected to spend something by the end of the last finished quarter, and nothing is coded to it | Usually a missing or misspelt Xero tag. "Expected" is the tracking grid's rule: the `Forecast` row where it has any entry, its blanks counting as 0, otherwise the `Budget` baseline. If the work has slipped, put the new timing on the `Forecast` tab. Finished quarters only, so it stays quiet while the first quarter of spend is under way; D4 catches a misspelt tag sooner. |
 | D6 | error | Actuals against a funding source whose `Funding end` has passed, or whose sheet is archived | Almost always a stale recurring journal or template. |
 
 ### E. Reconciliation
@@ -123,7 +124,7 @@ Complements **E4**: that one detects duplication nobody declared, these handle d
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
-| G1 | warning | A source's overhead, its margin over the cost of its own work as a share of the income on lines not already General's, is more than `CONTRIBUTION_TOLERANCE` (10 points) from its `Contribution policy` | At 40%, anything from 30 to 50 is fine. Judged on the budget; on actual spend while work continues only once it has already taken the overhead below the band; and on actual spend in both directions once every one of those lines has ended. The Forecast tab is deliberately not used: work moved to later quarters with the old ones left blank is, under the grid's blank-means-budget rule, planned twice. Above the band: two applications for the same work both landed, income is on the wrong milestone, or work is underspent. Below it: costs are eating the overhead. Secured and proposed sources both, so an application's budget is checked before it goes in. |
+| G1 | warning | A source's overhead, its margin over the cost of its own work as a share of the income on lines not already General's, is more than `CONTRIBUTION_TOLERANCE` (10 points) from its `Contribution policy` | At 40%, anything from 30 to 50 is fine. Judged on the budget; on actual spend while work continues only once it has already taken the overhead below the band; and on actual spend in both directions once every one of those lines has ended. The Forecast tab is deliberately not used: the budget is what was agreed with the funder, and re-timing work does not change its margin. Above the band: two applications for the same work both landed, income is on the wrong milestone, or work is underspent. Below it: costs are eating the overhead. Secured and proposed sources both, so an application's budget is checked before it goes in. |
 | G2 | info | A `proposed` source with no `Probability` in `Funding_info` | That ask is left out of expected income entirely rather than guessed at. "Unknown" is deliberately not "zero". |
 | G3 | info | Cost suppressed because a competing application in the same `Exclusivity group` carries it | Expected, and reported so the suppression is never invisible arithmetic. Remove the group value if these are genuinely separate work. |
 
