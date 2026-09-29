@@ -20,7 +20,7 @@
  * Everything this reader discards is reported rather than silently dropped: a
  * malformed line used to vanish behind a Logger.log nobody reads. Each entry
  * carries `issues: [{ check, row?, detail }]` where `check` is a health-check id
- * from dashboard/HEALTH_CHECKS.md.
+ * from docs/HEALTH_CHECKS.md.
  *
  * @return {Array<{name, status, projectFolder, lines, hasProjectColumn, metadata,
  *                 tabs, forecast, sheetUrl, issues}>}

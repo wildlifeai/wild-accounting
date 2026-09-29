@@ -8,7 +8,7 @@
  * every total without trace. Every finding here states what is wrong, where, who
  * owns it and what to do.
  *
- * Check ids and severities match dashboard/HEALTH_CHECKS.md.
+ * Check ids and severities match docs/HEALTH_CHECKS.md.
  *   error   - a number on the dashboard is wrong right now
  *   warning - a number may be wrong, or will be soon
  *   info    - hygiene; nothing is wrong yet
