@@ -1,17 +1,17 @@
 /**
  * ForecastEngine.js
- * Pure forecasting math, ported from create_xero_budget_project.js and reshaped
- * into side-effect-free functions that operate on parsed budget lines rather than
- * live spreadsheets. No SpreadsheetApp / DriveApp here — that makes it unit-testable.
+ * Pure forecasting maths over parsed budget lines. No SpreadsheetApp or DriveApp here,
+ * which is what makes it unit-testable. A budget line is the shape BudgetReader produces:
+ * { description, start, end, cost, income, contribution, milestone, item, project }.
  *
- * A budget line is: { account, start: Date, end: Date, amount: Number,
- *                     milestone, item, project }
+ * It does three things: day-weighted distribution of each line's Cost and Income across
+ * the months it spans; financial-year quarter labels and indexes; and the tracking grid's
+ * rule for what a quarter is expected to cost, forecastOrBaseline_.
  *
- * The three behaviours preserved from the original script:
- *   1. day-weighted distribution of each line across the months it spans
- *   2. overhead (account 500) split across quarters weighted by expense load
- *   3. grant revenue recognition: recognise income as expense is incurred,
- *      defer the remainder (FIFO by income date).
+ * The day-weighting came from an earlier account-keyed budget script, removed on
+ * 2026-09-29. That script also split an overhead account across quarters and deferred
+ * grant income; neither survived into the cockpit, which derives overhead from each
+ * sheet's Contribution policy instead (contributionRate_ in Aggregator.js).
  */
 
 const DateMath = {

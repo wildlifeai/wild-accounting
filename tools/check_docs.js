@@ -34,7 +34,7 @@ function ok(what) { console.log('  ok    ' + what); }
 // are matched separately, so a backlog cannot masquerade as behaviour.
 (function healthChecks() {
   const code = read('dashboard/HealthCheck.js');
-  const doc = read('dashboard/HEALTH_CHECKS.md');
+  const doc = read('docs/HEALTH_CHECKS.md');
 
   const implemented = new Set();
   const re = /^\s{2}([A-Z]\d+):\s*\{\s*severity:\s*'(\w+)'/gm;
@@ -70,8 +70,9 @@ function ok(what) { console.log('  ok    ' + what); }
 })();
 
 // ---------------------------------------------------------------- dashboard file list
+// The file table lives in AGENTS.md, the developer guide, since dashboard/ became code only.
 (function fileList() {
-  const doc = read('dashboard/README.md');
+  const doc = read('AGENTS.md');
   const actual = fs.readdirSync(path.join(ROOT, 'dashboard'))
     .filter(f => /\.(js|html)$/.test(f));
   const undocumented = actual.filter(f => doc.indexOf('`' + f + '`') === -1)
@@ -79,23 +80,23 @@ function ok(what) { console.log('  ok    ' + what); }
     .filter(f => !/^(Index|Stylesheet|JavaScript)\.html$/.test(f) ||
                  doc.indexOf('Index/Stylesheet/JavaScript.html') === -1);
   if (undocumented.length) {
-    fail('dashboard files absent from the README file list', undocumented.join(', '));
+    fail('dashboard files absent from the file table in AGENTS.md', undocumented.join(', '));
   } else {
-    ok('every dashboard file appears in dashboard/README.md');
+    ok('every dashboard file appears in the AGENTS.md file table');
   }
 })();
 
 // ---------------------------------------------------------------- UI tab count
 (function tabs() {
   const index = read('dashboard/Index.html');
-  const guide = read('dashboard/GM_GUIDE.md');
+  const guide = read('docs/USER_GUIDE.md');
   const n = (index.match(/data-view="/g) || []).length;
-  const words = { 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five' };
+  const words = { 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five', 6: 'Six', 7: 'Seven' };
   if (guide.indexOf('## ' + words[n] + ' tabs') === -1) {
-    fail('GM_GUIDE.md does not describe the right number of tabs',
+    fail('USER_GUIDE.md does not describe the right number of tabs',
       'Index.html has ' + n + ' tabs, so the heading should read "## ' + words[n] + ' tabs".');
   } else {
-    ok('GM_GUIDE.md agrees with Index.html on ' + n + ' tabs');
+    ok('USER_GUIDE.md agrees with Index.html on ' + n + ' tabs');
   }
 })();
 
@@ -103,7 +104,7 @@ function ok(what) { console.log('  ok    ' + what); }
 // Any key the code reads must be documented, or nobody knows to fill it in.
 (function metaKeys() {
   const cfg = read('dashboard/Config.js');
-  const doc = read('dashboard/BUDGET_SHEET_TEMPLATE.md');
+  const doc = read('docs/BUDGET_SHEET_TEMPLATE.md');
   const block = cfg.slice(cfg.indexOf('META: {'), cfg.indexOf('},', cfg.indexOf('META: {')));
   const keys = [...block.matchAll(/'([^']+)'/g)].map(m => m[1]);
   const missing = keys.filter(k => {
@@ -121,11 +122,12 @@ function ok(what) { console.log('  ok    ' + what); }
 // ---------------------------------------------------------------- dead references
 // Files the docs point at must exist. This is what caught create_quarterly_budgets.js
 // being referenced five times after it was deleted.
+const DOCS = ['README.md', 'AGENTS.md', '.agents/skills/SKILL.md',
+  'docs/USER_GUIDE.md', 'docs/BUDGET_SHEET_TEMPLATE.md', 'docs/HEALTH_CHECKS.md',
+  'docs/DESIGN.md'];
+
 (function deadRefs() {
-  const docs = ['README.md', 'AGENTS.md', '.agents/skills/SKILL.md',
-    'dashboard/README.md', 'dashboard/GM_GUIDE.md', 'dashboard/HEALTH_CHECKS.md',
-    'dashboard/BUDGET_SHEET_TEMPLATE.md', 'dashboard/BUDGET_PROCEDURES_ADDENDUM.md',
-    'budget_templates/README.md', 'project_reports/README.md'];
+  const docs = DOCS;
   // Files deleted on purpose, which the docs still name because the lesson outlived the
   // code. SKILL.md's "two files both defined getFolderByName" is still worth knowing even
   // though one of them is gone. Listed explicitly so a genuinely broken reference to a file
@@ -133,7 +135,11 @@ function ok(what) { console.log('  ok    ' + what); }
   const RETIRED_FILES = new Set([
     'create_quarterly_budgets.js',   // retired 2026-08-11, quarterly generation moved into the cockpit
     'loader-budgets-template.js',    // remote code loader, removed 2026-08-10
-    'loader_template.js'             // remote code loader, removed 2026-08-10
+    'loader_template.js',            // remote code loader, removed 2026-08-10
+    'create_xero_budget_project.js', // removed 2026-09-29, the cockpit ported what it needed
+    'general_valid_accounts.js',     // removed 2026-09-29, served the retired *Account column
+    'variance_funding_source.js',    // removed 2026-09-29, served the retired *Account column
+    'funding-aggregator.js'          // removed 2026-09-29, the cockpit's Overview replaced it
   ]);
 
   // Every file in the repo, by basename, so a bare mention in prose resolves.
@@ -167,6 +173,30 @@ function ok(what) { console.log('  ok    ' + what); }
       [...new Set(dead)].join('\n        '));
   } else {
     ok('every file referenced by the docs exists');
+  }
+})();
+
+// ---------------------------------------------------------------- relative links
+// A backticked name only has to exist somewhere; a markdown link has to resolve from the
+// page it is on, and moving a doc between folders breaks exactly those. Checked when the
+// docs moved into docs/, so the move could not strand a reader on a dead link.
+(function links() {
+  const broken = [];
+  DOCS.forEach(d => {
+    if (!fs.existsSync(path.join(ROOT, d))) return;
+    const dir = path.dirname(d);
+    [...read(d).matchAll(/\]\(([^)\s]+)\)/g)].forEach(m => {
+      const target = m[1];
+      if (/^(https?:|mailto:|#)/.test(target)) return;
+      const file = target.split('#')[0];
+      if (!file) return;
+      if (!fs.existsSync(path.join(ROOT, dir, file))) broken.push(d + ' -> ' + target);
+    });
+  });
+  if (broken.length) {
+    fail(broken.length + ' relative link(s) that do not resolve', broken.join('\n        '));
+  } else {
+    ok('every relative link in the docs resolves');
   }
 })();
 

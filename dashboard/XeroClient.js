@@ -2,8 +2,7 @@
  * XeroClient.js
  * OAuth2 connection to Xero and retrieval of actuals as normalised transaction lines.
  *
- * Reuses the apps-script-oauth2 library (declared in appsscript.json as `OAuth2`),
- * the same library the funding_reports script already depends on.
+ * Uses the apps-script-oauth2 library, declared in appsscript.json as `OAuth2`.
  *
  * A "normalised line" is the atomic unit the rest of the app reasons about:
  *   { date: Date, account: String, project: String, fundingSource: String,

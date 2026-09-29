@@ -77,7 +77,7 @@ function runTests() {
   check('keeps an unknown code', !isExcludedAccount_('Something New (999)'));
 
   // Health findings: severity order, value at risk, and the checks the reader
-  // cannot make for itself. See dashboard/HEALTH_CHECKS.md.
+  // cannot make for itself. See docs/HEALTH_CHECKS.md.
   var hBudgets = [{
     name: 'WW_25_TOI', status: 'secured', projectFolder: 'Wildlife Watcher', sheetUrl: '',
     metadata: { owner: 'someone@wildlife.ai' },
