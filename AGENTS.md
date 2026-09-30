@@ -82,7 +82,7 @@ Apps Script web app (HtmlService)  ->  staff open one URL, Google login
   rebuilt every 6h by a time trigger, and by "Refresh now"
         |
         v
-  Overview, Quarterly tracking, Project planner, Five-year plan, Health
+  Overview, Quarterly tracking, Project planner, Health
 ```
 
 **Why a cache.** Crawling the budget sheets plus a full Xero pull takes about a minute and can

@@ -230,7 +230,7 @@ function quarterBounds_(qi) {
  * The Budget tab is the budget as agreed with the funder and stays the baseline the
  * tracking grid compares against. Once a source is under way its Forecast tab, quarter by
  * quarter, is the plan, so everything that shows what is expected when (the Overview,
- * runway, the planner and the five-year plan) reads these lines instead.
+ * runway and the planner) reads these lines instead.
  *
  * A quarter's forecast is shared between a milestone's lines in proportion to each
  * line's budget for that field, or evenly when the milestone budgets none of it, and

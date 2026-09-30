@@ -488,7 +488,7 @@ function runTests() {
     return z['26/27 Q1'] === 0 && m['26/27 Q1'] === 100;
   })());
 
-  // Five-year plan rows. The plan sums per-quarter buckets by financial year, so a
+  // Breakdown rows. The Overview sums per-quarter buckets by financial year, so a
   // milestone spanning two years must split, not double.
   var planKey = 'General||XXX_27_PLAN||Delivery';
   var planEntry = { budget: 0, income: 0, status: 'secured', budgetFY: 0, incomeFY: 0,
@@ -504,23 +504,20 @@ function runTests() {
     {}, {}, {}, { XXX_27_PLAN: 'secured' });
   var pr = planRows[0];
 
-  check('a secured source fills securedByQ and leaves proposedByQ empty',
-    Object.keys(pr.securedByQ).length > 0 && Object.keys(pr.proposedByQ).length === 0);
-  check('the Forecast comment reaches the plan row', pr.comment === 'phased over two years');
+  check('a secured source fills securedByQ', Object.keys(pr.securedByQ).length > 0);
+  check('the Forecast comment reaches the breakdown row', pr.comment === 'phased over two years');
   check('cost splits across the two financial years it spans',
     sumFyQ(pr.budgetByQ, '25/26') > 0 && sumFyQ(pr.budgetByQ, '26/27') > 0);
   check('and the two years sum back to the line, not double it',
     Math.abs(sumFyQ(pr.budgetByQ, '25/26') + sumFyQ(pr.budgetByQ, '26/27') - 12000) < 1);
 
-  // A proposed source must populate the other column, so the plan never blends committed
-  // money with an application still out.
+  // An application still out is not secured money, so the Secured column never counts it.
   var propEntry = JSON.parse(JSON.stringify(planEntry));
   propEntry.status = 'proposed';
   propEntry.budgetByQ = planEntry.budgetByQ; propEntry.incomeByQ = planEntry.incomeByQ;
   var propRow = buildBreakdownRows_({ 'General||XXX_27_ASK||Delivery': propEntry },
     {}, {}, {}, { XXX_27_ASK: 'proposed' })[0];
-  check('a proposed source fills proposedByQ and leaves securedByQ empty',
-    Object.keys(propRow.proposedByQ).length > 0 &&
+  check('a proposed source leaves securedByQ empty',
     Object.keys(propRow.securedByQ).length === 0);
 
   // Project-lead scoped access. filterSnapshotForProjects_ is pure precisely so this can

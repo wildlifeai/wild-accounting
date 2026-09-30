@@ -460,10 +460,6 @@ function buildBreakdownRows_(budgetByKey, actualByKey, actualByKeyFY, actualByKe
       // for secured sources and is empty otherwise, matching the scalar above.
       budgetByQ: roundMapValues_(b.budgetByQ || {}),
       securedByQ: status === 'secured' ? roundMapValues_(b.incomeByQ || {}) : {},
-      // Income from a source that is still an application. Kept separate from secured so
-      // the five-year plan can show committed and hoped-for money in different columns
-      // rather than blending them into one number nobody can act on.
-      proposedByQ: status === 'proposed' ? roundMapValues_(b.incomeByQ || {}) : {},
       actualByQ: roundMapValues_(actualByKeyQ[key] || {}),
       // Secured in full plus proposed at its probability. What we expect to have, as
       // opposed to what is committed.

@@ -24,7 +24,7 @@ refreshes itself roughly every 6 hours; click **Refresh now** to pull the latest
 refresh takes about a minute, and a progress bar shows which phase it is in
 (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
 
-## Five tabs
+## Four tabs
 
 - **Overview**: the organisation-wide picture, with runway and a breakdown you can regroup
   (below).
@@ -32,9 +32,6 @@ refresh takes about a minute, and a progress bar shows which phase it is in
   milestone and quarter by quarter. See [Tracking and forecasting](#tracking-and-forecasting-quarterly).
 - **Project planner**: milestones on a timeline, coloured by funding status, with optional
   Cost, Income and Profit and loss columns.
-- **Five-year plan**: one row per funding source, milestone and financial year, showing what it
-  costs, what is secured and what is still an application. It answers "what am I delivering,
-  when, and is it paid for".
 - **Health**: sheet, Xero-coding and system problems found on the last refresh. The tab carries
   a badge: red when a number on screen is wrong right now, amber when one may be, nothing when
   clean. Each finding says what is wrong, where, the amount at stake and what to do, with a
@@ -129,7 +126,7 @@ grid is read-only and picks the change up at the next refresh. Two rules matter:
   `Forecast` tab therefore means the budget is still your best estimate, which is the normal state.
 - **Once a row has any number, that row is the plan** for every quarter the tab has a column for,
   and its blank cells count as `0`. The `Budget` tab's dates stop applying to those quarters, on
-  the grid, the Overview, the runway and the planners alike, so a row that starts in Oct-Dec needs
+  the grid, the Overview, the runway and the planner alike, so a row that starts in Oct-Dec needs
   nothing typed in the quarters before it. Quarters the tab has no column for keep the budget.
 
 The `Comments` column on the `Forecast` tab appears beside each milestone: use it to say why a

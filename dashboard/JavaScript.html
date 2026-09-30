@@ -56,8 +56,6 @@
     buildFySelector(s);
     buildFilters();
     renderBreakdown();
-    buildPlanProjects(s);
-    renderPlan();
     // Not wired to the filter or FY controls: runway is organisation-wide and always
     // runs from today, so it renders once per snapshot.
     renderRunway(s.runway);
@@ -118,116 +116,6 @@
       }
     });
     el.innerHTML = html;
-  }
-
-  // ---- Five-year plan ------------------------------------------------------
-  // The question a project lead actually asks: what am I delivering, when, what does it
-  // cost, and how much of it is paid for. One row per funding source, milestone and
-  // financial year, because a milestone spanning two years is two different answers.
-  //
-  // Secured and Proposed stay in separate columns rather than being summed. Blending
-  // committed money with an application still out produces a number nobody can act on.
-
-  var PLAN_YEARS = 5;
-
-  function planFyList(snap) {
-    var years = [];
-    (snap.quarters || []).forEach(function (q) {
-      var fy = fyOf(q);
-      if (years.indexOf(fy) === -1) years.push(fy);
-    });
-    years.sort();
-    // Five years from the current one. Anything earlier is history, not a plan.
-    var current = fyOf(snap.currentQuarter || '');
-    var from = years.indexOf(current);
-    if (from === -1) from = 0;
-    return { shown: years.slice(from, from + PLAN_YEARS), all: years };
-  }
-
-  function renderPlan() {
-    if (!snapshot) return;
-    var sel = document.getElementById('plan-project');
-    var project = sel ? sel.value : '*';
-    var showEmpty = document.getElementById('plan-empty');
-    showEmpty = showEmpty ? showEmpty.checked : false;
-
-    var fys = planFyList(snapshot);
-    var inWindow = {};
-    fys.shown.forEach(function (y) { inWindow[y] = true; });
-
-    var rows = [];
-    (snapshot.breakdownRows || []).forEach(function (r) {
-      if (project !== '*' && r.project !== project) return;
-      fys.shown.forEach(function (fy) {
-        var cost = sumFy(r.budgetByQ, fy);
-        var secured = sumFy(r.securedByQ, fy);
-        var proposed = sumFy(r.proposedByQ, fy);
-        if (!showEmpty && !cost && !secured && !proposed) return;
-        rows.push({ source: r.fundingSource, milestone: r.milestone, fy: fy,
-          cost: cost, secured: secured, proposed: proposed,
-          comment: r.comment || '', project: r.project });
-      });
-    });
-
-    // Source, then milestone, then year: the order a lead reads a grant in.
-    rows.sort(function (a, b) {
-      return a.source.localeCompare(b.source) || a.milestone.localeCompare(b.milestone) ||
-             a.fy.localeCompare(b.fy);
-    });
-
-    document.getElementById('plan-head').innerHTML =
-      '<tr><th>Funding source</th><th>Milestone</th><th>Financial year</th>' +
-      '<th class="num">Cost</th><th class="num">Secured</th><th class="num">Proposed</th>' +
-      '<th>Comments</th></tr>';
-
-    var totC = 0, totS = 0, totP = 0, prevSource = null, prevMile = null;
-    document.getElementById('plan-body').innerHTML = rows.map(function (r) {
-      totC += r.cost; totS += r.secured; totP += r.proposed;
-      // Repeating the source and milestone on every year makes the table unreadable, so
-      // they print once per group and the eye follows the year column.
-      var newSource = r.source !== prevSource;
-      var newMile = newSource || r.milestone !== prevMile;
-      prevSource = r.source; prevMile = r.milestone;
-      var gap = r.cost - r.secured;
-      return '<tr' + (newSource ? ' class="plan-group"' : '') + '>' +
-        '<td>' + (newSource ? esc(r.source) : '') + '</td>' +
-        '<td>' + (newMile ? esc(r.milestone) : '') + '</td>' +
-        '<td>' + esc(r.fy) + '</td>' +
-        '<td class="num">' + money0(r.cost) + '</td>' +
-        '<td class="num">' + (r.secured ? money0(r.secured) : '') + '</td>' +
-        '<td class="num plan-proposed">' + (r.proposed ? money0(r.proposed) : '') + '</td>' +
-        '<td class="plan-cmt">' + (newMile && r.comment ? esc(r.comment) : '') +
-          (gap > 0 && !r.proposed
-            ? '<span class="plan-gap">' + money0(gap) + ' unfunded</span>' : '') +
-        '</td></tr>';
-    }).join('');
-
-    document.getElementById('plan-foot').innerHTML =
-      '<tr><td colspan="3">Total</td>' +
-      '<td class="num">' + money0(totC) + '</td>' +
-      '<td class="num">' + money0(totS) + '</td>' +
-      '<td class="num plan-proposed">' + money0(totP) + '</td>' +
-      '<td>' + (totC - totS > 0
-        ? '<span class="plan-gap">' + money0(totC - totS) + ' not yet secured</span>' : '') +
-      '</td></tr>';
-
-    var outside = fys.all.filter(function (y) { return !inWindow[y]; });
-    document.getElementById('plan-scope').innerHTML =
-      rows.length + ' row(s) across <b>' + (fys.shown.join(', ') || 'no years') + '</b>' +
-      (outside.length
-        ? ' · <span class="muted">' + outside.length + ' other financial year(s) hold data ' +
-          'outside this window: ' + esc(outside.join(', ')) + '</span>'
-        : '');
-  }
-
-  function buildPlanProjects(snap) {
-    var sel = document.getElementById('plan-project');
-    if (!sel) return;
-    var keep = sel.value;
-    var names = distinct(snap.breakdownRows || [], 'project');
-    sel.innerHTML = '<option value="*">All projects</option>' +
-      names.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
-    if (keep && (keep === '*' || names.indexOf(keep) !== -1)) sel.value = keep;
   }
 
   var DIM_LABEL = { project: 'Project', fundingSource: 'Funding source', status: 'Status', milestone: 'Milestone' };
@@ -474,9 +362,6 @@
   // needs no server round trip and no full re-render.
   Array.prototype.slice.call(document.querySelectorAll('.bd-dim, .bd-status, #bd-fy'))
     .forEach(function (c) { c.addEventListener('change', renderBreakdown); });
-
-  Array.prototype.slice.call(document.querySelectorAll('#plan-project, #plan-empty'))
-    .forEach(function (c) { c.addEventListener('change', renderPlan); });
 
   Array.prototype.slice.call(document.querySelectorAll('.pl-dim, .pl-status, .pl-col'))
     .forEach(function (c) { c.addEventListener('change', function () { renderPlanner(); }); });
@@ -908,8 +793,6 @@
     // Health needs no lazy load: the findings arrive with the snapshot and renderHealth
     // has already written them.
     document.getElementById('view-health').classList.toggle('hidden', view !== 'health');
-    // No lazy load: the plan is derived from breakdownRows, already in the snapshot.
-    document.getElementById('view-plan').classList.toggle('hidden', view !== 'plan');
     if (view === 'tracking' && !tracksLoaded) { tracksLoaded = true; loadSources(); }
     if (view === 'planner' && !plannerLoaded) { plannerLoaded = true; loadPlannerProjects(); }
   }
