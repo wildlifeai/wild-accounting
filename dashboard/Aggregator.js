@@ -215,6 +215,9 @@ function buildSnapshot() {
   // fy and now are already defined at the top
   const coverage = {
     today: now.toISOString(),
+    // The page shows dates in the script's zone, not the viewer's: the FY starts at
+    // midnight 1 April in Auckland, which in UTC is still 31 March.
+    timeZone: typeof Session !== 'undefined' ? Session.getScriptTimeZone() : 'Pacific/Auckland',
     fyLabel: fy.label,
     fyStart: fy.start.toISOString(),
     fyEnd: fy.end.toISOString(),

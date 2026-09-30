@@ -9,19 +9,31 @@
     var p = key.split('-');
     return MONTHS[parseInt(p[1], 10) - 1] + ' ' + p[0];
   }
-  function ago(iso) {
-    var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-    if (mins < 60) return mins + 'm ago';
-    var h = Math.round(mins / 60);
-    if (h < 24) return h + 'h ago';
-    return Math.round(h / 24) + 'd ago';
+  // Every date on the page is a calendar date in the script's zone. Read in the browser's
+  // own zone, midnight 1 April in Auckland is 31 March, so the FY read "Mar 2026 - Feb 2027".
+  var TZ = 'Pacific/Auckland';
+  function zoned(iso, opts) {
+    var o = { timeZone: TZ };
+    Object.keys(opts).forEach(function (k) { o[k] = opts[k]; });
+    var parts = {};
+    new Intl.DateTimeFormat('en-GB', o).formatToParts(new Date(iso))
+      .forEach(function (p) { parts[p.type] = p.value; });
+    return parts;
+  }
+  // "30 Sep 2026, 9:14 am": an age such as "1m ago" goes stale on a page left open.
+  function syncedAt(iso) {
+    var p = zoned(iso, { day: 'numeric', month: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', hour12: true });
+    return p.day + ' ' + MONTHS[parseInt(p.month, 10) - 1] + ' ' + p.year + ', ' +
+      p.hour + ':' + p.minute + ' ' + String(p.dayPeriod || '').toLowerCase();
   }
   var COLOR = { ok: 'var(--green)', warn: 'var(--amber)', danger: 'var(--red)' };
   var snapshot = null;
 
   function render(s) {
     snapshot = s;
-    var syncText = 'synced ' + ago(s.generatedAt);
+    if (s.coverage && s.coverage.timeZone) TZ = s.coverage.timeZone;
+    var syncText = 'synced ' + syncedAt(s.generatedAt);
     if (s._userEmail) syncText += ' · ' + s._userEmail;
     if (s._accessLevel && s._accessLevel !== 'admin') syncText += ' (' + s._accessLevel + ')';
     document.getElementById('sync-label').textContent = syncText;
@@ -296,6 +308,7 @@
   // rather than markup: rebuilding it each time would drop the user's choice and its
   // change listener.
   var fySelect = null;
+  var fyChosen = false; // true once the user picks a year; until then, the current FY
 
   function fySelectEl() {
     if (!fySelect) {
@@ -305,7 +318,7 @@
       fySelect.innerHTML = '<option value="all">All time</option>';
       // Changing the year only re-totals per-quarter buckets already in the snapshot,
       // so no server round trip is needed.
-      fySelect.addEventListener('change', renderBreakdown);
+      fySelect.addEventListener('change', function () { fyChosen = true; renderBreakdown(); });
     }
     return fySelect;
   }
@@ -328,23 +341,27 @@
     return total;
   }
 
-  /** Populate the selector from the quarters the snapshot actually covers. */
+  /**
+   * Populate the selector from the quarters the snapshot covers, the current FY onwards.
+   * A finished year is still inside "All time"; on its own it answers nothing the
+   * Overview is for. Labels are "26/27", so they order as strings.
+   */
   function buildFySelector(snap) {
     var sel = fySelectEl();
+    var current = fyOf(snap.currentQuarter || '');
     var years = [];
     (snap.quarters || []).forEach(function (q) {
       var fy = fyOf(q);
-      if (years.indexOf(fy) === -1) years.push(fy);
+      if (fy >= current && years.indexOf(fy) === -1) years.push(fy);
     });
     var keep = sel.value;
     sel.innerHTML = '<option value="all">All time</option>' +
       years.map(function (y) { return '<option value="' + esc(y) + '">' + esc(y) + '</option>'; }).join('');
-    // Preserve the user's choice across refreshes; otherwise default to the current FY,
-    // falling back to the newest year present if the current one has nothing in it.
-    var current = fyOf(snap.currentQuarter || '');
-    if (keep && (keep === 'all' || years.indexOf(keep) !== -1)) sel.value = keep;
+    // Keep a year the user picked across refreshes; otherwise the current FY, or the
+    // earliest year to come if the current one has nothing in it.
+    if (fyChosen && (keep === 'all' || years.indexOf(keep) !== -1)) sel.value = keep;
     else if (years.indexOf(current) !== -1) sel.value = current;
-    else if (years.length) sel.value = years[years.length - 1];
+    else if (years.length) sel.value = years[0];
   }
 
   function renderBreakdown() {
@@ -427,11 +444,8 @@
       card((isFy ? fy + ' forecast budget' : 'Total forecast budget'), fmtMoney(totBudget)) +
       card((isFy ? fy + ' secured funding' : 'Secured funding'), fmtMoney(totSecured)) +
       card((isFy ? fy + ' actual' : 'Actual to date'), fmtMoney(totActual)) +
-      card((isFy ? fy + ' unsecured gap' : 'Unsecured gap'),
-           fmtMoney(Math.max(0, totBudget - totSecured)), 'danger') +
-      card((isFy ? fy + ' gap after pipeline' : 'Gap after pipeline'),
-           fmtMoney(Math.max(0, totBudget - totWeighted)),
-           (totBudget - totWeighted) > 0 ? 'amber' : '');
+      gapCard(isFy ? fy + ' unsecured' : 'Unsecured', totBudget - totSecured, 'danger') +
+      gapCard(isFy ? fy + ' after pipeline' : 'After pipeline', totBudget - totWeighted, 'amber');
 
     var foot = '<tr><td colspan="' + footCols + '">Total</td>' +
       '<td class="num">' + fmtMoney(totBudget) + '</td>' +
@@ -441,6 +455,13 @@
       '%;background:' + totColor + '"></span></div>' +
       '<span class="pct">' + totPct + '%</span></div></td></tr>';
     document.getElementById('overview-foot').innerHTML = foot;
+  }
+
+  // Cost minus income. A shortfall is a gap, in colour; more income than cost is a
+  // surplus, shown as one rather than as a red $0.
+  function gapCard(prefix, shortfall, cls) {
+    if (shortfall > 0.5) return card(prefix + ' gap', fmtMoney(shortfall), cls);
+    return card(prefix + ' surplus', fmtMoney(-shortfall));
   }
 
   function statusLabel(v) {
@@ -761,13 +782,13 @@
 
   function monthYear(iso) {
     if (!iso) return '—';
-    var d = new Date(iso);
-    return MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+    var p = zoned(iso, { month: 'numeric', year: 'numeric' });
+    return MONTHS[parseInt(p.month, 10) - 1] + ' ' + p.year;
   }
   function dayMonthYear(iso) {
     if (!iso) return '—';
-    var d = new Date(iso);
-    return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+    var p = zoned(iso, { day: 'numeric', month: 'numeric', year: 'numeric' });
+    return p.day + ' ' + MONTHS[parseInt(p.month, 10) - 1] + ' ' + p.year;
   }
   function renderCoverage(c, overrideStart, overrideEnd, fyLabel) {
     var el = document.getElementById('coverage');

@@ -18,7 +18,8 @@ ask the GM.
 column B, comma separated, or `*` for everything. A project lead sees only their projects'
 figures and health findings, plus the warnings that mean every number on screen is stale.
 
-The figure top-right ("synced Nh ago") tells you how fresh the data is, next to today's date. It
+The figure top-right ("synced 30 Sep 2026, 9:14 am", New Zealand time) says when the data was
+last pulled, next to today's date. It
 refreshes itself roughly every 6 hours; click **Refresh now** to pull the latest immediately. A
 refresh takes about a minute, and a progress bar shows which phase it is in
 (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
@@ -41,10 +42,12 @@ refresh takes about a minute, and a progress bar shows which phase it is in
 
 ## What you're looking at (Overview)
 
-1. **Summary cards**: organisation totals for the period picked in the selector, a financial
-   year or all time: forecast budget, secured funding, actual spent, the **unsecured gap**
-   (budget not yet covered by secured funding) and the **gap after pipeline** (what is still
-   uncovered once applications are counted at their probability).
+1. **Summary cards**: organisation totals for the period picked in the selector, the current
+   financial year by default, a later one, or all time (finished years are only inside all
+   time): forecast budget, secured funding, actual spent, the **unsecured gap** (budget not yet
+   covered by secured funding) and the **gap after pipeline** (what is still uncovered once
+   applications are counted at their probability). When income covers the budget, the card
+   shows the **surplus** instead.
 2. **Runway**: organisation-wide and outside every filter on the page. *Net position today* is
    secured income received minus spend to date. The three tiles give the months until
    cumulative spend overtakes cumulative income: on secured money only, on the
