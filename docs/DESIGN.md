@@ -98,9 +98,9 @@ Ranked by how badly they hurt the persona who depends on them:
   mid-quarter it understates that column and annual Expected with it. Whether it should be actual
   plus the rest of the forecast is undecided.
 - **Two income attributions.** The project rollup behind the organisation totals splits a source's
-  income by each project's share of its cost, while the Overview breakdown credits each line's own
-  income. They agree for most sheets and can differ slightly for one whose lines are not priced in
-  proportion to their cost. Only the breakdown is on screen.
+  income by each project's share of its cost, while the Overview's cards and runway credit each
+  line's own income. They agree for most sheets and can differ slightly for one whose lines are not
+  priced in proportion to their cost. Only the line attribution is on screen.
 - **Cash runway is out of scope** (decided 2026-09-21). It needs `accounting.reports.read`, a Xero
   re-consent and a balance-sheet read, and scopes cannot be removed from a live token without
   re-consent, so adding one is not a casual change.

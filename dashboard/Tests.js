@@ -669,10 +669,51 @@ function runTests() {
   ], rwNow, {});
   check('runway: archived project actuals are excluded', rwArch.openingNet === 0);
 
+  var rwYear = runwayWalk_([{ status: 'secured',
+    cost: { '2026-11': 100, '2026-12': 100, '2027-01': 100, '2027-02': 100 },
+    income: { '2026-11': 350 } }], '2026-11');
   check('runway: months counted across a year boundary',
-    monthsUntil_('2026-11', '2027-02') === 3);
+    rwYear.crossover.secured === '2027-02' && rwYear.monthsOfRunway.secured === 3);
   check('runway: no crossover reports null, not zero',
-    monthsUntil_('2026-06', null) === null);
+    rwNoProb.monthsOfRunway.proposed === null);
+
+  // The page receives runwayWalk_ as its own source (Index.html), so it must stand alone:
+  // a call to any server helper would work here and throw in the browser.
+  check('runway: the walk calls nothing outside itself',
+    !/\b(round_|monthsUntil_|addInto_|scaleMap_|distributeByMonth_|CONFIG|DateMath|clean_)\b/
+      .test(runwayWalk_.toString()));
+
+  // Parts split income the way the cards do: a 40% policy moves 40% of a non-General
+  // line's income to a "(contribution)" part under General, budget and actual alike.
+  var rwParts = runwayParts_([
+    mSrc('S', 'secured', { 'contribution policy': 'percent_of_income:40' },
+      [mLine(2026, 6, 500, 1000)])
+  ], [{ date: new Date(2026, 4, 10), amount: 200, kind: 'income',
+        project: 'P', fundingSource: 'S', item: '' }], {}, {});
+  var rwOwn = rwParts.filter(function (p) { return p.project === 'P'; })[0];
+  var rwGen = rwParts.filter(function (p) { return p.project === CONFIG.GENERAL_PROJECT; })[0];
+  check('runway parts: the project keeps its share of budget income',
+    Math.abs(rwOwn.income['2026-06'] - 600) < 0.01 && rwOwn.cost['2026-06'] === 500);
+  check('runway parts: General gets the policy share, under the contribution milestone',
+    Math.abs(rwGen.income['2026-06'] - 400) < 0.01 && rwGen.milestone === 'S (contribution)');
+  // The actual carries no item code, so it sits on the project's "(unassigned)" part.
+  var rwOwnActual = rwParts.filter(function (p) {
+    return p.project === 'P' && p.milestone === '(unassigned)'; })[0];
+  check('runway parts: actual income splits the same way',
+    Math.abs(rwOwnActual.actualIncome['2026-05'] - 120) < 0.01 &&
+    Math.abs(rwGen.actualIncome['2026-05'] - 80) < 0.01);
+
+  // Lines per group must add up to the organisation's line, or grouping the chart would
+  // change the total it is a breakdown of.
+  var rwAll = runwayWalk_(rwParts, '2026-06');
+  var rwAxis = rwAll.months.map(function (r) { return r.month; });
+  var rwSum = rwParts.reduce(function (t, p) {
+    var last = runwayWalk_([p], '2026-06', rwAxis).months.slice(-1)[0];
+    return t + last.weighted - last.spend;
+  }, 0);
+  var rwLast = rwAll.months.slice(-1)[0];
+  check('runway parts: group lines sum to the total line',
+    Math.abs(rwSum - (rwLast.weighted - rwLast.spend)) < 1);
 
   // ---- archiving actually archives ----------------------------------------
   // Archiving happens in Drive; Xero keeps the original tracking name forever. Matching

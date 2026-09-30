@@ -192,7 +192,7 @@ function buildSnapshot() {
   const timeline = buildTimeline_(planned, actualLines, itemToMilestone, fy, now);
 
   // Funded runway: cumulative income against cumulative spend, month by month.
-  const runway = buildRunway_(planned, actualLines, now, exclusivityReps);
+  const runway = buildRunway_(planned, actualLines, now, exclusivityReps, itemToMilestone);
 
   // Per-project rollups (feed the summary cards / org totals).
   const rows = Object.keys(projects).map(name => {
@@ -665,12 +665,101 @@ function roundMapValues_(map) {
 }
 
 /**
- * Per funding source: baseline (frozen budget) and actual (from Xero) spend,
- * bucketed by milestone (item code) and quarter. Returns an array ready for the
- * quarterly tracking screen; the live forecast layer is merged in WebApp/UI.
+ * The organisation's funded runway (runwayWalk_ over every part), plus the parts
+ * themselves, so the Overview can redraw it for any filter or grouping without a round trip.
  */
+function buildRunway_(budgets, actualLines, now, exclusivityReps, itemToMilestone) {
+  const nowKey = DateMath.monthKey(now);
+  const parts = runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone);
+  const walk = runwayWalk_(parts, nowKey);
+  // The parts travel with the snapshot so the Overview can walk any selection of them.
+  // Whole dollars, each map rounded so it still sums to its unrounded total.
+  walk.nowKey = nowKey;
+  walk.parts = parts.map(p => Object.assign({}, p, {
+    cost: roundMapValues_(p.cost), income: roundMapValues_(p.income),
+    actualCost: roundMapValues_(p.actualCost), actualIncome: roundMapValues_(p.actualIncome)
+  }));
+  return walk;
+}
+
 /**
- * Funded runway: the month cumulative income stops covering cumulative spend.
+ * The runway's building blocks: one part per project, funding source and milestone, with
+ * its budgeted cost and income and its Xero actual cost and income, month by month.
+ *
+ * Income is split the way the Overview's cards split it. A source's Contribution policy
+ * moves its share of each non-General line's income to a "(contribution)" part under
+ * General, and the same share of that source's actual income, so a project's line does not
+ * jump at today. A source whose exclusivity group another source carries has no cost here,
+ * as in the org totals.
+ */
+function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
+  const parts = {};
+  function part(project, source, milestone, status, probability) {
+    const k = project + '||' + source + '||' + milestone;
+    return parts[k] || (parts[k] = { project: project, fundingSource: source,
+      milestone: milestone, status: status, probability: probability,
+      cost: {}, income: {}, actualCost: {}, actualIncome: {} });
+  }
+
+  const bySource = {};
+  (budgets || []).forEach(src => {
+    const group = clean_((src.metadata || {})[CONFIG.META.exclusivityGroup] || '');
+    const carriesCost = !group || (exclusivityReps || {})[group] === src.name;
+    // A proposed source with no Probability counts nothing towards expected income rather
+    // than being guessed at, exactly as in the org totals. G2 asks for the number.
+    const probability = sourceProbability_(src.status, src.metadata);
+    const rate = contributionRate_(src);
+    bySource[src.name] = { status: src.status, probability: probability, rate: rate };
+    (src.lines || []).forEach(l => {
+      const p = part(l.project || CONFIG.DEFAULT_PROJECT, src.name,
+        l.milestone || '(unassigned)', src.status, probability);
+      addInto_(p.cost, scaleMap_(distributeByMonth_([l], 'cost'), carriesCost ? 1 : 0));
+      const income = distributeByMonth_([l], 'income');
+      const share = lineContribution_(l, rate) ? rate : 0;
+      addInto_(p.income, scaleMap_(income, 1 - share));
+      if (share) {
+        addInto_(part(CONFIG.GENERAL_PROJECT, src.name, contributionMilestone_(src.name),
+          src.status, probability).income, scaleMap_(income, share));
+      }
+    });
+  });
+
+  (actualLines || []).forEach(l => {
+    // Same exclusions as the org totals, or runway would disagree with the cards above it.
+    if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
+    if (isArchivedSource_(l.fundingSource)) return;
+    const fs = l.fundingSource || '(unassigned)';
+    // Money already spent or received is real whatever its sheet says, so a tag with no
+    // sheet counts as secured.
+    const s = bySource[fs] || { status: 'secured', probability: 1, rate: 0 };
+    const code = itemCode_(l.item);
+    const mile = (code && (itemToMilestone || {})[fs + '||' + code]) || '(unassigned)';
+    const key = DateMath.monthKey(new Date(l.date));
+    const amount = Number(l.amount) || 0;
+    const p = part(l.project, fs, mile, s.status, s.probability);
+    if (l.kind === 'expense') {
+      p.actualCost[key] = (p.actualCost[key] || 0) + amount;
+      return;
+    }
+    const share = s.rate && l.project !== CONFIG.GENERAL_PROJECT ? s.rate : 0;
+    p.actualIncome[key] = (p.actualIncome[key] || 0) + amount * (1 - share);
+    if (share) {
+      const g = part(CONFIG.GENERAL_PROJECT, fs, contributionMilestone_(fs), s.status,
+        s.probability);
+      g.actualIncome[key] = (g.actualIncome[key] || 0) + amount * share;
+    }
+  });
+
+  return Object.keys(parts).map(k => parts[k]);
+}
+
+/**
+ * Funded runway over any set of parts (runwayParts_): the month cumulative income stops
+ * covering cumulative spend.
+ *
+ * Self-contained on purpose. The page receives this function's own source (Index.html),
+ * so the chart and its tiles run exactly the code the tests run here. It may not call
+ * anything outside itself.
  *
  * This is NOT cash runway. There is no bank balance anywhere in this system and the Xero
  * scopes cannot reach one, so it answers "when does the plan go underwater on money we have
@@ -694,67 +783,56 @@ function roundMapValues_(map) {
  *   weighted  secured, plus each proposed source's income at its stated probability
  *   proposed  secured, plus every proposed source in full, the ceiling
  * All three share the same past, because a proposed grant has paid nothing yet, so they can
- * only diverge ahead of today.
+ * only diverge ahead of today. Spend is every part's cost whatever its status.
  *
  * A single burn-rate division was rejected deliberately: grant income arrives in tranches,
  * and dividing by an average burn rate reports a crossover no month actually experiences.
+ *
+ * `months`, optional, fixes the axis, so several walks line up on one chart.
  */
-function buildRunway_(budgets, actualLines, now, exclusivityReps) {
-  const nowKey = DateMath.monthKey(now);
+function runwayWalk_(parts, nowKey, months) {
+  function add(m, k, v) { m[k] = (m[k] || 0) + (v || 0); }
+  function monthsUntil(fromKey, toKey) {
+    if (!toKey) return null;
+    const a = fromKey.split('-'), b = toKey.split('-');
+    return (parseInt(b[0], 10) - parseInt(a[0], 10)) * 12 +
+           (parseInt(b[1], 10) - parseInt(a[1], 10));
+  }
 
-  const budgetCost = {};   // monthKey -> budgeted cost, exclusivity-adjusted
-  const incSecured = {};
-  const incWeighted = {};
-  const incProposed = {};
-
-  budgets.forEach(src => {
-    const group = clean_((src.metadata || {})[CONFIG.META.exclusivityGroup] || '');
-    const carriesCost = !group || (exclusivityReps || {})[group] === src.name;
-    const probability = sourceProbability_(src.status, src.metadata);
-
-    const cost = distributeByMonth_(src.lines, 'cost');
-    const income = distributeByMonth_(src.lines, 'income');
-
-    addInto_(budgetCost, scaleMap_(cost, carriesCost ? 1 : 0));
-    addInto_(incProposed, income);
-    if (src.status === 'secured') {
-      addInto_(incSecured, income);
-      addInto_(incWeighted, income);
-    } else if (probability !== null) {
-      // A proposed source with no Probability contributes nothing here rather than being
-      // guessed at, exactly as in the org totals. G2 asks for the number.
-      addInto_(incWeighted, scaleMap_(income, probability));
-    }
+  const budgetCost = {}, incSecured = {}, incWeighted = {}, incProposed = {};
+  const actualCost = {}, actualIncome = {};
+  (parts || []).forEach(p => {
+    const secured = p.status === 'secured';
+    const weight = secured ? 1 : (typeof p.probability === 'number' ? p.probability : 0);
+    Object.keys(p.cost || {}).forEach(k => add(budgetCost, k, p.cost[k]));
+    Object.keys(p.income || {}).forEach(k => {
+      add(incProposed, k, p.income[k]);
+      if (secured) add(incSecured, k, p.income[k]);
+      add(incWeighted, k, p.income[k] * weight);
+    });
+    Object.keys(p.actualCost || {}).forEach(k => add(actualCost, k, p.actualCost[k]));
+    Object.keys(p.actualIncome || {}).forEach(k => add(actualIncome, k, p.actualIncome[k]));
   });
 
-  const actualCost = {};
-  const actualIncome = {};
-  actualLines.forEach(l => {
-    // Same exclusions as the org totals, or runway would disagree with the cards above it.
-    if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
-    if (isArchivedSource_(l.fundingSource)) return;
-    const key = DateMath.monthKey(new Date(l.date));
-    const target = l.kind === 'expense' ? actualCost : actualIncome;
-    target[key] = (target[key] || 0) + l.amount;
-  });
+  if (!months) {
+    const seen = {};
+    [budgetCost, incSecured, incWeighted, incProposed, actualCost, actualIncome]
+      .forEach(m => Object.keys(m).forEach(k => (seen[k] = true)));
+    months = Object.keys(seen).sort();
+  }
 
-  const seen = {};
-  [budgetCost, incSecured, incWeighted, incProposed, actualCost, actualIncome]
-    .forEach(m => Object.keys(m).forEach(k => (seen[k] = true)));
-  const months = Object.keys(seen).sort();
-
-  const empty = { months: [], openingNet: 0, crossover: { secured: null, weighted: null,
-    proposed: null }, monthsOfRunway: { secured: null, weighted: null, proposed: null } };
-  if (!months.length) return empty;
+  const crossover = { secured: null, weighted: null, proposed: null };
+  if (!months.length) {
+    return { months: [], openingNet: 0, crossover: crossover,
+      monthsOfRunway: { secured: null, weighted: null, proposed: null } };
+  }
 
   let spend = 0, secured = 0, weighted = 0, proposed = 0;
   let openingNet = null;
   const rows = [];
-  const crossover = { secured: null, weighted: null, proposed: null };
-
   months.forEach(key => {
     const past = key < nowKey;
-    if (!past && openingNet === null) openingNet = round_(secured - spend);
+    if (!past && openingNet === null) openingNet = Math.round(secured - spend);
 
     spend += past ? (actualCost[key] || 0) : (budgetCost[key] || 0);
     if (past) {
@@ -772,31 +850,28 @@ function buildRunway_(budgets, actualLines, now, exclusivityReps) {
       if (crossover.proposed === null && proposed - spend < 0) crossover.proposed = key;
     }
 
-    rows.push({ month: key, actual: past, spend: round_(spend), secured: round_(secured),
-      weighted: round_(weighted), proposed: round_(proposed) });
+    rows.push({ month: key, actual: past, spend: Math.round(spend),
+      secured: Math.round(secured), weighted: Math.round(weighted),
+      proposed: Math.round(proposed) });
   });
 
   // Every month is in the past: the budget has run out, not the money. Say so with nulls
   // rather than reporting a crossover that the data cannot support.
-  if (openingNet === null) openingNet = round_(secured - spend);
+  if (openingNet === null) openingNet = Math.round(secured - spend);
 
   return { months: rows, openingNet: openingNet, crossover: crossover,
     monthsOfRunway: {
-      secured: monthsUntil_(nowKey, crossover.secured),
-      weighted: monthsUntil_(nowKey, crossover.weighted),
-      proposed: monthsUntil_(nowKey, crossover.proposed)
+      secured: monthsUntil(nowKey, crossover.secured),
+      weighted: monthsUntil(nowKey, crossover.weighted),
+      proposed: monthsUntil(nowKey, crossover.proposed)
     } };
 }
 
-/** Whole months from one monthKey to another, or null when there is no crossover. */
-function monthsUntil_(fromKey, toKey) {
-  if (!toKey) return null;
-  const a = fromKey.split('-');
-  const b = toKey.split('-');
-  return (parseInt(b[0], 10) - parseInt(a[0], 10)) * 12 +
-         (parseInt(b[1], 10) - parseInt(a[1], 10));
-}
-
+/**
+ * Per funding source: baseline (frozen budget) and actual (from Xero) spend,
+ * bucketed by milestone (item code) and quarter. Returns an array ready for the
+ * quarterly tracking screen; the live forecast layer is merged in WebApp/UI.
+ */
 function buildTracking_(budgets, actualLines) {
   // Index Xero actuals by source||itemCode -> { quarter: amount }, split by
   // expense (cost) vs income. Also remember a display name per item code.

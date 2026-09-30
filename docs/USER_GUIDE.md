@@ -26,7 +26,7 @@ refresh takes about a minute, and a progress bar shows which phase it is in
 
 ## Four tabs
 
-- **Overview**: the organisation-wide picture, with runway and a breakdown you can regroup
+- **Overview**: the organisation-wide picture, with a runway chart you can regroup and filter
   (below).
 - **Quarterly tracking**: one funding source, or the whole General project, milestone by
   milestone and quarter by quarter. See [Tracking and forecasting](#tracking-and-forecasting-quarterly).
@@ -39,30 +39,35 @@ refresh takes about a minute, and a progress bar shows which phase it is in
 
 ## What you're looking at (Overview)
 
-1. **Summary cards**: organisation totals for the period picked in the selector, the current
+**Show** (secured, proposed) and **filter** (projects, funding sources), under the heading, apply
+to everything on the tab: the cards and the runway. The year selector applies to the cards only,
+because runway always runs from today.
+
+1. **Summary cards**: totals for the period picked in the selector, the current
    financial year by default, a later one, or all time (finished years are only inside all
    time): forecast budget, secured funding, actual spent, the **unsecured gap** (budget not yet
    covered by secured funding) and the **gap after pipeline** (what is still uncovered once
    applications are counted at their probability). When income covers the budget, the card
    shows the **surplus** instead.
-2. **Runway**: organisation-wide and outside every filter on the page. *Net position today* is
-   secured income received minus spend to date. The three tiles give the months until
-   cumulative spend overtakes cumulative income: on secured money only, on the
+2. **Runway**: *Net position today* is income received minus spend to date. The tiles give the
+   months until cumulative spend overtakes cumulative income: on secured money only, on the
    probability-weighted pipeline, and if every application lands, each naming the month it goes
    short. "Beyond *month*" means no shortfall before the last budgeted month, which is not the
    same as safe: the budgets may simply stop there. The chart is the same walk month by month,
-   Xero actuals to last month and the Budget tabs from this month on; the vertical rule is
-   today, shaded months are budget, and a hollow dot is where a line goes below zero. This is
+   Xero actuals to last month and the plan from this month on; the vertical rule is today,
+   shaded months are budget, and a hollow dot is where a line goes below zero. This is
    **funded** runway, not cash: the cockpit reads no bank balance. Because it is the whole
    organisation's position, only people with access to every project see it.
-3. **Breakdown**: a table you slice with the `group by:` checkboxes. Tick any combination of
-   **Project**, **Funding source**, **Status** (secured or proposed) and **Milestone**. Each row
-   shows *Budget*, *Secured*, *Actual* and a *Spent vs budget* bar, green within budget and red
-   over. Grouping happens in the browser, so toggling is instant.
 
-Under General you will see rows named like `SPY_26_UOA (contribution)`. That is the share of a
-project's income its `Contribution policy` sends to General to pay for overheads; the project
-keeps the rest. Grouped by funding source, a source still totals exactly what its funder gives.
+   **Group by** changes the chart only. **Status** draws the three lines above. **Project**,
+   **Funding source** or **Milestone** draws one line per group, counting applications at their
+   probability (secured money only if *Proposed* is unticked); the lines add up to the
+   organisation's. The largest groups are named and the rest share an "Other" line. **Show as a
+   table** lists every value the chart draws.
+
+Grouped by project, General's line includes the share of each project's income its
+`Contribution policy` sends to General to pay for overheads; the project's line keeps the rest.
+Grouped by milestone, those shares appear as lines named like `SPY_26_UOA (contribution)`.
 
 ## Where each number comes from
 
