@@ -43,9 +43,9 @@ number formats or more than one tab.
 **What is already wired up.** `Contribution` is `Income − Cost` per row, and `Funding_info` derives
 the amount requested, total cost, total income, total contribution and contribution as a share
 of income from the `Budget` tab, so the header can never disagree with the rows beneath it.
-Dropdowns cover `Contribution policy` and the `Budget` tab's `Project` column. Yellow cells are
-yours to fill; grey cells are formulas, so leave them alone; green is a header row. The
-template's `Status` row can be deleted: the folder is the status.
+Dropdowns cover `Contribution policy`, `Income recognition` and the `Budget` tab's `Project`
+column. Yellow cells are yours to fill; grey cells are formulas, so leave them alone; green is a
+header row. There is no `Status` row: the folder is the status.
 
 **Two things that will bite:**
 

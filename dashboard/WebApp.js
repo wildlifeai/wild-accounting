@@ -1,8 +1,8 @@
 /**
  * WebApp.js
  * Web-app entry point and the server-side functions the client calls via
- * google.script.run. Also a spreadsheet menu for setup/admin if this script is
- * bound to a Gsheet (optional — it runs standalone too).
+ * google.script.run. Setup and diagnostics run from the editor: XeroClient.js for the
+ * Xero connection, Snapshot.js for the refresh trigger, Probe.js for dry runs.
  */
 
 function doGet() {
@@ -143,18 +143,10 @@ function filterSnapshotForProjects_(snap, allowedProjects) {
   return filteredSnap;
 }
 
-/** Client API: return the email the server sees for the current user (debugging). */
-function apiWhoAmI() {
-  var email = getCurrentUserEmail_();
-  var perms = getUserPermissions(email);
-  return { email: email, permissions: perms };
-}
-
 /** Client API: the cached snapshot (fast). */
 function apiGetSnapshot() {
   return getFilteredSnapshot_();
 }
-
 
 /** Client API: force a rebuild ("Refresh now" button). */
 function apiRefresh() {
@@ -174,143 +166,11 @@ function apiRefreshProgress() {
   return readRefreshProgress_();
 }
 
-/**
- * Diagnostic (run from the editor): rebuild the snapshot and log how many
- * breakdown rows / projects / sources it produced, plus a sample row. Confirms
- * the data side independently of the deployed web app + cache.
- */
-function diagBreakdown() {
-  const s = refreshSnapshot();
-  Logger.log('breakdownRows: ' + (s.breakdownRows ? s.breakdownRows.length : 'MISSING'));
-  Logger.log('projects: ' + (s.projects ? s.projects.length : 0) +
-    ' | fundingSources: ' + (s.fundingSources ? s.fundingSources.length : 0));
-  if (s.breakdownRows && s.breakdownRows.length) {
-    Logger.log('sample row: ' + JSON.stringify(s.breakdownRows[0]));
-  }
-  return s.breakdownRows ? s.breakdownRows.length : -1;
-}
-
-/**
- * Diagnostic (run from the editor): fetch fresh Xero actuals and log every
- * expense line that would be bucketed as "(unassigned)" for a given project.
- * Use this to trace phantom unassigned spend that doesn't appear in Xero's
- * own Account Transactions report.
- *
- * Default project is "Spyfish Aotearoa" — change the argument if needed.
- */
-function diagUnassigned(projectFilter) {
-  projectFilter = projectFilter || 'Spyfish Aotearoa';
-  if (!isXeroConnected()) { Logger.log('Xero not connected.'); return; }
-
-  const budgets = readAllBudgets();
-  const since = earliestBudgetStart_(budgets);
-  Logger.log('Fetching Xero actuals since ' + since.toISOString() + ' …');
-  const lines = fetchXeroActuals(since);
-  Logger.log('Total lines fetched: ' + lines.length);
-
-  var unassigned = [];
-  var totalAmount = 0;
-
-  lines.forEach(function (l) {
-    if (l.kind !== 'expense') return;
-    if (l.project !== projectFilter) return;
-    // isArchivedSource_ is the one definition of this, shared with Aggregator and
-    // HealthCheck. It used to be a line-number reference to a line that had moved.
-    var fs = l.fundingSource && !isArchivedSource_(l.fundingSource)
-      ? l.fundingSource : null;
-    if (fs) return; // has a live funding source, so it is not unassigned
-
-    totalAmount += l.amount;
-    unassigned.push({
-      date: l.date instanceof Date ? l.date.toISOString().substring(0, 10) : String(l.date),
-      amount: l.amount,
-      account: l.account,
-      item: l.item || '(no item)',
-      itemName: l.itemName || '',
-      fundingSourceRaw: l.fundingSource,  // the raw value from Xero ('' or undefined)
-      project: l.project
-    });
-  });
-
-  Logger.log('');
-  Logger.log('=== UNASSIGNED EXPENSE LINES for "' + projectFilter + '" ===');
-  Logger.log('Count: ' + unassigned.length + '  |  Total: $' + Math.round(totalAmount));
-  Logger.log('');
-  unassigned.forEach(function (u, i) {
-    Logger.log(
-      '#' + (i + 1) +
-      '  ' + u.date +
-      '  $' + u.amount.toFixed(2) +
-      '  acct: ' + u.account +
-      '  item: ' + u.item +
-      (u.itemName ? ' (' + u.itemName + ')' : '') +
-      '  fundingSourceRaw: "' + u.fundingSourceRaw + '"'
-    );
-  });
-
-  if (!unassigned.length) {
-    Logger.log('No unassigned expense lines found. The cached snapshot may be stale — ' +
-      'hit "Refresh now" in the dashboard and re-check the Overview.');
-  }
-  return unassigned.length;
-}
-
-/** Diagnostic: Find the exact URL of the Cockpit Settings spreadsheet */
-function diagLocateSpreadsheet() {
-  var id = getSettingsSheetId();
-  if (!id) {
-    Logger.log("No Settings spreadsheet ID found in Properties.");
-    return;
-  }
-  Logger.log("Your Cockpit Settings Spreadsheet URL is:");
-  Logger.log("https://docs.google.com/spreadsheets/d/" + id);
-  try {
-    var file = DriveApp.getFileById(id);
-    Logger.log("File Name: " + file.getName());
-    Logger.log("Is in Trash? " + file.isTrashed());
-  } catch(e) {
-    Logger.log("Could not check Drive properties: " + e.message);
-  }
-}
-
 /** Client API: is Xero connected, and the auth URL if not. */
 function apiXeroStatus() {
   const service = getXeroService();
   return { connected: service.hasAccess(),
     authUrl: service.hasAccess() ? null : service.getAuthorizationUrl() };
-}
-
-/**
- * Diagnostic: dump forecast tab parsing vs budget item codes for a source.
- * Run manually from the Apps Script editor: diagForecast('WW_25_TOI')
- */
-function diagForecast(sourceName) {
-  sourceName = sourceName || 'WW_25_TOI';
-  const snap = getSnapshot();
-  const tracking = snap.tracking || [];
-  const src = tracking.filter(t => t.source === sourceName)[0];
-  if (!src) { Logger.log('Source not found: ' + sourceName); return; }
-
-  Logger.log('\n=== Budget item codes for "' + sourceName + '" ===');
-  src.milestones.forEach(m => {
-    Logger.log('  item="' + m.item + '"  milestone="' + m.milestone + '"');
-    Logger.log('    costForecast keys: ' + JSON.stringify(Object.keys(m.costForecast || {})));
-    Logger.log('    costForecast vals: ' + JSON.stringify(m.costForecast || {}));
-    Logger.log('    baseline keys: ' + JSON.stringify(Object.keys(m.baseline || {})));
-  });
-
-  // Also re-parse the forecast tab live to compare
-  const budgets = readAllBudgets();
-  const bud = budgets.filter(b => b.name === sourceName)[0];
-  if (bud) {
-    Logger.log('\n=== Raw forecast from parseForecastTab_ ===');
-    Logger.log('  cost keys: ' + JSON.stringify(Object.keys(bud.forecast.cost)));
-    Logger.log('  cost values: ' + JSON.stringify(bud.forecast.cost));
-    Logger.log('  income keys: ' + JSON.stringify(Object.keys(bud.forecast.income)));
-    Logger.log('  comments: ' + JSON.stringify(bud.forecast.comments));
-  } else {
-    Logger.log('Budget source "' + sourceName + '" not found in readAllBudgets()');
-  }
 }
 
 /** Client API: list of project names for the planner dropdown. */
@@ -407,29 +267,6 @@ function resolveEntity_(snap, ids) {
   
   return { id: ids.join(','), label: 'Multiple sources selected', type: 'composite',
     project: 'Multiple', milestones: milestones, sheetUrls: sheetUrls };
-}
-
-// ---- Admin menu (only appears when bound to a spreadsheet) -----------------
-
-function onOpen() {
-  try {
-    SpreadsheetApp.getUi().createMenu('Cockpit')
-      .addItem('Connect Xero', 'menuConnectXero')
-      .addItem('Show Xero redirect URI', 'menuShowRedirectUri')
-      .addItem('Refresh snapshot now', 'refreshSnapshot')
-      .addItem('Install auto-refresh trigger', 'installRefreshTrigger')
-      .addToUi();
-  } catch (e) { /* not bound to a sheet — ignore */ }
-}
-
-function menuConnectXero() {
-  const url = getXeroService().getAuthorizationUrl();
-  SpreadsheetApp.getUi().alert('Open this URL to connect Xero:\n\n' + url);
-}
-
-function menuShowRedirectUri() {
-  SpreadsheetApp.getUi().alert('Register this redirect URI in your Xero app:\n\n' +
-    getXeroService().getRedirectUri());
 }
 
 /** Add values from source map into target map (mutates target). */

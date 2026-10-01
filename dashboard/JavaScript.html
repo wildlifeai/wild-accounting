@@ -27,7 +27,6 @@
     return p.day + ' ' + MONTHS[parseInt(p.month, 10) - 1] + ' ' + p.year + ', ' +
       p.hour + ':' + p.minute + ' ' + String(p.dayPeriod || '').toLowerCase();
   }
-  var COLOR = { ok: 'var(--green)', warn: 'var(--amber)', danger: 'var(--red)' };
   var snapshot = null;
 
   function render(s) {
@@ -1040,7 +1039,6 @@
 
   function money0(n) { return '$' + Math.round(Number(n) || 0).toLocaleString('en-NZ'); }
   function signed(n) { n = Math.round(n); return (n > 0 ? '+' : '') + money0(n).replace('$-', '-$'); }
-  function varClass(n) { return n > 0 ? 'var-pos' : (n < 0 ? 'var-neg' : ''); }
   // For cost, spending over budget (positive variance) is bad (red). For income
   // and net, exceeding budget (positive) is good (green) - so invert.
   function varClassM(n, measure) {

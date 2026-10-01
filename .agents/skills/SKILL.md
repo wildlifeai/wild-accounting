@@ -149,7 +149,7 @@ function name silently collide, last definition winning.
 
 * Private helpers take a **trailing underscore** (`getFolderByName_`). Apps Script treats those as
   private, so they stay out of the IDE's Run menu.
-* Only real entry points stay bare. `authCallback` must stay bare: OAuth2 calls it by name.
+* Only real entry points stay bare. `xeroAuthCallback` must stay bare: OAuth2 calls it by name.
 * `create_quarterly_budgets.js` and `funding-aggregator.js` both defined `getFolderByName`. The
   collision was hidden only because the former was wrapped in a closure; flattening it for
   deployment exposed the clash, which is why the underscore convention is enforced.

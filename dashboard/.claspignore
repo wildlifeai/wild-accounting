@@ -3,8 +3,6 @@
 !*.js
 !*.html
 
-# check_docs.js is Node, not Apps Script: it requires fs and path, which do not exist
-# there, and it needs the filesystem to read the .md files it checks. Without this line
-# the whitelist above sweeps it up as a *.js and clasp push installs permanently broken
-# code into the project.
-check_docs.js
+# Only Apps Script belongs in this folder: every *.js here is pushed. Node tooling, such
+# as tools/check_docs.js and tools/run_tests.js, lives in tools/, outside the pushed folder,
+# because it needs fs and path, which Apps Script does not have.
