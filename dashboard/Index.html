@@ -36,7 +36,6 @@
       <button class="tab active" data-view="overview">Overview</button>
       <button class="tab" data-view="tracking">Quarterly tracking</button>
       <button class="tab" data-view="planner">Project planner</button>
-      <button class="tab" data-view="plan">Five-year plan</button>
       <!-- The count badge is not decoration. Health used to sit at the foot of the
            Overview where it was unavoidable; behind a tab, nothing would tell you there
            were fourteen errors unless the tab says so. -->
@@ -49,100 +48,53 @@
         <!-- The timeframe selector lives in the subtitle, ahead of the scope text, so the
              control and the description of what is on screen read as one line. -->
         <div id="coverage" class="coverage"></div>
+        <!-- Show and filter apply to everything on this tab, the cards and the runway alike.
+             The year selector above applies to the cards only: runway always runs from today. -->
+        <div class="ov-controls">
+          <div class="bd-controls">
+            <span class="bd-label">show:</span>
+            <label><input type="checkbox" class="bd-status" value="secured" checked> Secured (confirmed)</label>
+            <label><input type="checkbox" class="bd-status" value="proposed" checked> Proposed</label>
+          </div>
+          <div class="bd-controls">
+            <span class="bd-label">filter:</span>
+            <details class="bd-dd left-aligned">
+              <summary id="filter-projects-sum">Projects</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-actions"><a data-target="filter-projects" data-act="all">all</a>
+                  <a data-target="filter-projects" data-act="none">none</a></div>
+                <div class="bd-dd-list" id="filter-projects"></div>
+              </div>
+            </details>
+            <details class="bd-dd left-aligned">
+              <summary id="filter-sources-sum">Funding sources</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-actions"><a data-target="filter-sources" data-act="all">all</a>
+                  <a data-target="filter-sources" data-act="none">none</a></div>
+                <div class="bd-dd-list" id="filter-sources"></div>
+              </div>
+            </details>
+          </div>
+        </div>
         <section class="cards" id="totals"></section>
       </div>
 
-      <!-- Runway sits above the Breakdown and its filters on purpose: it is
-           organisation-wide and runs from today, so neither the filters nor the
-           financial-year selector apply to it, and the layout should say so. -->
       <div class="overview-section hidden" id="runway-section">
         <h2>Runway</h2>
         <div class="coverage" id="runway-caption"></div>
         <section class="cards" id="runway-tiles"></section>
+        <!-- Group by changes the chart only. Status draws the three scenario lines; any
+             other choice draws one expected-case line per group. -->
+        <div class="bd-controls rw-controls">
+          <span class="bd-label">group by:</span>
+          <label><input type="radio" name="rw-group" class="rw-group" value="status" checked> Status</label>
+          <label><input type="radio" name="rw-group" class="rw-group" value="project"> Project</label>
+          <label><input type="radio" name="rw-group" class="rw-group" value="fundingSource"> Funding source</label>
+          <label><input type="radio" name="rw-group" class="rw-group" value="milestone"> Milestone</label>
+        </div>
         <div class="rw-wrap" id="runway-chart"></div>
         <div class="legend" id="runway-legend"></div>
         <div id="runway-table"></div>
-      </div>
-
-      <div class="overview-section">
-        <div class="breakdown-head">
-          <h2>Breakdown</h2>
-          <div class="bd-controls-wrap">
-            <div class="bd-controls">
-              <span class="bd-label">group by:</span>
-              <label><input type="checkbox" class="bd-dim" value="project" checked> Project</label>
-              <label><input type="checkbox" class="bd-dim" value="fundingSource"> Funding source</label>
-              <label><input type="checkbox" class="bd-dim" value="status"> Status</label>
-              <label><input type="checkbox" class="bd-dim" value="milestone"> Milestone</label>
-            </div>
-            <div class="bd-controls">
-              <span class="bd-label">show:</span>
-              <label><input type="checkbox" class="bd-status" value="secured" checked> Secured (confirmed)</label>
-              <label><input type="checkbox" class="bd-status" value="proposed" checked> Proposed</label>
-            </div>
-            <!-- The timeframe selector used to sit here. It now lives in the
-                 Organisation overview subtitle, rendered by renderCoverage. -->
-            <div class="bd-controls">
-              <span class="bd-label">filter:</span>
-              <details class="bd-dd">
-                <summary id="filter-projects-sum">Projects</summary>
-                <div class="bd-dd-panel">
-                  <div class="bd-dd-actions"><a data-target="filter-projects" data-act="all">all</a>
-                    <a data-target="filter-projects" data-act="none">none</a></div>
-                  <div class="bd-dd-list" id="filter-projects"></div>
-                </div>
-              </details>
-              <details class="bd-dd">
-                <summary id="filter-sources-sum">Funding sources</summary>
-                <div class="bd-dd-panel">
-                  <div class="bd-dd-actions"><a data-target="filter-sources" data-act="all">all</a>
-                    <a data-target="filter-sources" data-act="none">none</a></div>
-                  <div class="bd-dd-list" id="filter-sources"></div>
-                </div>
-              </details>
-            </div>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table id="overview">
-            <thead id="overview-head"></thead>
-            <tbody id="overview-body"></tbody>
-            <tfoot id="overview-foot"></tfoot>
-          </table>
-        </div>
-
-        <div class="legend">
-          <span><i class="sw ok"></i> within budget</span>
-          <span><i class="sw danger"></i> over budget</span>
-          <span class="muted">Secured = confirmed funding · Status: secured (confirmed) vs proposed</span>
-        </div>
-      </div>
-    </div>
-
-    <div id="view-plan" class="hidden">
-      <div class="overview-section">
-        <h2>Five-year plan</h2>
-        <div class="coverage">
-          <span id="plan-scope"></span>
-        </div>
-        <div class="bd-controls">
-          <span class="bd-label">project:</span>
-          <select id="plan-project"><option value="*">All projects</option></select>
-          <span class="bd-label">show:</span>
-          <label><input type="checkbox" id="plan-empty"> financial years with no cost</label>
-        </div>
-        <div class="table-wrap">
-          <table class="plan-table">
-            <thead id="plan-head"></thead>
-            <tbody id="plan-body"></tbody>
-            <tfoot id="plan-foot"></tfoot>
-          </table>
-        </div>
-        <div class="legend">
-          <span class="muted">One row per funding source, milestone and financial year.
-            Cost is budgeted spend; Secured is income from a grant already won; Proposed is
-            income from an application still out. Comments come from the source's Forecast tab.</span>
-        </div>
       </div>
     </div>
 
@@ -239,6 +191,9 @@
     </div>
   </div>
 
+  <!-- The runway walk the server runs, sent as its own source, so the chart and its tiles
+       cannot drift from the tested code. See runwayWalk_ in Aggregator.js. -->
+  <script><?!= runwayWalk_.toString() ?></script>
   <?!= include('JavaScript'); ?>
 </body>
 </html>

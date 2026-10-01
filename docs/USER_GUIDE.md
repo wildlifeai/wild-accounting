@@ -18,22 +18,20 @@ ask the GM.
 column B, comma separated, or `*` for everything. A project lead sees only their projects'
 figures and health findings, plus the warnings that mean every number on screen is stale.
 
-The figure top-right ("synced Nh ago") tells you how fresh the data is, next to today's date. It
+The figure top-right ("synced 30 Sep 2026, 9:14 am", New Zealand time) says when the data was
+last pulled, next to today's date. It
 refreshes itself roughly every 6 hours; click **Refresh now** to pull the latest immediately. A
 refresh takes about a minute, and a progress bar shows which phase it is in
 (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
 
-## Five tabs
+## Four tabs
 
-- **Overview**: the organisation-wide picture, with runway and a breakdown you can regroup
+- **Overview**: the organisation-wide picture, with a runway chart you can regroup and filter
   (below).
 - **Quarterly tracking**: one funding source, or the whole General project, milestone by
   milestone and quarter by quarter. See [Tracking and forecasting](#tracking-and-forecasting-quarterly).
 - **Project planner**: milestones on a timeline, coloured by funding status, with optional
   Cost, Income and Profit and loss columns.
-- **Five-year plan**: one row per funding source, milestone and financial year, showing what it
-  costs, what is secured and what is still an application. It answers "what am I delivering,
-  when, and is it paid for".
 - **Health**: sheet, Xero-coding and system problems found on the last refresh. The tab carries
   a badge: red when a number on screen is wrong right now, amber when one may be, nothing when
   clean. Each finding says what is wrong, where, the amount at stake and what to do, with a
@@ -41,28 +39,35 @@ refresh takes about a minute, and a progress bar shows which phase it is in
 
 ## What you're looking at (Overview)
 
-1. **Summary cards**: organisation totals for the period picked in the selector, a financial
-   year or all time: forecast budget, secured funding, actual spent, the **unsecured gap**
-   (budget not yet covered by secured funding) and the **gap after pipeline** (what is still
-   uncovered once applications are counted at their probability).
-2. **Runway**: organisation-wide and outside every filter on the page. *Net position today* is
-   secured income received minus spend to date. The three tiles give the months until
-   cumulative spend overtakes cumulative income: on secured money only, on the
+**Show** (secured, proposed) and **filter** (projects, funding sources), under the heading, apply
+to everything on the tab: the cards and the runway. The year selector applies to the cards only,
+because runway always runs from today.
+
+1. **Summary cards**: totals for the period picked in the selector, the current
+   financial year by default, a later one, or all time (finished years are only inside all
+   time): forecast budget, secured funding, actual spent, the **unsecured gap** (budget not yet
+   covered by secured funding) and the **gap after pipeline** (what is still uncovered once
+   applications are counted at their probability). When income covers the budget, the card
+   shows the **surplus** instead.
+2. **Runway**: *Net position today* is income received minus spend to date. The tiles give the
+   months until cumulative spend overtakes cumulative income: on secured money only, on the
    probability-weighted pipeline, and if every application lands, each naming the month it goes
    short. "Beyond *month*" means no shortfall before the last budgeted month, which is not the
    same as safe: the budgets may simply stop there. The chart is the same walk month by month,
-   Xero actuals to last month and the Budget tabs from this month on; the vertical rule is
-   today, shaded months are budget, and a hollow dot is where a line goes below zero. This is
+   Xero actuals to last month and the plan from this month on; the vertical rule is today,
+   shaded months are budget, and a hollow dot is where a line goes below zero. This is
    **funded** runway, not cash: the cockpit reads no bank balance. Because it is the whole
    organisation's position, only people with access to every project see it.
-3. **Breakdown**: a table you slice with the `group by:` checkboxes. Tick any combination of
-   **Project**, **Funding source**, **Status** (secured or proposed) and **Milestone**. Each row
-   shows *Budget*, *Secured*, *Actual* and a *Spent vs budget* bar, green within budget and red
-   over. Grouping happens in the browser, so toggling is instant.
 
-Under General you will see rows named like `SPY_26_UOA (contribution)`. That is the share of a
-project's income its `Contribution policy` sends to General to pay for overheads; the project
-keeps the rest. Grouped by funding source, a source still totals exactly what its funder gives.
+   **Group by** changes the chart only. **Status** draws the three lines above. **Project**,
+   **Funding source** or **Milestone** draws one line per group, counting applications at their
+   probability (secured money only if *Proposed* is unticked); the lines add up to the
+   organisation's. The largest groups are named and the rest share an "Other" line. **Show as a
+   table** lists every value the chart draws.
+
+Grouped by project, General's line includes the share of each project's income its
+`Contribution policy` sends to General to pay for overheads; the project's line keeps the rest.
+Grouped by milestone, those shares appear as lines named like `SPY_26_UOA (contribution)`.
 
 ## Where each number comes from
 
@@ -126,7 +131,7 @@ grid is read-only and picks the change up at the next refresh. Two rules matter:
   `Forecast` tab therefore means the budget is still your best estimate, which is the normal state.
 - **Once a row has any number, that row is the plan** for every quarter the tab has a column for,
   and its blank cells count as `0`. The `Budget` tab's dates stop applying to those quarters, on
-  the grid, the Overview, the runway and the planners alike, so a row that starts in Oct-Dec needs
+  the grid, the Overview, the runway and the planner alike, so a row that starts in Oct-Dec needs
   nothing typed in the quarters before it. Quarters the tab has no column for keep the budget.
 
 The `Comments` column on the `Forecast` tab appears beside each milestone: use it to say why a

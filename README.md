@@ -17,7 +17,7 @@ the projects you have access to. **To get access, or access to more projects, as
 |---|---|
 | See where the money is: budget, secured funding, spend and runway | The cockpit's **Overview**, explained in the [user guide](docs/USER_GUIDE.md) |
 | Track one funding source quarter by quarter | **Quarterly tracking**, see [tracking and forecasting](docs/USER_GUIDE.md#tracking-and-forecasting-quarterly) |
-| See what a project delivers over the coming years, and whether it is paid for | **Project planner** and **Five-year plan** |
+| See what a project delivers over the coming years, and whether it is paid for | **Project planner** |
 | Change a forecast | The funding source's own `Forecast` tab, see [the user guide](docs/USER_GUIDE.md#tracking-and-forecasting-quarterly) |
 | Start a budget for a new grant or application | Download the [budget template](docs/Budget_sheet_template.xlsx), then follow the [budget sheet guide](docs/BUDGET_SHEET_TEMPLATE.md) |
 | Understand a warning on the Health tab | [Health checks](docs/HEALTH_CHECKS.md): what each one means and what to do |

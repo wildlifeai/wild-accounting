@@ -257,7 +257,7 @@ changing code:
   "simplify" it back.
 * **A row with any entry owns its tab's quarters**: `ownedForecast_` fills its blanks with 0, and
   with `CONFIG.PLAN_FROM_FORECAST` on, `planBudgets_` re-times the lines so every view (Overview,
-  runway, planners) follows the forecast. Quarters with no column keep the budget. `buildSnapshot`
+  runway, planner) follows the forecast. Quarters with no column keep the budget. `buildSnapshot`
   passes `planned` budgets to the views and `judged` ones (original lines, owned forecast) to the
   grid and health checks. See `docs/DESIGN.md`, decisions, 2026-09-30.
 
@@ -322,7 +322,7 @@ in its `Contribution policy`. The rates live in each sheet's `Funding_info`, not
 list copied into this file drifts from the sheets: `reportContributions()` prints the current ones.
 
 `contributionRate_` and `lineContribution_` in `Aggregator.js` are the one statement of the rule,
-used by the Overview, the five-year plan, the planner, General's tracking view and G1.
+used by the Overview, the planner, General's tracking view and G1.
 `percent_of_income` takes its share from lines not already on General; `per_line` and `none`
 derive nothing. Organisation totals and runway do not move; only the split between projects does.
 
