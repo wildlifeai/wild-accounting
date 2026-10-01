@@ -1201,6 +1201,12 @@ function runTests() {
       lines: ls || mLines, forecast: fcst }], [], {}).filter(function (f) { return f.id === 'A11'; });
   };
   var costOnly = { cost: { 'SPY_27_HAN_001||26/27 Q3': 4000 }, income: {}, comments: {} };
+  // A11 is raised only while the plan does not run from today; with it, a blank Revenue
+  // row follows its cost, which is the fix A11 asks for.
+  check('A11: quiet once the plan runs from today',
+    CONFIG.PLAN_REMAINING !== true || a11For(costOnly).length === 0);
+  var keepPlan = CONFIG.PLAN_REMAINING;
+  CONFIG.PLAN_REMAINING = false;
   var a11 = a11For(costOnly);
   check('A11: a cost forecast with no income forecast is flagged, with the income at stake',
     a11.length === 1 && a11[0].amount === 24000 && /SPY_27_HAN_001/.test(a11[0].detail));
@@ -1208,6 +1214,7 @@ function runTests() {
     a11For({ cost: costOnly.cost, income: { 'SPY_27_HAN_001||26/27 Q3': 0 }, comments: {} }).length === 0);
   check('A11: quiet for a milestone that budgets no income',
     a11For(costOnly, [ml('Cost only', d(2026, 8, 1), d(2026, 9, 1), 500, 0, 'SPY_27_HAN_001', 'Dashboard')]).length === 0);
+  CONFIG.PLAN_REMAINING = keepPlan; // shared global: leave it as it was found
 
   // A12: a minus sign on the Forecast tab, as WW_26_SALES had on its costs.
   var negGrid = [

@@ -166,13 +166,13 @@ const CONFIG = {
   // What counts as an actual: false is invoices and bank lines as they are coded; true
   // follows Xero's P&L, reading manual journals and each account's class, and earns the
   // income of sheets marked "Income recognition: as spent" as they spend
-  // (earnedActuals_).
-  ACTUALS_EARNED: false,
+  // (earnedActuals_). On since 2026-10-02, after its dry run was read.
+  ACTUALS_EARNED: true,
   // The plan from today: false is the forecast plan above for every month; true is
   // actuals for months gone and what is left of each milestone for months to come, a
-  // blank Revenue row following its cost (remainingPlan_). Turned on together with
-  // ACTUALS_EARNED, which it relies on, once reportEarnedPlan's dry run has been read.
-  PLAN_REMAINING: false,
+  // blank Revenue row following its cost (remainingPlan_). It relies on ACTUALS_EARNED and
+  // was turned on with it on 2026-10-02.
+  PLAN_REMAINING: true,
 
   // ---- Caching ------------------------------------------------------------
   // The snapshot is stored as a JSON file in Drive (no size ceiling, unlike

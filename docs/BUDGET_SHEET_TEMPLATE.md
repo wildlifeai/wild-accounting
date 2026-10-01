@@ -91,7 +91,7 @@ which `parseBudgetFile_` reads as a fallback. Where both exist, `Funding_info` w
 | `Owner` | yes | Email of whoever maintains this sheet. Health checks are addressed to this person. |
 | `Probability` | proposed only | 0 to 100: the chance this ask is won. Drives the "gap after pipeline" figure. Accepts `40`, `40%` or `0.4`; anything at or below 1 is read as a fraction, so `1` means certainty. A `secured` source is always 100 whatever this says. Absent means unknown, and the ask is left out of expected income rather than counted as zero (check **G2**). |
 | `Exclusivity group` | when competing | A label shared by applications chasing the **same work**, for example `Advisory role 26/27`. Exactly one member carries the cost; the rest are asks against it. Without this, two parallel applications for one $48,000 role would put $96,000 of budget on the organisation. Secured beats proposed, then largest cost, then name, so the choice is stable between refreshes. Reported as **G3** on the members whose cost is suppressed. |
-| `Income recognition` | grants paid upfront | `as spent` for a grant the accountant defers and releases as the money is spent: once the cockpit counts actuals on Xero's terms, its income is its actual spend to date times its budget's income-to-cost ratio, capped at its budgeted income, and its own invoice and release journals are ignored. Blank or `as invoiced`: income counts when invoiced. Anything else is reported as **C8**; a deferred source left unmarked as **D7**. |
+| `Income recognition` | grants paid upfront | `as spent` for a grant the accountant defers and releases as the money is spent: its income is its actual spend to date times its budget's income-to-cost ratio, capped at its budgeted income, and its own invoice and release journals are ignored. Blank or `as invoiced`: income counts when invoiced. Anything else is reported as **C8**; a deferred source left unmarked as **D7**. |
 | `Link` | recommended | Where the grant folder, contract or funding agreement lives. A Drive URL, or a reference code such as `27_TOI_GENERAL`. What the budget is accountable to, one click from the budget itself. Read into metadata but not yet surfaced anywhere in the cockpit. |
 | `Last reviewed` | yes | Date last checked against reality. Staleness is otherwise invisible. |
 | `Notes` | no | Free text. Not parsed, so never put a number here that something else needs. |
@@ -173,17 +173,23 @@ any, plus `Project` where a line belongs elsewhere.
 
 ## `Forecast` tab
 
-Optional, and only worth using when you need to override the budget. **A row with no entry here
-falls back to the budget baseline**, so an empty or absent `Forecast` tab is a valid state: it
-means "the budget is still our best estimate". Record a forecast when you know something the budget
-does not: a delayed hire, a grant ending early, a re-profiled milestone.
+Optional, and only worth using when you know something the budget does not: a delayed hire, a
+grant ending early, a re-profiled milestone. Months already gone always come from Xero; the tab
+only shapes the months to come.
+
+**A row with no entry plans what is left of the budget**: budget minus actual spend to date,
+spread over the line's remaining months in the `Budget` tab's shape. So an empty or absent
+`Forecast` tab is a valid state, and an underspend rolls forward without anyone typing it. A line
+whose end date has passed plans nothing more, so type late work into a later quarter.
 
 **A row with any number owns every quarter the tab has a column for, and its blanks count as `0`.**
-The `Budget` tab's dates then no longer place that milestone's money in those quarters; the
-forecast does, everywhere in the cockpit. Quarters with no column keep the budget, so give the tab a
-column for every quarter the work could fall in. Fill the `Revenue` row as well as the `Expenses`
-row: a milestone forecast for cost but not income is flagged (A11), and its income keeps the
-budget's timing meanwhile.
+Quarters with no column keep the budget, so give the tab a column for every quarter the work could
+fall in.
+
+**Leave the `Revenue` row blank when income follows the spend**, as a grant's does: it then follows
+the `Expenses` row at the budget's income-to-cost ratio, never past the source's budgeted income.
+Fill it only when the money arrives on its own timetable, such as a contract invoiced per
+milestone.
 
 Layout, as parsed by `BudgetReader.parseForecastTab_`:
 

@@ -260,6 +260,12 @@ changing code:
   runway, planner) follows the forecast. Quarters with no column keep the budget. `buildSnapshot`
   passes `planned` budgets to the views and `judged` ones (original lines, owned forecast) to the
   grid and health checks. See `docs/DESIGN.md`, decisions, 2026-09-30.
+* **The plan runs from today**: with `CONFIG.PLAN_REMAINING` on, `remainingPlan_` rebuilds
+  `planned` as actuals for months gone and, for months to come, the typed forecast or what is left
+  of the budget, with income that has no Revenue row following its cost, capped at the source's
+  budgeted income. It needs `CONFIG.ACTUALS_EARNED`: on the invoiced basis an upfront grant is
+  income to date on no milestone, and its income to come would count it again. See
+  `docs/DESIGN.md`, decisions, 2026-10-02.
 
 **The parser reports rather than skips.** A line it cannot use becomes a health finding: both
 `Cost` and `Income` zero (B1), an unparseable date (B2), an end before its start (B3), no item
@@ -290,7 +296,8 @@ payroll line carried both tracking categories. **Fetching is not the same as cou
 bill with no `Projects` tag would be dropped from every total, so read D1 and D2 before trusting
 any total that ought to contain salary.
 
-Manual journals are read by `fetchManualJournalLines_` when `CONFIG.ACTUALS_EARNED` is on. The
+Manual journals are read by `fetchManualJournalLines_`, with `CONFIG.ACTUALS_EARNED` on since
+2026-10-02. The
 probe of 2026-10-02 confirmed against the live organisation that the current connection
 (`accounting.transactions.read`) can read them, that every P&L journal line carried both tracking
 categories, and that none carried an item code. The rules the reader follows:

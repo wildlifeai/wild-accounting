@@ -106,7 +106,7 @@ snapshot that the dashboard reads instantly. The data model it relies on is in `
 | `WebApp.js` | `doGet`, the client API (`google.script.run`), per-person filtering |
 | `Index/Stylesheet/JavaScript.html` | The dashboard UI |
 | `Tests.js` | `runTests()`: the checks above, with no Drive or Xero |
-| `Probe.js` | Read-only diagnostics run by hand from the editor, currently the contribution and earned-plan dry runs. Never on a trigger |
+| `Probe.js` | Read-only diagnostics run by hand from the editor, currently the contribution dry run. Never on a trigger |
 
 ## Deploying a change
 
@@ -155,8 +155,9 @@ Only needed to stand up a new copy of the cockpit.
 - **Common adjustments, all in `Config.js`:** a balance-sheet account to exclude goes in
   `EXCLUDED_ACCOUNTS`, matched on its code, so a rename in Xero needs nothing; the refresh interval
   is `REFRESH_TRIGGER_HOURS`, after which re-run `installRefreshTrigger`.
-- **Known assumptions.** `XeroClient.js` reads bank transactions and invoices; anything booked as a
-  manual journal is invisible (see `SKILL.md` §4). Line amounts are Xero's GST-exclusive
+- **Known assumptions.** `XeroClient.js` reads bank transactions, invoices and posted manual
+  journals, and each line's account class decides income or expense, as in Xero's P&L (see
+  `SKILL.md` §4). Line amounts are Xero's GST-exclusive
   `LineAmount`, matching the GST-exclusive budgets.
 
 ## What belongs in this repository
