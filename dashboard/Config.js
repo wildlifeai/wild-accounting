@@ -96,7 +96,10 @@ const CONFIG = {
     // Competing applications for the same work share a label here. Exactly one member of
     // a group carries the cost; the rest are asks against it. Without this, two parallel
     // applications for one role would double that role in the organisation budget.
-    exclusivityGroup: 'exclusivity group'
+    exclusivityGroup: 'exclusivity group',
+    // "as spent": income is earned as the sheet spends (earnedActuals_), for grants paid
+    // upfront and released by the accountant. Blank or "as invoiced": when invoiced.
+    incomeRecognition: 'income recognition'
   },
   DEFAULT_PROJECT: 'Unallocated',
   GENERAL_PROJECT: 'General',
@@ -158,8 +161,18 @@ const CONFIG = {
   GENERAL_FORECAST_QUARTERS: 6, // 1.5 years
   // The plan every view shows: false is the Budget tab's own dates; true is each sheet's
   // Forecast tab where it has an entry, a row's blanks then counting as 0 (planBudgets_).
-  // Held false until reportForecastPlan's dry run has been read.
-  PLAN_FROM_FORECAST: false,
+  // On since 2026-09-30, after its dry run was read.
+  PLAN_FROM_FORECAST: true,
+  // What counts as an actual: false is invoices and bank lines as they are coded; true
+  // follows Xero's P&L, reading manual journals and each account's class, and earns the
+  // income of sheets marked "Income recognition: as spent" as they spend
+  // (earnedActuals_). On since 2026-10-02, after its dry run was read.
+  ACTUALS_EARNED: true,
+  // The plan from today: false is the forecast plan above for every month; true is
+  // actuals for months gone and what is left of each milestone for months to come, a
+  // blank Revenue row following its cost (remainingPlan_). It relies on ACTUALS_EARNED and
+  // was turned on with it on 2026-10-02.
+  PLAN_REMAINING: true,
 
   // ---- Caching ------------------------------------------------------------
   // The snapshot is stored as a JSON file in Drive (no size ceiling, unlike

@@ -149,7 +149,7 @@ function name silently collide, last definition winning.
 
 * Private helpers take a **trailing underscore** (`getFolderByName_`). Apps Script treats those as
   private, so they stay out of the IDE's Run menu.
-* Only real entry points stay bare. `authCallback` must stay bare: OAuth2 calls it by name.
+* Only real entry points stay bare. `xeroAuthCallback` must stay bare: OAuth2 calls it by name.
 * `create_quarterly_budgets.js` and `funding-aggregator.js` both defined `getFolderByName`. The
   collision was hidden only because the former was wrapped in a closure; flattening it for
   deployment exposed the clash, which is why the underscore convention is enforced.
@@ -250,12 +250,22 @@ changing code:
 * **Forecasts are per sheet**, on each funding source's own `Forecast` tab, read by
   `parseForecastTab_`. The central sheet, Cockpit Settings, holds only the Permissions tab
   (`Permissions.js`).
-* **A missing forecast falls back to the budget baseline**, never to zero. `forecastOrBaseline_`
-  in `ForecastEngine.js` is the one statement of that rule, used by the tracking grid, D5 and E2.
-  Reading zero made every source with an unmaintained `Forecast` tab look certain to underspend;
-  the fallback was lost once and restored with a regression test. Do not "simplify" it back. Its
-  price is that work moved to a later quarter must be zeroed where it left, or it counts twice
-  (see `docs/DESIGN.md`, open questions).
+* **A milestone row with no forecast falls back to the budget baseline**, never to zero.
+  `forecastOrBaseline_` in `ForecastEngine.js` is the one statement of that rule, used by the
+  tracking grid, D5 and E2. Reading zero made every source with an unmaintained `Forecast` tab look
+  certain to underspend; the fallback was lost once and restored with a regression test. Do not
+  "simplify" it back.
+* **A row with any entry owns its tab's quarters**: `ownedForecast_` fills its blanks with 0, and
+  with `CONFIG.PLAN_FROM_FORECAST` on, `planBudgets_` re-times the lines so every view (Overview,
+  runway, planner) follows the forecast. Quarters with no column keep the budget. `buildSnapshot`
+  passes `planned` budgets to the views and `judged` ones (original lines, owned forecast) to the
+  grid and health checks. See `docs/DESIGN.md`, decisions, 2026-09-30.
+* **The plan runs from today**: with `CONFIG.PLAN_REMAINING` on, `remainingPlan_` rebuilds
+  `planned` as actuals for months gone and, for months to come, the typed forecast or what is left
+  of the budget, with income that has no Revenue row following its cost, capped at the source's
+  budgeted income. It needs `CONFIG.ACTUALS_EARNED`: on the invoiced basis an upfront grant is
+  income to date on no milestone, and its income to come would count it again. See
+  `docs/DESIGN.md`, decisions, 2026-10-02.
 
 **The parser reports rather than skips.** A line it cannot use becomes a health finding: both
 `Cost` and `Income` zero (B1), an unparseable date (B2), an end before its start (B3), no item
@@ -286,8 +296,11 @@ payroll line carried both tracking categories. **Fetching is not the same as cou
 bill with no `Projects` tag would be dropped from every total, so read D1 and D2 before trusting
 any total that ought to contain salary.
 
-If anything must ever be read from manual journals again, these findings came from Xero's
-documentation and were never confirmed against a live call:
+Manual journals are read by `fetchManualJournalLines_`, with `CONFIG.ACTUALS_EARNED` on since
+2026-10-02. The
+probe of 2026-10-02 confirmed against the live organisation that the current connection
+(`accounting.transactions.read`) can read them, that every P&L journal line carried both tracking
+categories, and that none carried an item code. The rules the reader follows:
 
 * `ManualJournalLine` **does** carry `Tracking`, at most two categories, which is exactly `Projects`
   and `Funding source`.
@@ -300,6 +313,10 @@ documentation and were never confirmed against a live call:
   must net to zero.
 * Filter to `Status === 'POSTED'` in the mapper, not via `where`, which `paginate_` overwrites when
   `modifiedAfter` is set.
+* A grant paid upfront is invoiced to a revenue account, deferred by a quarter-end journal and
+  released quarter by quarter as it is spent, so the releases lag by up to a quarter. A sheet
+  marked `Income recognition: as spent` therefore earns its income from its own spend
+  (`earnedActuals_`), and its invoice and release journals are dropped, or it would count twice.
 * There is no repeating-journal endpoint, so future payroll cannot be read from Xero; forward salary
   cost must keep coming from the budget.
 
@@ -318,7 +335,7 @@ in its `Contribution policy`. The rates live in each sheet's `Funding_info`, not
 list copied into this file drifts from the sheets: `reportContributions()` prints the current ones.
 
 `contributionRate_` and `lineContribution_` in `Aggregator.js` are the one statement of the rule,
-used by the Overview, the five-year plan, the planner, General's tracking view and G1.
+used by the Overview, the planner, General's tracking view and G1.
 `percent_of_income` takes its share from lines not already on General; `per_line` and `none`
 derive nothing. Organisation totals and runway do not move; only the split between projects does.
 

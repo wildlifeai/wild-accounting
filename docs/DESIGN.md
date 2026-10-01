@@ -23,7 +23,7 @@ buy does it for us:
   not see the organisation-wide picture. That is why aggregation lives in the cockpit rather than
   in a master spreadsheet.
 
-The cost of this decision is about 3,900 lines of bespoke server-side Apps Script, plus the
+The cost of this decision is about 4,000 lines of bespoke server-side Apps Script, plus the
 dashboard's interface, for about ten funding sources. The milestone dimension is what we are
 paying for.
 
@@ -61,21 +61,21 @@ because nothing said when a tag was missing.
 
 ## The eleven requirements
 
-Status as at 29 September 2026. This table is the test specification: "does the cockpit work"
+Status as at 2 October 2026. This table is the test specification: "does the cockpit work"
 means "does it answer these".
 
 | # | What | Freq | Persona | Source of truth | Today |
 |---|---|---|---|---|---|
 | 1 | Forecast reported to Board | Q | Board | Cockpit: secured + weighted pipeline, frozen | Runway on the Overview on secured, weighted and all-proposed money, and a gap after pipeline. **Freezing does not exist**: the snapshot is overwritten every 6 hours, so August's figure is gone by November |
 | 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | Exists. General's overhead is derived from each sheet's `Contribution policy`, the same way in every view |
-| 3 | P&L (income and expenses) | Q | Board | Xero | Approved bank transactions, invoices and bills. Payroll posts as Xero Payroll bills and reaches the cockpit; milestone grain depends on each line carrying an item code, which D3 reports |
+| 3 | P&L (income and expenses) | Q | Board | Xero | Approved bank transactions, invoices and bills, and posted manual journals, counted as Xero's P&L counts them. Payroll posts as Xero Payroll bills and reaches the cockpit; milestone grain depends on each line carrying an item code, which D3 reports |
 | 4 | Working capital balance and forecast | Q | Board, Treasurer | Xero balance sheet + deferred grants | **Absent.** Needs a Xero scope the cockpit does not hold |
 | 5 | Bill payments | M | Bookkeeper | Xero | Native Xero. Deliberately out of scope |
 | 6 | Payroll | F | Bookkeeper | Xero Payroll | Posts as bills with both tracking categories. The Health tab flags untagged spend (D1, D2), missing item codes (D3), tags with no sheet (D4) and spend after a grant ended (D6). **Not routed to the bookkeeper**: someone has to read the Health tab |
 | 7 | Funding source income and expense variance | M | Project lead | Cockpit | Exists, on Quarterly tracking. Monthly cadence not enforced |
-| 8 | Funding source budget | per funder | GM | Sheets template | Template and validation exist: 40 health checks across sheet structure, data quality, metadata, Xero coding, reconciliation and the funding pipeline |
+| 8 | Funding source budget | per funder | GM | Sheets template | Template and validation exist: health checks across sheet structure, data quality, metadata, Xero coding, reconciliation and the funding pipeline |
 | 9 | Funding source summary | per funder | Funder | Cockpit export | **Absent.** No funder-facing output of any kind; every funder report is hand-built |
-| 10 | Project budget overview | per project | Project lead, GM | Cockpit rollup | Exists: Overview grouped by project, and the Five-year plan |
+| 10 | Project budget overview | per project | Project lead, GM | Cockpit rollup | Exists: the Overview's runway grouped by project, and the Project planner |
 | 11 | YTD P&L | Q | Project lead, then Board | Cockpit, per project YTD | Partial |
 
 ### The gaps that cost the most
@@ -97,20 +97,13 @@ Ranked by how badly they hurt the persona who depends on them:
 - **The current quarter shows actual to date** in the tracking grid rather than the forecast, so
   mid-quarter it understates that column and annual Expected with it. Whether it should be actual
   plus the rest of the forecast is undecided.
-- **Blank forecast cells mean "the budget stands".** Work moved to a later quarter must be zeroed
-  where it left, or the grid, D5 and E2 count it twice. G1 deliberately ignores the forecast for
-  this reason. A contract in which a written forecast replaces a milestone's whole remaining plan
-  would remove the trap; it is not built.
 - **Two income attributions.** The project rollup behind the organisation totals splits a source's
-  income by each project's share of its cost, while the Overview breakdown credits each line's own
-  income. They agree for most sheets and can differ slightly for one whose lines are not priced in
-  proportion to their cost. Only the breakdown is on screen.
+  income by each project's share of its cost, while the Overview's cards and runway credit each
+  line's own income. They agree for most sheets and can differ slightly for one whose lines are not
+  priced in proportion to their cost. Only the line attribution is on screen.
 - **Cash runway is out of scope** (decided 2026-09-21). It needs `accounting.reports.read`, a Xero
   re-consent and a balance-sheet read, and scopes cannot be removed from a live token without
   re-consent, so adding one is not a casual change.
-- **Manual journals are not read.** Payroll no longer needs them, but anything still booked as a
-  journal is invisible. What reading them would take is recorded in
-  [`SKILL.md`](../.agents/skills/SKILL.md) §4.
 
 ## Decisions
 
@@ -143,6 +136,25 @@ Ranked by how badly they hurt the persona who depends on them:
   by the end of the last finished quarter, not by its contract dates.
 - **2026-09-28: General's overhead is derived from each sheet's `Contribution policy`**, and G1
   allows ten points either side of it.
+- **2026-09-30: once a milestone has a forecast, the forecast is its plan.** The `Budget` tab's
+  dates are for building the budget; after it is confirmed, leads re-profile by quarter against it.
+  A `Forecast` row with any number owns every quarter the tab has a column for, its blanks counting
+  as 0, in every view (`CONFIG.PLAN_FROM_FORECAST`). A row left blank keeps the budget. This
+  replaced "a blank cell means the budget stands", which made work moved to a later quarter count
+  twice unless the quarter it left was zeroed. G1 still judges the budget, the agreement with the
+  funder, not the forecast.
+- **2026-10-02: actuals are counted as Xero's P&L counts them** (`CONFIG.ACTUALS_EARNED`). Posted
+  manual journals are read and each line's account decides income or expense. A grant paid upfront
+  is deferred and released by the accountant a quarter late, so a sheet marked
+  `Income recognition: as spent` earns its income from its own spend instead, the accountant's own
+  rule, capped at its budgeted income; its invoice and release journals are dropped. How journals
+  are read is in [`SKILL.md`](../.agents/skills/SKILL.md) §4.
+- **2026-10-02: the plan runs from today** (`CONFIG.PLAN_REMAINING`). Months gone are actuals;
+  months to come are a typed forecast, or what is left of the budget spread over the lines'
+  remaining months; income with no Revenue row follows its cost, capped at the source's budgeted
+  income, not each milestone's, as the accountant's releases are. Counting income when earned had
+  moved unspent grant money out of today, and the plan has to put it back ahead of today, which
+  budget dates already past could not. The tracking grid, D5 and E2 still judge against the budget.
 
 ## History
 

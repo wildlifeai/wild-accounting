@@ -95,6 +95,9 @@ const HEALTH_CATALOGUE = {
   C7: { severity: 'warning', category: 'Metadata',
     title: 'Proposed source with no Decision date',
     action: 'Funders ask for it, and the pipeline cannot be timed without it.' },
+  C8: { severity: 'warning', category: 'Metadata',
+    title: 'Income recognition not understood',
+    action: 'Use "as spent", "as invoiced", or leave it blank for as invoiced.' },
   D3: { severity: 'warning', category: 'Xero coding',
     title: 'Actual spend with no item code',
     action: 'Falls outside the quarterly tracking grid. Set the Product/Service in Xero.' },
@@ -103,11 +106,15 @@ const HEALTH_CATALOGUE = {
     action: 'Either the sheet is missing, or the Xero tag is a typo.' },
   D5: { severity: 'warning', category: 'Xero coding',
     title: 'Spend was expected, nothing is coded',
-    action: 'Usually a missing or misspelt Xero tag. If the work has slipped, enter 0 ' +
-      'for those quarters on the Forecast tab.' },
+    action: 'Usually a missing or misspelt Xero tag. If the work has slipped, put its new ' +
+      'timing on the Forecast tab.' },
   D6: { severity: 'error', category: 'Xero coding',
     title: 'Actuals dated after the grant ended',
     action: 'Almost always a stale repeating journal or template still pointing here.' },
+  D8: { severity: 'warning', category: 'Xero coding',
+    title: 'Xero defers this income, the sheet is not marked as spent',
+    action: 'If the accountant releases it as the money is spent, set Income recognition ' +
+      'to "as spent" on Funding_info. Otherwise its income follows the journals, a quarter late.' },
   E1: { severity: 'warning', category: 'Reconciliation',
     title: 'Actuals exceed the budget',
     action: 'Re-budget, or explain the overspend to the funder.' },
@@ -249,6 +256,8 @@ function buildHealth(budgets, actualLines, ctx) {
     // --- A11: cost forecast with no income forecast beside it ---
     // A forecast moves a milestone's spend; with nothing on its Revenue row the income
     // keeps the Budget tab's timing, and the two drift apart on every view that plans.
+    // Not raised once the plan runs from today (CONFIG.PLAN_REMAINING): there a blank
+    // Revenue row follows the cost, which is the fix A11 asks for.
     const incomeBudget = {};
     (b.lines || []).forEach(l => {
       const code = itemCode_(l.item);
@@ -258,7 +267,7 @@ function buildHealth(budgets, actualLines, ctx) {
     const fc = b.forecast || {};
     const noIncome = Object.keys(incomeBudget).filter(code => incomeBudget[code] > 0 &&
       hasEntry(fc.cost, code) && !hasEntry(fc.income, code)).sort();
-    if (noIncome.length) {
+    if (noIncome.length && !CONFIG.PLAN_REMAINING) {
       add('A11', withBase_(base, {
         amount: Math.round(noIncome.reduce((t, c) => t + incomeBudget[c], 0)),
         detail: noIncome.join(', ') + ' forecast cost but no income' }));
@@ -325,6 +334,11 @@ function buildHealth(budgets, actualLines, ctx) {
       add('C7', withBase_(base, { detail: 'no "decision date"' }));
     }
 
+    if (incomeRecognition_(b) === 'unknown') {
+      add('C8', withBase_(base, { detail: '"' + clean_(meta[CONFIG.META.incomeRecognition]) +
+        '" is not as spent or as invoiced, so its income counts when invoiced' }));
+    }
+
     // --- G1: overhead off its Contribution policy ---
     // A source's margin over the cost of its own work is its overhead to General, judged on
     // the lines not already General's, as a share of their income, against the policy's
@@ -333,9 +347,8 @@ function buildHealth(budgets, actualLines, ctx) {
     // Planned is the budget. Actual is judged two ways. While the work continues, only
     // when spend has already taken the overhead below the band, since no restraint from
     // then on brings it back. Once every one of those lines has ended, in both directions.
-    // The Forecast tab is deliberately not used: a lead who moves work to later quarters
-    // and leaves the old ones blank has, under the grid's blank-means-budget rule, planned
-    // it twice, and G1 would report the double count as an overrun.
+    // The Forecast tab is deliberately not used: the budget is what was agreed with the
+    // funder, and moving work between quarters does not change its margin.
     //
     // Above the band, two applications for the same work both landed, income is misfiled,
     // or the work is underspent. Below it, costs are eating the overhead. G1 used to call
@@ -394,10 +407,12 @@ function buildHealth(budgets, actualLines, ctx) {
     const byName = {};
     live.forEach(b => { byName[b.name] = b; });
 
-    // D3: spend with no item code falls out of the quarterly grid entirely.
+    // D3: spend with no item code falls out of the quarterly grid entirely. Journal lines
+    // are left out: Xero journals cannot carry a Product/Service, so the advice would be
+    // impossible to follow.
     let noItem = 0, noItemTotal = 0;
     (actualLines || []).forEach(l => {
-      if (l.kind !== 'expense') return;
+      if (l.kind !== 'expense' || l.journal) return;
       if (!itemCode_(l.item)) { noItem++; noItemTotal += Number(l.amount) || 0; }
     });
     if (noItem) {
@@ -432,6 +447,25 @@ function buildHealth(budgets, actualLines, ctx) {
         amount: Math.round(afterEnd[fs]),
         detail: 'spend dated after Funding end ' +
           isoDate_(parseSheetDate_((b.metadata || {})['funding end'])) });
+    });
+
+    // D8: Xero moves this source's income by manual journal, the accountant's deferral and
+    // release, but the sheet is not marked "as spent", so its income follows the journals
+    // and lags by up to a quarter. Only seen once journals are read (CONFIG.ACTUALS_EARNED).
+    const deferred = {};
+    (actualLines || []).forEach(l => {
+      if (!l.journal || l.kind !== 'income') return;
+      const fs = clean_(l.fundingSource || '');
+      if (!byName[fs] || incomeRecognition_(byName[fs]) === 'as spent') return;
+      deferred[fs] = (deferred[fs] || 0) + Math.abs(Number(l.amount) || 0);
+    });
+    Object.keys(deferred).forEach(fs => {
+      const b = byName[fs];
+      add('D8', { fundingSource: fs, project: b.projectFolder,
+        owner: (b.metadata || {})['owner'] || '', link: b.sheetUrl || '',
+        amount: Math.round(deferred[fs]),
+        detail: 'Xero journals move income in and out of this source, so its income ' +
+          'follows the accountant\'s releases' });
     });
 
     // Actual spend per source, for D5, E1 and E2.
