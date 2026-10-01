@@ -163,7 +163,7 @@ function buildSnapshot() {
   // What is expected when: the Forecast tab where one was written, the Budget tab where
   // not (planBudgets_). The Budget tab itself stays the baseline, so the tracking grid and
   // the health checks keep the sheets' own lines and only gain the resolved forecast.
-  const planned = CONFIG.PLAN_FROM_FORECAST ? planBudgets_(budgets) : budgets;
+  const forecastPlan = CONFIG.PLAN_FROM_FORECAST ? planBudgets_(budgets) : budgets;
   const judged = CONFIG.PLAN_FROM_FORECAST
     ? budgets.map(b => Object.assign({}, b, { forecast: ownedForecast_(b.forecast) }))
     : budgets;
@@ -173,6 +173,9 @@ function buildSnapshot() {
   const earnedBasis = !!CONFIG.ACTUALS_EARNED;
   const fetched = isXeroConnected() ? fetchXeroActuals(actualSince, { earned: earnedBasis }) : [];
   const actualLines = earnedBasis ? earnedActuals_(fetched, budgets) : fetched;
+  // From today: actuals for months gone, what is left of each milestone for months to come.
+  const planned = CONFIG.PLAN_REMAINING
+    ? remainingPlan_(forecastPlan, actualLines, DateMath.monthKey(now)) : forecastPlan;
   setRefreshProgress_('Aggregating ' + actualLines.length + ' actual line(s)', 0, 0, 90);
 
   // Competing applications for the same work share an Exclusivity group, and only one
@@ -304,6 +307,9 @@ function buildSnapshot() {
     generatedAt: now.toISOString(),
     xeroConnected: xeroOk,
     currentQuarter: currentQuarterLabel(),
+    // 'remaining' when the plan is actuals to date plus what is left (CONFIG.PLAN_REMAINING),
+    // so the Overview calls its cost card expected cost rather than forecast budget.
+    planBasis: CONFIG.PLAN_REMAINING ? 'remaining' : 'forecast',
     // Every FY quarter any budget or actual touches, oldest first. The Overview's FY
     // selector is built from these, so it only offers years with something in them.
     quarters: quarters,
