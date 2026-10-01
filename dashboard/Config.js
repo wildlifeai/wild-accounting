@@ -190,9 +190,22 @@ const CONFIG = {
   PROGRESS_CACHE_TTL_SECONDS: 600
 };
 
-/** Settings spreadsheet id from Config or Script Property. */
+/**
+ * Settings spreadsheet id from its Script Property, or CONFIG.SETTINGS.SPREADSHEET_ID.
+ *
+ * Until 2026-09-29 the id lived under the property's old name, COCKPIT_FORECAST_SHEET_ID,
+ * from when the sheet held forecasts. Where only that one is set, it is copied across once,
+ * so the old name stops mattering and can be deleted from the project's properties.
+ */
 function getSettingsSheetId() {
-  return getSecret(CONFIG.SETTINGS.PROPERTY_KEY) || getSecret('COCKPIT_FORECAST_SHEET_ID') || CONFIG.SETTINGS.SPREADSHEET_ID;
+  const id = getSecret(CONFIG.SETTINGS.PROPERTY_KEY);
+  if (id) return id;
+  const legacy = getSecret('COCKPIT_FORECAST_SHEET_ID');
+  if (legacy) {
+    setSecret(CONFIG.SETTINGS.PROPERTY_KEY, legacy);
+    return legacy;
+  }
+  return CONFIG.SETTINGS.SPREADSHEET_ID;
 }
 
 /** Read a secret from Script Properties (returns '' if unset). */

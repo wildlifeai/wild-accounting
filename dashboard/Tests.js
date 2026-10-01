@@ -315,6 +315,17 @@ function runTests() {
 
   check('D3 counts spend with no item code',
     idsFor([sheet_()], [spend_(900, '2026-07-01', { item: '' })]).indexOf('D3') !== -1);
+  // The detail names the lines, largest first, so they can be found in Xero.
+  var d3Lines = [];
+  for (var d3i = 1; d3i <= D3_LINES_SHOWN + 2; d3i++) {
+    d3Lines.push(spend_(d3i * 10, '2026-07-01', { item: '' }));
+  }
+  var d3 = buildHealth([sheet_()], d3Lines, { now: NOW, xeroConnected: true })
+    .filter(function (f) { return f.id === 'D3'; })[0];
+  check('D3 names the largest lines, and says when there are more',
+    /The largest: 2026-07-01 /.test(d3.detail) &&
+    d3.detail.indexOf(', ' + (D3_LINES_SHOWN + 2) * 10) !== -1 &&
+    d3.detail.split(';').length === D3_LINES_SHOWN);
   check('D4 catches actuals tagged to a source with no sheet',
     idsFor([sheet_()], [spend_(900, '2026-07-01', { fundingSource: 'XXX_27_TYPO' })])
       .indexOf('D4') !== -1);
@@ -737,6 +748,21 @@ function runTests() {
   check('archived: spend on an archived source stays out of runway',
     rwArchName.openingNet === 0);
   setArchivedSourceNames_({}); // shared global: leave it as it was found
+
+  // Only a funding-source name in archived/ hides a Xero tag. An old budget called
+  // "General" there once hid everything tagged General.
+  check('archived name: the prefix comes off a funding source',
+    archivedSourceName_('Z_ARCH_WW_25_POW') === 'WW_25_POW');
+  check('archived name: the older Z_ARCHIVED_ prefix is understood too',
+    archivedSourceName_('Z_ARCHIVED_WW_24_DOC_COM') === 'WW_24_DOC_COM');
+  check('archived name: an unprefixed funding source still counts',
+    archivedSourceName_('WAI_25_OMV') === 'WAI_25_OMV');
+  check('archived name: an old budget called General does not',
+    archivedSourceName_('General') === '' && archivedSourceName_('General 26-29') === '');
+  check('archived name: legacy files do not',
+    archivedSourceName_('SPY_Xero_budgets') === '' &&
+    archivedSourceName_('Z_ARCH_WAI_24_25_Budget_P&L_Expenses_Revenue') === '' &&
+    archivedSourceName_('Spyfish_24_25_Project_Profit_Loss') === '');
 
   // The folder is the status. Requiring a second copy only created something that
   // could contradict it.
@@ -1215,6 +1241,19 @@ function runTests() {
   check('A11: quiet for a milestone that budgets no income',
     a11For(costOnly, [ml('Cost only', d(2026, 8, 1), d(2026, 9, 1), 500, 0, 'SPY_27_HAN_001', 'Dashboard')]).length === 0);
   CONFIG.PLAN_REMAINING = keepPlan; // shared global: leave it as it was found
+
+  // The template's note ends the tab even when its "Funding Source Details" heading is
+  // missing, as on SPY_27_MAINT, where the note was read as a milestone (A8).
+  var noteGrid = [
+    ['Expenses'].concat(hdr),
+    ['Dashboard', '', 4000, 4000, 4000, ''],
+    ['Nothing below this row is read. Keep working notes here.', '', '', '', '', '']
+  ];
+  var noteSs = { getUrl: function () { return 'u'; },
+    getSheetByName: function () { return { getDataRange: function () {
+      return { getValues: function () { return noteGrid; } }; } }; } };
+  check('Forecast tab: the "nothing below is read" note ends the tab, raising no A8',
+    !parseForecastTab_(noteSs, mLines).issues.some(function (x) { return x.check === 'A8'; }));
 
   // A12: a minus sign on the Forecast tab, as WW_26_SALES had on its costs.
   var negGrid = [

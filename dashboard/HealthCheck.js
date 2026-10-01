@@ -16,6 +16,9 @@
  * Pure over its inputs - no Drive or Xero calls - so it can be exercised offline.
  */
 
+// How many of the lines D3 counts its detail names, largest first.
+const D3_LINES_SHOWN = 10;
+
 const HEALTH_CATALOGUE = {
   A1: { severity: 'error', category: 'Sheet structure',
     title: 'Budget sheet could not be read',
@@ -103,7 +106,9 @@ const HEALTH_CATALOGUE = {
     action: 'Falls outside the quarterly tracking grid. Set the Product/Service in Xero.' },
   D4: { severity: 'error', category: 'Xero coding',
     title: 'Actuals coded to a funding source with no budget sheet',
-    action: 'Either the sheet is missing, or the Xero tag is a typo.' },
+    action: 'Either the sheet is missing, the Xero tag is a typo, or the source was archived ' +
+      'and its project\'s archived folder has been renamed or moved. Renaming the Xero tag ' +
+      'with Z_ARCH_ archives it whatever the folders say.' },
   D5: { severity: 'warning', category: 'Xero coding',
     title: 'Spend was expected, nothing is coded',
     action: 'Usually a missing or misspelt Xero tag. If the work has slipped, put its new ' +
@@ -410,14 +415,21 @@ function buildHealth(budgets, actualLines, ctx) {
     // D3: spend with no item code falls out of the quarterly grid entirely. Journal lines
     // are left out: Xero journals cannot carry a Product/Service, so the advice would be
     // impossible to follow.
-    let noItem = 0, noItemTotal = 0;
-    (actualLines || []).forEach(l => {
-      if (l.kind !== 'expense' || l.journal) return;
-      if (!itemCode_(l.item)) { noItem++; noItemTotal += Number(l.amount) || 0; }
-    });
-    if (noItem) {
-      add('D3', { detail: noItem + ' expense line(s) carry no Product/Service, so they ' +
-        'sit outside the quarterly tracking grid', amount: Math.round(noItemTotal) });
+    // The detail names the largest lines, so the bookkeeper can find them in Xero without
+    // searching every transaction for a blank Product/Service.
+    const noItem = (actualLines || []).filter(l =>
+      l.kind === 'expense' && !l.journal && !itemCode_(l.item));
+    if (noItem.length) {
+      const shown = noItem.slice().sort((a, b) =>
+        Math.abs(Number(b.amount) || 0) - Math.abs(Number(a.amount) || 0)).slice(0, D3_LINES_SHOWN);
+      const describe = l => (l.date ? isoDate_(new Date(l.date)) : 'undated') + ' ' +
+        (clean_(l.fundingSource || '') || 'no funding source') + ', ' +
+        (l.account || 'no account') + ', ' + Math.round(Number(l.amount) || 0);
+      add('D3', { amount: Math.round(noItem.reduce((t, l) => t + (Number(l.amount) || 0), 0)),
+        detail: noItem.length + ' expense line(s) carry no Product/Service, so they sit ' +
+          'outside the quarterly tracking grid. ' +
+          (noItem.length > shown.length ? 'The largest: ' : 'They are: ') +
+          shown.map(describe).join('; ') });
     }
 
     // D4 / D6: actuals pointing at a source that has no sheet, or at one that has ended.

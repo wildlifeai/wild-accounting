@@ -213,7 +213,9 @@ Budgets/
   <Project>/            e.g. Wildlife Watcher, Spyfish Aotearoa, Wild About AI, General
     secured/            one Google Sheet per funding source -> status 'secured'
     proposed/           -> status 'proposed'
-    archived/           ignored, along with anything named Z_ARCH_*
+    archived/           not read; each sheet named like a funding source, with or without
+                        Z_ARCH_ or Z_ARCHIVED_, marks that Xero tag as archived
+                        (archivedSourceName_), so its actuals leave the totals too
 ```
 
 Rules that follow from this:
