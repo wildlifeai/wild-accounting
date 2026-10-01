@@ -70,6 +70,62 @@ function lineContribution_(line, rate) {
 function contributionMilestone_(sourceName) { return sourceName + ' (contribution)'; }
 
 /**
+ * A sheet's Income recognition, normalised: 'as spent', 'as invoiced' (also the blank
+ * default) or 'unknown' for anything else, which C8 reports rather than guessing.
+ */
+function incomeRecognition_(src) {
+  const raw = clean_(((src && src.metadata) || {})[CONFIG.META.incomeRecognition] || '')
+    .toLowerCase().replace(/[\s_]+/g, ' ').trim();
+  if (!raw || raw === 'as invoiced') return 'as invoiced';
+  return raw === 'as spent' ? 'as spent' : 'unknown';
+}
+
+/**
+ * Income earned as it is spent, for sheets marked "Income recognition: as spent"
+ * (CONFIG.ACTUALS_EARNED).
+ *
+ * A grant paid upfront is invoiced once and released by the accountant, quarter by
+ * quarter, as the money is spent; the releases lag by up to a quarter. Rather than wait
+ * for them, a marked sheet's income is its actual spend to date times its budget's
+ * income-to-cost ratio, capped at its budgeted income. That is the accountant's own rule,
+ * so it matches Xero at each release and stays current between them. The sheet's own
+ * invoices, receipts and release journals are dropped, or the grant would count twice.
+ *
+ * Earned income lands on the same project, source and milestone as the spend that earned
+ * it. A refund lowers it again; the cap holds it between zero and the grant.
+ */
+function earnedActuals_(actualLines, budgets) {
+  const marked = {};
+  (budgets || []).forEach(b => {
+    if (incomeRecognition_(b) !== 'as spent') return;
+    const cost = (b.lines || []).reduce((t, l) => t + (Number(l.cost) || 0), 0);
+    const income = (b.lines || []).reduce((t, l) => t + (Number(l.income) || 0), 0);
+    if (cost > 0) marked[b.name] = { ratio: income / cost, cap: income, earned: 0 };
+  });
+
+  const out = [], spend = [];
+  (actualLines || []).forEach(l => {
+    const m = marked[clean_(l.fundingSource || '')];
+    if (m && l.kind !== 'expense') return;
+    out.push(l);
+    if (m) spend.push(l);
+  });
+
+  spend.sort((a, b) => new Date(a.date) - new Date(b.date));
+  spend.forEach(l => {
+    const m = marked[clean_(l.fundingSource || '')];
+    const target = Math.min(m.cap, Math.max(0, m.earned + (Number(l.amount) || 0) * m.ratio));
+    const amount = target - m.earned;
+    if (!amount) return;
+    m.earned = target;
+    out.push({ date: l.date, account: '(earned as spent)', project: l.project,
+      fundingSource: l.fundingSource, item: l.item, itemName: l.itemName || '',
+      amount: amount, kind: 'income', earned: true });
+  });
+  return out;
+}
+
+/**
  * What deriving contribution moves between projects, per source and per (status,
  * project), without changing anything. The Overview credits income to each line's own
  * project, so this does the same: a dry run reports what the breakdown will show.
@@ -112,7 +168,11 @@ function buildSnapshot() {
     ? budgets.map(b => Object.assign({}, b, { forecast: ownedForecast_(b.forecast) }))
     : budgets;
   const actualSince = earliestBudgetStart_(budgets);
-  const actualLines = isXeroConnected() ? fetchXeroActuals(actualSince) : [];
+  // On the earned basis, actuals follow Xero's P&L (journals included), and a sheet marked
+  // "as spent" earns its income as it spends rather than when it was invoiced.
+  const earnedBasis = !!CONFIG.ACTUALS_EARNED;
+  const fetched = isXeroConnected() ? fetchXeroActuals(actualSince, { earned: earnedBasis }) : [];
+  const actualLines = earnedBasis ? earnedActuals_(fetched, budgets) : fetched;
   setRefreshProgress_('Aggregating ' + actualLines.length + ' actual line(s)', 0, 0, 90);
 
   // Competing applications for the same work share an Exclusivity group, and only one

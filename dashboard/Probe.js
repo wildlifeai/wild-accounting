@@ -7,12 +7,15 @@
  *                            Contribution policy moves between projects.
  *   reportForecastPlan()   : what planning from each sheet's Forecast tab, instead of
  *                            the Budget tab's dates, moves on the Overview and runway.
- *   reportXeroJournals()   : which accounts the income the cockpit counts sits on, and what
- *                            Xero's manual journals would add if they were read.
+ *   reportEarnedActuals()  : what counting actuals on Xero's P&L terms, with sheets marked
+ *                            "as spent" earning income as they spend, moves.
  *
  * One-off probes are deleted once their question is answered. The two that asked whether
  * payroll reached the cockpit went on 2026-09-29: payroll posts as Xero Payroll bills,
  * which the cockpit already reads, and a live refresh showed every line tagged.
+ * reportXeroJournals went on 2026-10-02: journals are readable on the current Xero
+ * connection, a grant paid upfront is deferred and released by quarter-end journals, and
+ * those journals carry both tracking tags but no item code.
  */
 
 
@@ -147,136 +150,80 @@ function reportForecastPlan() {
 
 
 /**
- * PROBE: before the cockpit counts income when it is earned, as Xero's P&L does, rather
- * than when it is invoiced. Answers three questions and changes nothing; it only sends
- * GET requests to Xero.
- *   1. Which account each income line the cockpit counts today sits on, so a grant
- *      invoiced to a liability such as Income in Advance shows up.
- *   2. Whether the current Xero connection can read manual journals at all.
- *   3. What the posted journals carry: account class, tracking, item codes in the
- *      description, and, per funding source and month, what reading them would add.
- * Journal amounts are signed in Xero (debit positive), so income is the negative of the
- * line amount and an accrual and its reversal net to zero.
+ * DRY RUN: what counting actuals on Xero's P&L terms would move (CONFIG.ACTUALS_EARNED):
+ * manual journals read, each line's account class deciding income or expense, and sheets
+ * marked "Income recognition: as spent" earning their income as they spend. Reads the
+ * budget sheets and Xero the way a refresh does, both ways, and changes nothing: not the
+ * snapshot, not a sheet, not Xero.
  */
-function reportXeroJournals() {
+function reportEarnedActuals() {
   const out = [];
   const say = (s) => { out.push(s); Logger.log(s); };
   const money = n => (n < 0 ? '-' : '') + Math.round(Math.abs(n)).toLocaleString('en-NZ');
   const pad = (s, w) => { s = String(s); while (s.length < w) s += ' '; return s + ' '; };
-  const monthsOf = m => Object.keys(m).sort().map(k => k + ' ' + money(m[k])).join(', ');
+  const lpad = (s, w) => { s = String(s); while (s.length < w) s = ' ' + s; return s + ' '; };
 
   if (!isXeroConnected()) { say('Xero is not connected. Connect it from the web app first.'); return; }
   const now = new Date();
-  const since = fyBounds_(new Date(now.getFullYear() - 1, now.getMonth(), 1)).start;
-  say('==================== XERO JOURNALS PROBE ====================');
-  say('Nothing is changed. Journals and income from ' + isoDate_(since) + ' on.');
+  const fy = fyBounds_(now);
+  setArchivedSourceNames_(readArchivedSourceNames());
+  const budgets = readAllBudgets();
+  const planned = CONFIG.PLAN_FROM_FORECAST ? planBudgets_(budgets) : budgets;
+  const reps = chooseExclusivityReps_(budgets);
+  const since = earliestBudgetStart_(budgets);
+  const before = fetchXeroActuals(since);
+  const after = earnedActuals_(fetchXeroActuals(since, { earned: true }), budgets);
 
-  // Account code -> { name, class }. Class is ASSET, LIABILITY, EQUITY, REVENUE or EXPENSE.
-  const accounts = {};
-  (xeroGet_('/Accounts').Accounts || []).forEach(a => {
-    accounts[a.Code] = { name: a.Name, cls: a.Class || '', type: a.Type || '' };
-  });
-  const classOfLabel = label => {
-    const m = /\((\d+)\)\s*$/.exec(String(label || ''));
-    return m && accounts[m[1]] ? accounts[m[1]].cls : '?';
-  };
+  say('==================== EARNED ACTUALS DRY RUN ====================');
+  say('Nothing is changed. "now" is actuals as invoiced and coded; "earned" follows');
+  say('Xero\'s P&L, with sheets marked as spent earning their income as they spend.');
+  const marked = budgets.filter(b => incomeRecognition_(b) === 'as spent').map(b => b.name);
+  say('\nMarked "Income recognition: as spent": ' + (marked.length ? marked.join(', ')
+    : 'none yet, so only journals and account classes move anything'));
 
-  // 1. Income the cockpit counts today, by account and funding source.
-  say('\n1. Income the cockpit counts today, by account (invoices and bank receipts):');
-  const income = {};
-  fetchXeroActuals(since).forEach(l => {
-    if (l.kind === 'expense') return;
-    const k = l.account + '||' + (l.fundingSource || '(no funding source)');
-    const e = income[k] || (income[k] = { total: 0, months: {} });
-    const mk = DateMath.monthKey(new Date(l.date));
-    e.total += l.amount;
-    e.months[mk] = (e.months[mk] || 0) + l.amount;
-  });
-  const incomeKeys = Object.keys(income).sort();
-  if (!incomeKeys.length) say('  none');
-  incomeKeys.forEach(k => {
-    const p = k.split('||'), cls = classOfLabel(p[0]);
-    say('  ' + pad(p[0], 34) + pad(cls, 9) + pad(p[1], 16) + money(income[k].total) +
-      (cls !== 'REVENUE' ? '   <- not income in Xero\'s P&L' : ''));
-    say('      ' + monthsOf(income[k].months));
+  const inFy = l => new Date(l.date) >= fy.start && new Date(l.date) <= fy.end;
+  const total = (lines, kind, src, fyOnly) => lines.reduce((t, l) =>
+    l.kind === kind && clean_(l.fundingSource || '') === src && (!fyOnly || inFy(l))
+      ? t + (Number(l.amount) || 0) : t, 0);
+  const sources = {};
+  before.concat(after).forEach(l => {
+    const fs = clean_(l.fundingSource || '');
+    if (fs && !isArchivedSource_(fs)) sources[fs] = true;
   });
 
-  // 2. Can this connection read manual journals? Paged on purpose: an unpaged request
-  // returns journals without their lines.
-  say('\n2. Manual journals:');
-  const journals = [];
-  try {
-    for (let page = 1; page < 200; page++) {
-      const rows = (xeroGet_('/ManualJournals', { page: page }).ManualJournals) || [];
-      rows.forEach(j => journals.push(j));
-      if (rows.length < 100) break;
-    }
-  } catch (e) {
-    say('  The current Xero connection cannot read them: ' + String(e.message).slice(0, 200));
-    say('  Reading them needs a scope the connection does not hold, so a Xero re-consent.');
-    return out.join('\n');
-  }
-  const posted = journals.filter(j => j.Status === 'POSTED' &&
-    (parseXeroDate_(j.Date) || new Date(j.DateString)) >= since);
-  const byStatus = {};
-  journals.forEach(j => (byStatus[j.Status] = (byStatus[j.Status] || 0) + 1));
-  say('  Readable. ' + journals.length + ' journal(s) in all (' + Object.keys(byStatus)
-    .map(s => byStatus[s] + ' ' + s).join(', ') + '); ' + posted.length + ' posted since ' +
-    isoDate_(since) + '.');
-
-  // 3. What the posted journals carry.
-  const P = CONFIG.XERO.PROJECT_TRACKING_CATEGORY, F = CONFIG.XERO.FUNDING_TRACKING_CATEGORY;
-  const byClass = {}, bySource = {}, samples = { REVENUE: {}, EXPENSE: {} };
-  posted.forEach(j => {
-    const date = parseXeroDate_(j.Date) || new Date(j.DateString);
-    const mk = DateMath.monthKey(date);
-    (j.JournalLines || []).forEach(li => {
-      const acct = accounts[li.AccountCode] || { name: '(' + li.AccountCode + ')', cls: '?' };
-      const amt = Number(li.LineAmount) || 0;
-      const project = trackingValue_(li.Tracking, P), source = trackingValue_(li.Tracking, F);
-      const c = byClass[acct.cls] || (byClass[acct.cls] = { lines: 0, both: 0, one: 0,
-        none: 0, coded: 0, effect: 0 });
-      c.lines++;
-      if (project && source) c.both++; else if (project || source) c.one++; else c.none++;
-      if (codeFromDescription_(li.Description)) c.coded++;
-      // P&L effect: income is a credit, so its sign flips; expense is a debit.
-      const effect = acct.cls === 'REVENUE' ? -amt : amt;
-      c.effect += effect;
-      if (acct.cls !== 'REVENUE' && acct.cls !== 'EXPENSE') return;
-      const s = bySource[(source || '(no funding source)') + '||' + acct.cls] ||
-        (bySource[(source || '(no funding source)') + '||' + acct.cls] = { total: 0, months: {} });
-      s.total += effect;
-      s.months[mk] = (s.months[mk] || 0) + effect;
-      const text = String(li.Description || j.Narration || '').slice(0, 60);
-      if (Object.keys(samples[acct.cls]).length < 8) samples[acct.cls][text] = true;
+  say('\nPer source that moves (' + fy.label + ', then all time):');
+  say('  ' + pad('source', 14) + pad('', 8) + lpad(fy.label + ' now', 12) + lpad('earned', 10) +
+    lpad('all now', 10) + lpad('earned', 10));
+  let moved = 0;
+  Object.keys(sources).sort().forEach(src => {
+    ['income', 'expense'].forEach(kind => {
+      const v = [total(before, kind, src, true), total(after, kind, src, true),
+        total(before, kind, src, false), total(after, kind, src, false)];
+      if (Math.abs(v[0] - v[1]) < 1 && Math.abs(v[2] - v[3]) < 1) return;
+      moved++;
+      say('  ' + pad(src, 14) + pad(kind, 8) + lpad(money(v[0]), 12) + lpad(money(v[1]), 10) +
+        lpad(money(v[2]), 10) + lpad(money(v[3]), 10));
     });
   });
+  if (!moved) say('  none');
 
-  say('\n3. Posted journal lines by account class:');
-  say('  ' + pad('class', 10) + pad('lines', 6) + pad('both tags', 10) + pad('one tag', 8) +
-    pad('no tag', 7) + pad('item code', 10) + 'P&L effect');
-  Object.keys(byClass).sort().forEach(k => {
-    const c = byClass[k];
-    say('  ' + pad(k, 10) + pad(c.lines, 6) + pad(c.both, 10) + pad(c.one, 8) +
-      pad(c.none, 7) + pad(c.coded, 10) +
-      (k === 'REVENUE' || k === 'EXPENSE' ? money(c.effect) : '(balance sheet, never counted)'));
-  });
+  // The "actual" card counts spend on live sources with a project tag.
+  const card = lines => lines.reduce((t, l) => l.kind === 'expense' && l.project &&
+    !startsWith_(l.project, CONFIG.ARCHIVE_PREFIX) && !isArchivedSource_(l.fundingSource) &&
+    inFy(l) ? t + (Number(l.amount) || 0) : t, 0);
+  say('\n' + fy.label + ' actual card: ' + money(card(before)) + ' -> ' + money(card(after)));
 
-  say('\n4. What reading them would add, P&L lines by funding source:');
-  const sourceKeys = Object.keys(bySource).sort();
-  if (!sourceKeys.length) say('  nothing: no posted journal touches an income or expense account');
-  sourceKeys.forEach(k => {
-    const p = k.split('||');
-    say('  ' + pad(p[0], 22) + pad(p[1] === 'REVENUE' ? 'income' : 'expense', 8) +
-      money(bySource[k].total));
-    say('      ' + monthsOf(bySource[k].months));
-  });
+  const ra = buildRunway_(planned, before, now, reps), rz = buildRunway_(planned, after, now, reps);
+  const when = r => ['secured', 'weighted', 'proposed'].map(k =>
+    k + ' ' + (r.crossover[k] || 'none')).join(', ');
+  say('\nRunway (now -> earned):');
+  say('  net position today  ' + money(ra.openingNet) + ' -> ' + money(rz.openingNet));
+  say('  now:    ' + when(ra));
+  say('  earned: ' + when(rz));
 
-  say('\n5. Sample descriptions (to see whether an item code leads them):');
-  ['REVENUE', 'EXPENSE'].forEach(cls => {
-    const t = Object.keys(samples[cls]);
-    say('  ' + (cls === 'REVENUE' ? 'income' : 'expense') + ': ' +
-      (t.length ? t.map(x => '"' + x + '"').join(' | ') : 'none'));
-  });
+  const found = buildHealth(budgets, after, {}).filter(f => f.id === 'C8' || f.id === 'D7');
+  say('\nFindings this would raise (C8, D7):');
+  if (!found.length) say('  none');
+  found.forEach(f => say('  ' + f.id + ' ' + pad(f.fundingSource || '', 14) + f.detail));
   return out.join('\n');
 }

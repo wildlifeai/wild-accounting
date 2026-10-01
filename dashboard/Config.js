@@ -96,7 +96,10 @@ const CONFIG = {
     // Competing applications for the same work share a label here. Exactly one member of
     // a group carries the cost; the rest are asks against it. Without this, two parallel
     // applications for one role would double that role in the organisation budget.
-    exclusivityGroup: 'exclusivity group'
+    exclusivityGroup: 'exclusivity group',
+    // "as spent": income is earned as the sheet spends (earnedActuals_), for grants paid
+    // upfront and released by the accountant. Blank or "as invoiced": when invoiced.
+    incomeRecognition: 'income recognition'
   },
   DEFAULT_PROJECT: 'Unallocated',
   GENERAL_PROJECT: 'General',
@@ -160,6 +163,11 @@ const CONFIG = {
   // Forecast tab where it has an entry, a row's blanks then counting as 0 (planBudgets_).
   // On since 2026-09-30, after reportForecastPlan's dry run was read.
   PLAN_FROM_FORECAST: true,
+  // What counts as an actual: false is invoices and bank lines as they are coded; true
+  // follows Xero's P&L, reading manual journals and each account's class, and earns the
+  // income of sheets marked "Income recognition: as spent" as they spend
+  // (earnedActuals_). Held false until reportEarnedActuals's dry run has been read.
+  ACTUALS_EARNED: false,
 
   // ---- Caching ------------------------------------------------------------
   // The snapshot is stored as a JSON file in Drive (no size ceiling, unlike

@@ -104,9 +104,9 @@ Ranked by how badly they hurt the persona who depends on them:
 - **Cash runway is out of scope** (decided 2026-09-21). It needs `accounting.reports.read`, a Xero
   re-consent and a balance-sheet read, and scopes cannot be removed from a live token without
   re-consent, so adding one is not a casual change.
-- **Manual journals are not read.** Payroll no longer needs them, but anything still booked as a
-  journal is invisible. What reading them would take is recorded in
-  [`SKILL.md`](../.agents/skills/SKILL.md) §4.
+- **Manual journals are read only behind `CONFIG.ACTUALS_EARNED`, which is off.** Until it is on,
+  anything booked as a journal, the accountant's grant deferrals and releases included, is
+  invisible. How they are read is in [`SKILL.md`](../.agents/skills/SKILL.md) §4.
 
 ## Decisions
 
