@@ -330,10 +330,11 @@ function planBudgets_(budgets) {
  *   cost    a typed Forecast row wins, as planBudgets_ resolved it; otherwise what is left
  *           of the budget (budget minus actual to date) spread over the lines' remaining
  *           months in the Budget tab's own shape. A line already ended plans nothing more.
- *   income  a typed Revenue row wins; otherwise it follows the cost at the budget's
- *           income-to-cost ratio, scaled down so income to date plus income to come never
- *           exceeds the budgeted income. A milestone that budgets no cost spreads what is
- *           left of its income the way cost does.
+ *   income  a typed Revenue row wins; otherwise it follows the cost at the milestone's
+ *           income-to-cost ratio, scaled down so the source's income to date plus income
+ *           to come never exceeds its budgeted income: the grant's cap, not each
+ *           milestone's. A milestone that budgets no cost spreads what is left of its
+ *           income the way cost does.
  * The current month counts as to come, as in runway. Lines with no item code cannot be
  * matched to actuals and pass through as planned.
  *
@@ -402,6 +403,7 @@ function remainingPlan_(planned, actualLines, nowKey) {
     });
 
     // What is left, per milestone, line by line.
+    const plans = [];
     Object.keys(byCode).forEach(code => {
       const lines = byCode[code];
       const spent = toDate[code] || { cost: 0, income: 0 };
@@ -426,30 +428,46 @@ function remainingPlan_(planned, actualLines, nowKey) {
         lines.forEach((l, i) => { costAhead[i] = total ? scale(base[i], left / total) : {}; });
       }
 
-      let incomeAhead;
+      let incomeAhead, follows = false;
       if (typed.income[code]) {
         const all = ahead(plannedLines, 'income'), base = lines.map(l => ahead([l], 'income'));
         const total = base.reduce((t, m) => t + sum(m), 0);
         incomeAhead = lines.map((l, i) => scale(all, total ? sum(base[i]) / total : 1 / lines.length));
+      } else if (budget.cost > 0) {
+        // Follows the cost; held within the grant below, once every milestone is known.
+        incomeAhead = costAhead.map(m => scale(m, budget.income / budget.cost));
+        follows = true;
       } else {
+        // No cost to follow: exactly what is left of its income, in the Budget tab's shape.
+        const base = lines.map(l => ahead([l], 'income'));
+        const total = base.reduce((t, m) => t + sum(m), 0);
         const left = Math.max(0, budget.income - spent.income);
-        if (budget.cost > 0) {
-          incomeAhead = costAhead.map(m => scale(m, budget.income / budget.cost));
-        } else {
-          incomeAhead = lines.map(l => ahead([l], 'income'));
-        }
-        const total = incomeAhead.reduce((t, m) => t + sum(m), 0);
-        // Never more than is left of the budgeted income, and, for a milestone with no
-        // cost, exactly what is left, in the Budget tab's shape.
-        const f = total ? (budget.cost > 0 ? Math.min(1, left / total) : left / total) : 0;
-        incomeAhead = incomeAhead.map(m => scale(m, f));
+        incomeAhead = base.map(m => scale(m, total ? left / total : 0));
       }
+      plans.push({ lines: lines, costAhead: costAhead, incomeAhead: incomeAhead, follows: follows });
+    });
 
-      lines.forEach((l, i) => {
+    // Income that follows cost never takes the source past its budgeted income. The cap
+    // is the grant's, not each milestone's, as the accountant's releases are: a milestone
+    // that overspends draws on what another left unspent, and only what is left of the
+    // whole grant, after income to date and every fixed figure to come, is shared out.
+    const totalOf = list => list.reduce((t, m) => t + sum(m), 0);
+    const budgetIncome = original.reduce((t, l) => t + (Number(l.income) || 0), 0);
+    const incomeToDate = Object.keys(toDate).reduce((t, k) => t + toDate[k].income, 0);
+    const fixed = plans.reduce((t, p) => (p.follows ? t : t + totalOf(p.incomeAhead)), 0) +
+      sum(ahead(out.filter(l => !itemCode_(l.item) && l.start && l.end &&
+        DateMath.monthKey(l.end) >= nowKey), 'income'));
+    const following = plans.reduce((t, p) => (p.follows ? t + totalOf(p.incomeAhead) : t), 0);
+    const room = Math.max(0, budgetIncome - incomeToDate - fixed);
+    const f = following > room ? room / following : 1;
+    plans.forEach(p => { if (p.follows && f !== 1) p.incomeAhead = p.incomeAhead.map(m => scale(m, f)); });
+
+    plans.forEach(p => {
+      p.lines.forEach((l, i) => {
         const months = {};
-        Object.keys(costAhead[i]).concat(Object.keys(incomeAhead[i])).forEach(k => { months[k] = true; });
+        Object.keys(p.costAhead[i]).concat(Object.keys(p.incomeAhead[i])).forEach(k => { months[k] = true; });
         Object.keys(months).sort().forEach(mk => {
-          const cost = costAhead[i][mk] || 0, income = incomeAhead[i][mk] || 0;
+          const cost = p.costAhead[i][mk] || 0, income = p.incomeAhead[i][mk] || 0;
           if (cost || income) out.push(monthLine(l, mk, cost, income, l.project));
         });
       });

@@ -1350,6 +1350,25 @@ function runTests() {
     cost: 1200, income: 1200 }])], [rAct('expense', 300, 2026, 2)], '2026-07')[0].lines;
   check('plan from today: a line already ended plans nothing more',
     rSum(rEnded, 'cost', '2026-07') === 0 && Math.abs(rSum(rEnded, 'cost') - 300) < 0.01);
+  // The cap is the grant's: one milestone overspent, another finished underspent, and the
+  // overspent one still draws on what is left of the whole grant. Capping per milestone
+  // dropped the last of WW_25_TOI's income from the plan.
+  var gLines = [
+    { description: 'A', milestone: 'A', item: 'XXX_26_R_001', project: 'P',
+      start: d(2026, 1, 1), end: d(2026, 12, 31), cost: 100, income: 100 },
+    { description: 'B', milestone: 'B', item: 'XXX_26_R_002', project: 'P',
+      start: d(2026, 1, 1), end: d(2026, 3, 31), cost: 100, income: 100 }];
+  var gSrc = rSrc({ cost: { 'XXX_26_R_001||26/27 Q2': 50 }, income: {},
+    rowQuarters: { cost: { XXX_26_R_001: ['26/27 Q2'] }, income: {} } }, gLines);
+  var gPlan = remainingPlan_([planBudgets_([gSrc])[0]], [
+    rAct('expense', 130, 2026, 4), rAct('income', 130, 2026, 4),
+    { date: d(2026, 2, 15), kind: 'expense', amount: 20, fundingSource: 'XXX_26_R', project: 'P', item: 'XXX_26_R_002' },
+    { date: d(2026, 2, 15), kind: 'income', amount: 20, fundingSource: 'XXX_26_R', project: 'P', item: 'XXX_26_R_002' }
+  ], '2026-07')[0].lines;
+  check('plan from today: an overspent milestone draws on what is left of the whole grant',
+    Math.abs(rSum(gPlan, 'income', '2026-07') - 50) < 0.01);
+  check('plan from today: and the grant\'s total is never passed',
+    rSum(gPlan, 'income') <= 200 + 0.01);
   var rStray = remainingPlan_([rSrc()], [{ date: d(2026, 4, 10), kind: 'expense', amount: 75,
     fundingSource: 'XXX_26_R', project: 'P', item: '' }], '2026-07')[0].lines;
   check('plan from today: spend on no budgeted milestone stays in, as unassigned',
