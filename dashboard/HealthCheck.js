@@ -111,7 +111,7 @@ const HEALTH_CATALOGUE = {
   D6: { severity: 'error', category: 'Xero coding',
     title: 'Actuals dated after the grant ended',
     action: 'Almost always a stale repeating journal or template still pointing here.' },
-  D7: { severity: 'warning', category: 'Xero coding',
+  D8: { severity: 'warning', category: 'Xero coding',
     title: 'Xero defers this income, the sheet is not marked as spent',
     action: 'If the accountant releases it as the money is spent, set Income recognition ' +
       'to "as spent" on Funding_info. Otherwise its income follows the journals, a quarter late.' },
@@ -449,7 +449,7 @@ function buildHealth(budgets, actualLines, ctx) {
           isoDate_(parseSheetDate_((b.metadata || {})['funding end'])) });
     });
 
-    // D7: Xero moves this source's income by manual journal, the accountant's deferral and
+    // D8: Xero moves this source's income by manual journal, the accountant's deferral and
     // release, but the sheet is not marked "as spent", so its income follows the journals
     // and lags by up to a quarter. Only seen once journals are read (CONFIG.ACTUALS_EARNED).
     const deferred = {};
@@ -461,7 +461,7 @@ function buildHealth(budgets, actualLines, ctx) {
     });
     Object.keys(deferred).forEach(fs => {
       const b = byName[fs];
-      add('D7', { fundingSource: fs, project: b.projectFolder,
+      add('D8', { fundingSource: fs, project: b.projectFolder,
         owner: (b.metadata || {})['owner'] || '', link: b.sheetUrl || '',
         amount: Math.round(deferred[fs]),
         detail: 'Xero journals move income in and out of this source, so its income ' +

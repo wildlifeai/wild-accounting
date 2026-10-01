@@ -174,7 +174,7 @@ The accountant's **posted manual journals** count too, as Xero's P&L counts them
 line needs the Projects and Funding source tags. Journals cannot carry an item code, so they land
 on the funding source rather than a milestone. A refund coded to an expense account lowers that
 spend. A grant paid upfront and released by journal as it is spent is marked
-`Income recognition: as spent` on its sheet, and then earns its income from its own spend; D7
+`Income recognition: as spent` on its sheet, and then earns its income from its own spend; D8
 names any the journals defer that are not marked.
 
 The Health tab reports what is missing: spend with no Projects tag (D1), no Funding source tag

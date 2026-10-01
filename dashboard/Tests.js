@@ -1298,7 +1298,7 @@ function runTests() {
   check('journal: a balance-sheet line is not an actual',
     journalLineToActual_(jl, d(2025, 9, 30), 'LIABILITY', 'Deferred revenue (850)') === null);
 
-  // C8, D7 and D3 on the earned basis.
+  // C8, D8 and D3 on the earned basis.
   function eHealth(sheets, lines) { return buildHealth(sheets, lines, {}); }
   var eSheets = [Object.assign(eSheet('XXX_25_A', 'spent', 100, 100), { lines: [{ cost: 100,
     income: 100, milestone: 'M', item: 'XXX_25_A_001' }] })];
@@ -1307,12 +1307,12 @@ function runTests() {
   var jFor = function (src) { return Object.assign({}, jIncome, { fundingSource: src }); };
   var unmarked = [Object.assign(eSheet('XXX_25_B', '', 100, 100), { lines: [{ cost: 100,
     income: 100, milestone: 'M', item: 'XXX_25_B_001' }] })];
-  check('D7: Xero deferring an unmarked sheet\'s income is flagged',
-    eHealth(unmarked, [jFor('XXX_25_B')]).some(function (f) { return f.id === 'D7'; }));
+  check('D8: Xero deferring an unmarked sheet\'s income is flagged',
+    eHealth(unmarked, [jFor('XXX_25_B')]).some(function (f) { return f.id === 'D8'; }));
   var markedSheet = [Object.assign(eSheet('XXX_25_B', 'as spent', 100, 100), { lines: [{ cost: 100,
     income: 100, milestone: 'M', item: 'XXX_25_B_001' }] })];
-  check('D7: quiet once the sheet is marked as spent',
-    !eHealth(markedSheet, [jFor('XXX_25_B')]).some(function (f) { return f.id === 'D7'; }));
+  check('D8: quiet once the sheet is marked as spent',
+    !eHealth(markedSheet, [jFor('XXX_25_B')]).some(function (f) { return f.id === 'D8'; }));
   // ---- the plan from today (CONFIG.PLAN_REMAINING) ------------------------------
   // One milestone budgeting 1,200 of cost and 2,400 of income over 2026, judged in July.
   function rSrc(forecast, lines) {
