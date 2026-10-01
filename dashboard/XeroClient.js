@@ -140,17 +140,27 @@ function xeroGet_(path, params) {
 
 /**
  * Pull all actuals since `sinceDate` and return normalised lines.
- * Sources: bank transactions (cash) + invoices (accrual). Extend with
- * ManualJournals if you book accruals/payroll via journals.
+ * Sources: bank transactions (cash) + invoices (accrual).
+ *
+ * With `opts.earned` (CONFIG.ACTUALS_EARNED) the lines follow Xero's P&L instead: posted
+ * manual journals are read too, each line's account class decides whether it is income or
+ * expense (a receipt coded to an expense account reduces spend), and anything not on a
+ * profit-and-loss account is left out. earnedActuals_ then replaces the income of sheets
+ * marked "as spent".
  */
-function fetchXeroActuals(sinceDate) {
+function fetchXeroActuals(sinceDate, opts) {
+  const earned = !!(opts && opts.earned);
   const modifiedHeader = sinceDate ? Utilities.formatDate(
     sinceDate, 'UTC', "yyyy-MM-dd'T'HH:mm:ss") : null;
-  const lines = [];
+  let lines = [];
 
   _lastUnposted = { count: 0, total: 0 };
   lines.push.apply(lines, fetchBankTransactionLines_(modifiedHeader));
   lines.push.apply(lines, fetchInvoiceLines_(modifiedHeader));
+  if (earned) {
+    lines = lines.map(l => byAccountClass_(l, accountClassFromLabel_(l.account)));
+    lines.push.apply(lines, fetchManualJournalLines_(sinceDate));
+  }
 
   // Apply the balance-sheet exclusions in ONE place so every present and future
   // fetcher inherits it. Filtering downstream in Aggregator would mean touching
@@ -159,7 +169,10 @@ function fetchXeroActuals(sinceDate) {
   const kept = [];
   let count = 0, total = 0;
   lines.forEach(l => {
-    if (isExcludedAccount_(l.account)) { count++; total += Number(l.amount) || 0; return; }
+    if (l.offPnl || isExcludedAccount_(l.account)) {
+      count++; total += Number(l.amount) || 0;
+      return;
+    }
     kept.push(l);
   });
   _lastExclusion = { count: count, total: Math.round(total) };
@@ -349,14 +362,98 @@ function codeFromDescription_(desc) {
  * Cached per run from the Accounts endpoint so budgets and actuals share one key.
  */
 let _accountLabelCache = null;
+let _accountClassCache = null;
+function loadAccounts_() {
+  if (_accountLabelCache) return;
+  _accountLabelCache = {};
+  _accountClassCache = {};
+  const data = xeroGet_('/Accounts');
+  (data.Accounts || []).forEach(a => {
+    _accountLabelCache[a.Code] = a.Name + ' (' + a.Code + ')';
+    _accountClassCache[a.Code] = a.Class || '';
+  });
+}
 function accountLabelFromCode_(code) {
   if (code == null || code === '') return '';
-  if (!_accountLabelCache) {
-    _accountLabelCache = {};
-    const data = xeroGet_('/Accounts');
-    (data.Accounts || []).forEach(a => {
-      _accountLabelCache[a.Code] = a.Name + ' (' + a.Code + ')';
-    });
-  }
+  loadAccounts_();
   return _accountLabelCache[code] || ('(' + code + ')');
+}
+
+/** ASSET, LIABILITY, EQUITY, REVENUE or EXPENSE for a "Name (code)" label, or ''. */
+function accountClassFromLabel_(label) {
+  const m = /\((\d+)\)\s*$/.exec(String(label == null ? '' : label));
+  if (!m) return '';
+  loadAccounts_();
+  return _accountClassCache[m[1]] || '';
+}
+
+// ---- Earned basis (CONFIG.ACTUALS_EARNED) ----------------------------------
+// Xero's P&L decides what a line is by its account, not by the document it sits on. A
+// receipt coded to Salaries is a refund that lowers salary cost, not income; a grant
+// invoiced to a revenue account and then deferred by journal is income only as the
+// journals release it. These two functions apply that rule; earnedActuals_ in
+// Aggregator.js handles sheets whose income is earned as they spend.
+
+const PNL_CLASSES = { REVENUE: true, EXPENSE: true };
+
+/**
+ * One invoice or bank line on the P&L's terms. Income or expense follows the account's
+ * class, with the sign flipped when the document says the opposite, and a line on a
+ * balance-sheet account is marked offPnl so the exclusion count reports it. A line whose
+ * class is unknown passes through unchanged rather than vanishing.
+ */
+function byAccountClass_(line, cls) {
+  if (!cls) return line;
+  if (!PNL_CLASSES[cls]) return Object.assign({}, line, { offPnl: true });
+  const kind = cls === 'REVENUE' ? 'income' : 'expense';
+  if (kind === line.kind) return line;
+  return Object.assign({}, line, { kind: kind, amount: -(Number(line.amount) || 0) });
+}
+
+/**
+ * One manual-journal line as an actual line, or null if it is not on a P&L account.
+ * LineAmount is signed, debit positive, so income is its negative and an accrual and its
+ * reversal net to zero; never Math.abs() it. Journal lines carry tracking but no item
+ * code, so a milestone can only come from a code leading the description.
+ */
+function journalLineToActual_(li, date, cls, accountLabel) {
+  if (!PNL_CLASSES[cls]) return null;
+  const amount = Number(li.LineAmount) || 0;
+  return {
+    date: date,
+    account: accountLabel,
+    project: trackingValue_(li.Tracking, CONFIG.XERO.PROJECT_TRACKING_CATEGORY),
+    fundingSource: trackingValue_(li.Tracking, CONFIG.XERO.FUNDING_TRACKING_CATEGORY),
+    item: codeFromDescription_(li.Description),
+    itemName: '',
+    amount: cls === 'REVENUE' ? -amount : amount,
+    kind: cls === 'REVENUE' ? 'income' : 'expense',
+    journal: true
+  };
+}
+
+/**
+ * Posted manual journals dated on or after `sinceDate`, as actual lines. Paged on
+ * purpose: an unpaged request returns journals without their lines. Status is filtered
+ * here rather than through `where`, and by the journal's own date, not when it was last
+ * edited, so an old journal touched yesterday does not reappear in the wrong month.
+ */
+function fetchManualJournalLines_(sinceDate) {
+  setRefreshProgress_('Fetching Xero manual journals', 0, 0, 88);
+  const out = [];
+  for (let page = 1; page < 200; page++) {
+    const rows = (xeroGet_('/ManualJournals', { page: page }).ManualJournals) || [];
+    rows.forEach(j => {
+      if (j.Status !== 'POSTED') return;
+      const date = parseXeroDate_(j.Date) || new Date(j.DateString);
+      if (sinceDate && date < sinceDate) return;
+      (j.JournalLines || []).forEach(li => {
+        const label = accountLabelFromCode_(li.AccountCode);
+        const line = journalLineToActual_(li, date, accountClassFromLabel_(label), label);
+        if (line) out.push(line);
+      });
+    });
+    if (rows.length < 100) break; // Xero pages at 100
+  }
+  return out;
 }

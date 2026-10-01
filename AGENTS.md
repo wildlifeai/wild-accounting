@@ -45,7 +45,7 @@ node tools/run_tests.js             # runs dashboard/Tests.js headlessly
 Both live in `tools/`, not `dashboard/`, because `.claspignore` is a whitelist: any `.js` file under
 `dashboard/` is swept into the Apps Script project whether or not it belongs there.
 
-`dashboard/Tests.js` holds `runTests()`: 238 checks over the forecast maths, budget and forecast
+`dashboard/Tests.js` holds `runTests()`: checks over the forecast maths, budget and forecast
 parsing, the health catalogue, serve-time staleness, which Xero statuses count as actuals, the
 budget aggregation and contribution derivation, funded runway, scoped access and the funding
 pipeline. It runs from the IDE with no Drive or Xero access, and `tools/run_tests.js` runs the
@@ -106,7 +106,7 @@ snapshot that the dashboard reads instantly. The data model it relies on is in `
 | `WebApp.js` | `doGet`, the client API (`google.script.run`), per-person filtering |
 | `Index/Stylesheet/JavaScript.html` | The dashboard UI |
 | `Tests.js` | `runTests()`: the checks above, with no Drive or Xero |
-| `Probe.js` | Read-only diagnostics run by hand from the editor, currently the contribution and forecast-plan dry runs. Never on a trigger |
+| `Probe.js` | Read-only diagnostics run by hand from the editor, currently the contribution, forecast-plan and earned-actuals dry runs. Never on a trigger |
 
 ## Deploying a change
 

@@ -1225,6 +1225,91 @@ function runTests() {
   check('A12: a 0 is not negative',
     !negIssues.some(function (x) { return /Machine learning/.test(x.detail); }));
 
+  // ---- earned basis (CONFIG.ACTUALS_EARNED) ----------------------------------
+  // Income recognition is matched after normalising, like Contribution policy.
+  function recog(v) { return incomeRecognition_({ metadata: { 'income recognition': v } }); }
+  check('income recognition: "As Spent" and "as_spent" both mean as spent',
+    recog('As Spent') === 'as spent' && recog('as_spent') === 'as spent');
+  check('income recognition: blank and "as invoiced" are the default',
+    recog('') === 'as invoiced' && recog('As invoiced') === 'as invoiced');
+  check('income recognition: anything else is unknown, not guessed', recog('spent') === 'unknown');
+
+  // A marked sheet earns as it spends, capped at its budgeted income; its invoice goes.
+  function eSheet(name, recognition, cost, income) {
+    return { name: name, status: 'secured', metadata: { 'income recognition': recognition },
+      lines: [{ cost: cost, income: income }] };
+  }
+  function eLine(source, kind, amount, y, m) {
+    return { date: d(y, m, 15), kind: kind, amount: amount, fundingSource: source,
+      project: 'P', item: 'XXX_25_A_001', account: 'Grants (102)' };
+  }
+  var eOut = earnedActuals_([
+    eLine('XXX_25_A', 'income', 1000, 2025, 8),
+    eLine('XXX_25_A', 'expense', 30, 2025, 9),
+    eLine('XXX_25_A', 'expense', 50, 2025, 10),
+    eLine('XXX_25_A', 'expense', 40, 2025, 11),
+    eLine('XXX_25_A', 'expense', -10, 2025, 12),
+    eLine('XXX_25_B', 'income', 500, 2025, 8),
+    eLine('XXX_25_C', 'expense', 10, 2025, 9)
+  ], [eSheet('XXX_25_A', 'as spent', 100, 100), eSheet('XXX_25_B', '', 100, 100),
+      eSheet('XXX_25_C', 'as spent', 100, 200)]);
+  var earnedA = eOut.filter(function (l) { return l.fundingSource === 'XXX_25_A' && l.kind === 'income'; });
+  check('earned: a marked sheet\'s invoice no longer counts as income',
+    !earnedA.some(function (l) { return !l.earned; }));
+  check('earned: income follows spend month by month, up to the grant',
+    earnedA.map(function (l) { return l.amount; }).join(',') === '30,50,20,-10');
+  check('earned: it lands on the project, source and milestone that spent it',
+    earnedA[0].project === 'P' && earnedA[0].item === 'XXX_25_A_001');
+  check('earned: an unmarked sheet keeps its invoice',
+    eOut.filter(function (l) { return l.fundingSource === 'XXX_25_B' && l.kind === 'income'; })
+      .map(function (l) { return l.amount; }).join(',') === '500');
+  check('earned: a margin earns at the budget\'s income-to-cost ratio',
+    eOut.filter(function (l) { return l.fundingSource === 'XXX_25_C' && l.kind === 'income'; })
+      .map(function (l) { return l.amount; }).join(',') === '20');
+  check('earned: spend lines pass through unchanged',
+    eOut.filter(function (l) { return l.kind === 'expense'; }).length === 5);
+
+  // A line is what its account says it is, as in Xero's P&L.
+  var receipt = { kind: 'income', amount: 500, account: 'Salaries (477)' };
+  check('account class: a receipt on an expense account lowers spend',
+    byAccountClass_(receipt, 'EXPENSE').kind === 'expense' &&
+    byAccountClass_(receipt, 'EXPENSE').amount === -500 && receipt.amount === 500);
+  check('account class: a line on a balance-sheet account is set aside',
+    byAccountClass_(receipt, 'LIABILITY').offPnl === true);
+  check('account class: an unknown class leaves the line alone',
+    byAccountClass_(receipt, '') === receipt);
+  var jl = { LineAmount: -2000, Description: 'Release deferred revenue to 30 Sept',
+    Tracking: [{ Name: CONFIG.XERO.PROJECT_TRACKING_CATEGORY, Option: 'P' },
+               { Name: CONFIG.XERO.FUNDING_TRACKING_CATEGORY, Option: 'XXX_25_A' }] };
+  var jIncome = journalLineToActual_(jl, d(2025, 9, 30), 'REVENUE', 'Grants (102)');
+  check('journal: a credit to income is positive income, tagged and marked as a journal',
+    jIncome.kind === 'income' && jIncome.amount === 2000 && jIncome.fundingSource === 'XXX_25_A' &&
+    jIncome.journal === true);
+  check('journal: a deferral (a debit to income) is negative income, so it nets out',
+    journalLineToActual_({ LineAmount: 2000, Tracking: [] }, d(2025, 9, 30), 'REVENUE', 'Grants (102)')
+      .amount === -2000);
+  check('journal: a balance-sheet line is not an actual',
+    journalLineToActual_(jl, d(2025, 9, 30), 'LIABILITY', 'Deferred revenue (850)') === null);
+
+  // C8, D7 and D3 on the earned basis.
+  function eHealth(sheets, lines) { return buildHealth(sheets, lines, {}); }
+  var eSheets = [Object.assign(eSheet('XXX_25_A', 'spent', 100, 100), { lines: [{ cost: 100,
+    income: 100, milestone: 'M', item: 'XXX_25_A_001' }] })];
+  check('C8: an Income recognition it does not understand is flagged',
+    eHealth(eSheets, []).some(function (f) { return f.id === 'C8'; }));
+  var jFor = function (src) { return Object.assign({}, jIncome, { fundingSource: src }); };
+  var unmarked = [Object.assign(eSheet('XXX_25_B', '', 100, 100), { lines: [{ cost: 100,
+    income: 100, milestone: 'M', item: 'XXX_25_B_001' }] })];
+  check('D7: Xero deferring an unmarked sheet\'s income is flagged',
+    eHealth(unmarked, [jFor('XXX_25_B')]).some(function (f) { return f.id === 'D7'; }));
+  var markedSheet = [Object.assign(eSheet('XXX_25_B', 'as spent', 100, 100), { lines: [{ cost: 100,
+    income: 100, milestone: 'M', item: 'XXX_25_B_001' }] })];
+  check('D7: quiet once the sheet is marked as spent',
+    !eHealth(markedSheet, [jFor('XXX_25_B')]).some(function (f) { return f.id === 'D7'; }));
+  check('D3: a journal\'s expense line is not asked for a Product/Service',
+    !eHealth([], [{ kind: 'expense', amount: 10, item: '', journal: true, fundingSource: '',
+      project: 'P', date: d(2025, 9, 1) }]).some(function (f) { return f.id === 'D3'; }));
+
   Logger.log(results.join('\n'));
   return results;
 }

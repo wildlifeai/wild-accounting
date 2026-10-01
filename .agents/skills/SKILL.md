@@ -149,7 +149,7 @@ function name silently collide, last definition winning.
 
 * Private helpers take a **trailing underscore** (`getFolderByName_`). Apps Script treats those as
   private, so they stay out of the IDE's Run menu.
-* Only real entry points stay bare. `authCallback` must stay bare: OAuth2 calls it by name.
+* Only real entry points stay bare. `xeroAuthCallback` must stay bare: OAuth2 calls it by name.
 * `create_quarterly_budgets.js` and `funding-aggregator.js` both defined `getFolderByName`. The
   collision was hidden only because the former was wrapped in a closure; flattening it for
   deployment exposed the clash, which is why the underscore convention is enforced.
@@ -290,8 +290,10 @@ payroll line carried both tracking categories. **Fetching is not the same as cou
 bill with no `Projects` tag would be dropped from every total, so read D1 and D2 before trusting
 any total that ought to contain salary.
 
-If anything must ever be read from manual journals again, these findings came from Xero's
-documentation and were never confirmed against a live call:
+Manual journals are read by `fetchManualJournalLines_` when `CONFIG.ACTUALS_EARNED` is on. The
+probe of 2026-10-02 confirmed against the live organisation that the current connection
+(`accounting.transactions.read`) can read them, that every P&L journal line carried both tracking
+categories, and that none carried an item code. The rules the reader follows:
 
 * `ManualJournalLine` **does** carry `Tracking`, at most two categories, which is exactly `Projects`
   and `Funding source`.
@@ -304,6 +306,10 @@ documentation and were never confirmed against a live call:
   must net to zero.
 * Filter to `Status === 'POSTED'` in the mapper, not via `where`, which `paginate_` overwrites when
   `modifiedAfter` is set.
+* A grant paid upfront is invoiced to a revenue account, deferred by a quarter-end journal and
+  released quarter by quarter as it is spent, so the releases lag by up to a quarter. A sheet
+  marked `Income recognition: as spent` therefore earns its income from its own spend
+  (`earnedActuals_`), and its invoice and release journals are dropped, or it would count twice.
 * There is no repeating-journal endpoint, so future payroll cannot be read from Xero; forward salary
   cost must keep coming from the budget.
 

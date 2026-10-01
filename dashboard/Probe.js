@@ -3,14 +3,19 @@
  * Read-only diagnostics, run by hand from the Apps Script editor. Nothing in a refresh
  * calls them, and none of them writes to Drive, the snapshot or Xero.
  *
- *   reportContributions()  – what deriving General's overhead from each sheet's
+ *   reportContributions()  : what deriving General's overhead from each sheet's
  *                            Contribution policy moves between projects.
- *   reportForecastPlan()   – what planning from each sheet's Forecast tab, instead of
+ *   reportForecastPlan()   : what planning from each sheet's Forecast tab, instead of
  *                            the Budget tab's dates, moves on the Overview and runway.
+ *   reportEarnedActuals()  : what counting actuals on Xero's P&L terms, with sheets marked
+ *                            "as spent" earning income as they spend, moves.
  *
  * One-off probes are deleted once their question is answered. The two that asked whether
  * payroll reached the cockpit went on 2026-09-29: payroll posts as Xero Payroll bills,
  * which the cockpit already reads, and a live refresh showed every line tagged.
+ * reportXeroJournals went on 2026-10-02: journals are readable on the current Xero
+ * connection, a grant paid upfront is deferred and released by quarter-end journals, and
+ * those journals carry both tracking tags but no item code.
  */
 
 
@@ -140,5 +145,85 @@ function reportForecastPlan() {
   say('\nMilestones with a cost forecast and no income forecast (A11):');
   if (!a11.length) say('  none');
   a11.forEach(f => say('  ' + pad(f.fundingSource, 14) + f.detail));
+  return out.join('\n');
+}
+
+
+/**
+ * DRY RUN: what counting actuals on Xero's P&L terms would move (CONFIG.ACTUALS_EARNED):
+ * manual journals read, each line's account class deciding income or expense, and sheets
+ * marked "Income recognition: as spent" earning their income as they spend. Reads the
+ * budget sheets and Xero the way a refresh does, both ways, and changes nothing: not the
+ * snapshot, not a sheet, not Xero.
+ */
+function reportEarnedActuals() {
+  const out = [];
+  const say = (s) => { out.push(s); Logger.log(s); };
+  const money = n => (n < 0 ? '-' : '') + Math.round(Math.abs(n)).toLocaleString('en-NZ');
+  const pad = (s, w) => { s = String(s); while (s.length < w) s += ' '; return s + ' '; };
+  const lpad = (s, w) => { s = String(s); while (s.length < w) s = ' ' + s; return s + ' '; };
+
+  if (!isXeroConnected()) { say('Xero is not connected. Connect it from the web app first.'); return; }
+  const now = new Date();
+  const fy = fyBounds_(now);
+  setArchivedSourceNames_(readArchivedSourceNames());
+  const budgets = readAllBudgets();
+  const planned = CONFIG.PLAN_FROM_FORECAST ? planBudgets_(budgets) : budgets;
+  const reps = chooseExclusivityReps_(budgets);
+  const since = earliestBudgetStart_(budgets);
+  const before = fetchXeroActuals(since);
+  const after = earnedActuals_(fetchXeroActuals(since, { earned: true }), budgets);
+
+  say('==================== EARNED ACTUALS DRY RUN ====================');
+  say('Nothing is changed. "now" is actuals as invoiced and coded; "earned" follows');
+  say('Xero\'s P&L, with sheets marked as spent earning their income as they spend.');
+  const marked = budgets.filter(b => incomeRecognition_(b) === 'as spent').map(b => b.name);
+  say('\nMarked "Income recognition: as spent": ' + (marked.length ? marked.join(', ')
+    : 'none yet, so only journals and account classes move anything'));
+
+  const inFy = l => new Date(l.date) >= fy.start && new Date(l.date) <= fy.end;
+  const total = (lines, kind, src, fyOnly) => lines.reduce((t, l) =>
+    l.kind === kind && clean_(l.fundingSource || '') === src && (!fyOnly || inFy(l))
+      ? t + (Number(l.amount) || 0) : t, 0);
+  const sources = {};
+  before.concat(after).forEach(l => {
+    const fs = clean_(l.fundingSource || '');
+    if (fs && !isArchivedSource_(fs)) sources[fs] = true;
+  });
+
+  say('\nPer source that moves (' + fy.label + ', then all time):');
+  say('  ' + pad('source', 14) + pad('', 8) + lpad(fy.label + ' now', 12) + lpad('earned', 10) +
+    lpad('all now', 10) + lpad('earned', 10));
+  let moved = 0;
+  Object.keys(sources).sort().forEach(src => {
+    ['income', 'expense'].forEach(kind => {
+      const v = [total(before, kind, src, true), total(after, kind, src, true),
+        total(before, kind, src, false), total(after, kind, src, false)];
+      if (Math.abs(v[0] - v[1]) < 1 && Math.abs(v[2] - v[3]) < 1) return;
+      moved++;
+      say('  ' + pad(src, 14) + pad(kind, 8) + lpad(money(v[0]), 12) + lpad(money(v[1]), 10) +
+        lpad(money(v[2]), 10) + lpad(money(v[3]), 10));
+    });
+  });
+  if (!moved) say('  none');
+
+  // The "actual" card counts spend on live sources with a project tag.
+  const card = lines => lines.reduce((t, l) => l.kind === 'expense' && l.project &&
+    !startsWith_(l.project, CONFIG.ARCHIVE_PREFIX) && !isArchivedSource_(l.fundingSource) &&
+    inFy(l) ? t + (Number(l.amount) || 0) : t, 0);
+  say('\n' + fy.label + ' actual card: ' + money(card(before)) + ' -> ' + money(card(after)));
+
+  const ra = buildRunway_(planned, before, now, reps), rz = buildRunway_(planned, after, now, reps);
+  const when = r => ['secured', 'weighted', 'proposed'].map(k =>
+    k + ' ' + (r.crossover[k] || 'none')).join(', ');
+  say('\nRunway (now -> earned):');
+  say('  net position today  ' + money(ra.openingNet) + ' -> ' + money(rz.openingNet));
+  say('  now:    ' + when(ra));
+  say('  earned: ' + when(rz));
+
+  const found = buildHealth(budgets, after, {}).filter(f => f.id === 'C8' || f.id === 'D7');
+  say('\nFindings this would raise (C8, D7):');
+  if (!found.length) say('  none');
+  found.forEach(f => say('  ' + f.id + ' ' + pad(f.fundingSource || '', 14) + f.detail));
   return out.join('\n');
 }
