@@ -278,8 +278,11 @@
 
     renderCoverage(snapshot.coverage, minStart, maxEnd, isFy ? fy : null);
 
+    // With the plan running from today, the cost card is actual spend so far plus what is
+    // left, so it is named for that rather than for the budget.
+    var costName = snapshot.planBasis === 'remaining' ? 'expected cost' : 'forecast budget';
     document.getElementById('totals').innerHTML =
-      card((isFy ? fy + ' forecast budget' : 'Total forecast budget'), fmtMoney(totBudget)) +
+      card((isFy ? fy + ' ' : 'Total ') + costName, fmtMoney(totBudget)) +
       card((isFy ? fy + ' secured funding' : 'Secured funding'), fmtMoney(totSecured)) +
       card((isFy ? fy + ' actual' : 'Actual to date'), fmtMoney(totActual)) +
       gapCard(isFy ? fy + ' unsecured' : 'Unsecured', totBudget - totSecured, 'danger') +

@@ -1306,6 +1306,55 @@ function runTests() {
     income: 100, milestone: 'M', item: 'XXX_25_B_001' }] })];
   check('D7: quiet once the sheet is marked as spent',
     !eHealth(markedSheet, [jFor('XXX_25_B')]).some(function (f) { return f.id === 'D7'; }));
+  // ---- the plan from today (CONFIG.PLAN_REMAINING) ------------------------------
+  // One milestone budgeting 1,200 of cost and 2,400 of income over 2026, judged in July.
+  function rSrc(forecast, lines) {
+    var ls = lines || [{ description: 'Work', milestone: 'M', item: 'XXX_26_R_001 - M',
+      project: 'P', start: d(2026, 1, 1), end: d(2026, 12, 31), cost: 1200, income: 2400 }];
+    return { name: 'XXX_26_R', status: 'secured', metadata: {}, lines: ls, budgetLines: ls,
+      forecast: forecast || { cost: {}, income: {} } };
+  }
+  function rAct(kind, amount, y, m) {
+    return { date: d(y, m, 15), kind: kind, amount: amount, fundingSource: 'XXX_26_R',
+      project: 'P', item: 'XXX_26_R_001' };
+  }
+  function rSum(lines, field, from, to) {
+    var m = distributeByMonth_(lines, field);
+    return Object.keys(m).reduce(function (t, k) {
+      return (!from || k >= from) && (!to || k < to) ? t + m[k] : t; }, 0);
+  }
+  var rPlan = remainingPlan_([rSrc()], [rAct('expense', 300, 2026, 3), rAct('income', 600, 2026, 3)],
+    '2026-07')[0].lines;
+  check('plan from today: months gone are the actuals',
+    Math.abs(rSum(rPlan, 'cost', null, '2026-07') - 300) < 0.01 &&
+    Math.abs(rSum(rPlan, 'cost', '2026-03', '2026-04') - 300) < 0.01);
+  check('plan from today: what is left of the budget is spread over the months left',
+    Math.abs(rSum(rPlan, 'cost', '2026-07') - 900) < 0.01 &&
+    Math.abs(rSum(rPlan, 'cost', '2026-12', '2027-01') - 900 * 31 / 184) < 0.5);
+  check('plan from today: income follows the cost at the budget\'s ratio, within what is left',
+    Math.abs(rSum(rPlan, 'income', '2026-07') - 1800) < 0.01);
+  var rCapped = remainingPlan_([rSrc()], [rAct('expense', 300, 2026, 3), rAct('income', 2000, 2026, 3)],
+    '2026-07')[0].lines;
+  check('plan from today: income stops at the budgeted income',
+    Math.abs(rSum(rCapped, 'income', '2026-07') - 400) < 0.01);
+  var rTyped = remainingPlan_([planBudgets_([rSrc({ cost: { 'XXX_26_R_001||26/27 Q3': 500 },
+    income: {}, rowQuarters: { cost: { XXX_26_R_001: ['26/27 Q2', '26/27 Q3'] }, income: {} } })])[0]],
+    [rAct('expense', 300, 2026, 3)], '2026-07')[0].lines;
+  check('plan from today: a typed Forecast row wins over what is left',
+    Math.abs(rSum(rTyped, 'cost', '2026-10', '2027-01') - 500) < 0.01 &&
+    Math.abs(rSum(rTyped, 'cost', '2026-07', '2026-10')) < 0.01);
+  check('plan from today: income follows a typed cost forecast too',
+    Math.abs(rSum(rTyped, 'income', '2026-07') - 1000) < 0.01);
+  var rEnded = remainingPlan_([rSrc(null, [{ description: 'Done', milestone: 'M',
+    item: 'XXX_26_R_001', project: 'P', start: d(2026, 1, 1), end: d(2026, 3, 31),
+    cost: 1200, income: 1200 }])], [rAct('expense', 300, 2026, 2)], '2026-07')[0].lines;
+  check('plan from today: a line already ended plans nothing more',
+    rSum(rEnded, 'cost', '2026-07') === 0 && Math.abs(rSum(rEnded, 'cost') - 300) < 0.01);
+  var rStray = remainingPlan_([rSrc()], [{ date: d(2026, 4, 10), kind: 'expense', amount: 75,
+    fundingSource: 'XXX_26_R', project: 'P', item: '' }], '2026-07')[0].lines;
+  check('plan from today: spend on no budgeted milestone stays in, as unassigned',
+    rStray.some(function (l) { return l.milestone === '(unassigned)' && l.cost === 75; }));
+
   check('D3: a journal\'s expense line is not asked for a Product/Service',
     !eHealth([], [{ kind: 'expense', amount: 10, item: '', journal: true, fundingSource: '',
       project: 'P', date: d(2025, 9, 1) }]).some(function (f) { return f.id === 'D3'; }));

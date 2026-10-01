@@ -161,13 +161,18 @@ const CONFIG = {
   GENERAL_FORECAST_QUARTERS: 6, // 1.5 years
   // The plan every view shows: false is the Budget tab's own dates; true is each sheet's
   // Forecast tab where it has an entry, a row's blanks then counting as 0 (planBudgets_).
-  // On since 2026-09-30, after reportForecastPlan's dry run was read.
+  // On since 2026-09-30, after its dry run was read.
   PLAN_FROM_FORECAST: true,
   // What counts as an actual: false is invoices and bank lines as they are coded; true
   // follows Xero's P&L, reading manual journals and each account's class, and earns the
   // income of sheets marked "Income recognition: as spent" as they spend
-  // (earnedActuals_). Held false until reportEarnedActuals's dry run has been read.
+  // (earnedActuals_).
   ACTUALS_EARNED: false,
+  // The plan from today: false is the forecast plan above for every month; true is
+  // actuals for months gone and what is left of each milestone for months to come, a
+  // blank Revenue row following its cost (remainingPlan_). Turned on together with
+  // ACTUALS_EARNED, which it relies on, once reportEarnedPlan's dry run has been read.
+  PLAN_REMAINING: false,
 
   // ---- Caching ------------------------------------------------------------
   // The snapshot is stored as a JSON file in Drive (no size ceiling, unlike

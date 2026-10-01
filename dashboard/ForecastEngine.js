@@ -318,6 +318,147 @@ function planBudgets_(budgets) {
 }
 
 /**
+ * The plan from today (CONFIG.PLAN_REMAINING): actuals for the months already gone, and
+ * what is left of each milestone for the months to come. Lines in, lines out, so every
+ * view that reads the plan (the Overview's cards, the planner, runway) needs no change.
+ *
+ * Months gone: the source's actual cost and income, month by month, on the milestone and
+ * project Xero coded them to. Actuals on no budgeted milestone land on "(unassigned)", so
+ * the plan still reconciles to Xero.
+ *
+ * Months to come, per milestone:
+ *   cost    a typed Forecast row wins, as planBudgets_ resolved it; otherwise what is left
+ *           of the budget (budget minus actual to date) spread over the lines' remaining
+ *           months in the Budget tab's own shape. A line already ended plans nothing more.
+ *   income  a typed Revenue row wins; otherwise it follows the cost at the budget's
+ *           income-to-cost ratio, scaled down so income to date plus income to come never
+ *           exceeds the budgeted income. A milestone that budgets no cost spreads what is
+ *           left of its income the way cost does.
+ * The current month counts as to come, as in runway. Lines with no item code cannot be
+ * matched to actuals and pass through as planned.
+ *
+ * Meant to run with CONFIG.ACTUALS_EARNED: an upfront grant counted when invoiced would
+ * be income to date on no milestone, and its income to come would count it again.
+ */
+function remainingPlan_(planned, actualLines, nowKey) {
+  const monthLine = (base, mk, cost, income, project) => {
+    const p = mk.split('-');
+    const start = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, 1);
+    return Object.assign({}, base, { start: start,
+      end: new Date(start.getFullYear(), start.getMonth() + 1, 0), cost: cost,
+      income: income, contribution: income - cost, project: project });
+  };
+  const future = m => Object.keys(m).filter(k => k >= nowKey);
+  const sum = m => Object.keys(m).reduce((t, k) => t + m[k], 0);
+  const scale = (m, f) => { const o = {}; Object.keys(m).forEach(k => { o[k] = m[k] * f; }); return o; };
+  const ahead = (lines, field) => {
+    const all = distributeByMonth_(lines, field), o = {};
+    future(all).forEach(k => { o[k] = all[k]; });
+    return o;
+  };
+
+  return (planned || []).map(src => {
+    const original = src.budgetLines || src.lines || [];
+    const fc = src.forecast || {};
+    const typed = { cost: {}, income: {} };
+    ['cost', 'income'].forEach(kind => Object.keys(fc[kind] || {}).forEach(k => {
+      typed[kind][k.slice(0, k.indexOf('||'))] = true;
+    }));
+    const byCode = {}, plannedByCode = {}, out = [];
+    original.forEach(l => {
+      const code = itemCode_(l.item);
+      if (code) (byCode[code] = byCode[code] || []).push(l);
+    });
+    (src.lines || []).forEach(l => {
+      const code = itemCode_(l.item);
+      if (!code || !byCode[code]) { out.push(l); return; }
+      (plannedByCode[code] = plannedByCode[code] || []).push(l);
+    });
+
+    // Actuals before this month, by milestone (or unassigned), month and project.
+    const past = {}, toDate = {};
+    (actualLines || []).forEach(l => {
+      if (clean_(l.fundingSource || '') !== src.name) return;
+      // Same exclusions as the org totals: no project tag, or an archived project.
+      if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
+      const mk = DateMath.monthKey(new Date(l.date));
+      if (mk >= nowKey) return;
+      const code = byCode[itemCode_(l.item)] ? itemCode_(l.item) : '';
+      const kind = l.kind === 'expense' ? 'cost' : 'income';
+      const amount = Number(l.amount) || 0;
+      const key = code + '||' + mk + '||' + l.project;
+      const e = past[key] || (past[key] = { code: code, mk: mk, project: l.project,
+        cost: 0, income: 0 });
+      e[kind] += amount;
+      const t = toDate[code] || (toDate[code] = { cost: 0, income: 0 });
+      t[kind] += amount;
+    });
+    Object.keys(past).forEach(k => {
+      const e = past[k];
+      if (!e.cost && !e.income) return;
+      const base = e.code ? byCode[e.code][0]
+        : { description: '(unassigned)', milestone: '(unassigned)', item: '' };
+      out.push(monthLine(base, e.mk, e.cost, e.income, e.project));
+    });
+
+    // What is left, per milestone, line by line.
+    Object.keys(byCode).forEach(code => {
+      const lines = byCode[code];
+      const spent = toDate[code] || { cost: 0, income: 0 };
+      const budget = { cost: lines.reduce((t, l) => t + (Number(l.cost) || 0), 0),
+        income: lines.reduce((t, l) => t + (Number(l.income) || 0), 0) };
+      const plannedLines = plannedByCode[code] || [];
+
+      // Cost to come, per budget line, before income is derived from it.
+      const costAhead = lines.map(() => ({}));
+      if (typed.cost[code]) {
+        const all = ahead(plannedLines, 'cost'), base = lines.map(l => ahead([l], 'cost'));
+        const total = base.reduce((t, m) => t + sum(m), 0);
+        // A typed forecast is shared between the milestone's lines as the budget is.
+        lines.forEach((l, i) => {
+          const share = total ? sum(base[i]) / total : 1 / lines.length;
+          costAhead[i] = scale(all, share);
+        });
+      } else {
+        const base = lines.map(l => ahead([l], 'cost'));
+        const total = base.reduce((t, m) => t + sum(m), 0);
+        const left = Math.max(0, budget.cost - spent.cost);
+        lines.forEach((l, i) => { costAhead[i] = total ? scale(base[i], left / total) : {}; });
+      }
+
+      let incomeAhead;
+      if (typed.income[code]) {
+        const all = ahead(plannedLines, 'income'), base = lines.map(l => ahead([l], 'income'));
+        const total = base.reduce((t, m) => t + sum(m), 0);
+        incomeAhead = lines.map((l, i) => scale(all, total ? sum(base[i]) / total : 1 / lines.length));
+      } else {
+        const left = Math.max(0, budget.income - spent.income);
+        if (budget.cost > 0) {
+          incomeAhead = costAhead.map(m => scale(m, budget.income / budget.cost));
+        } else {
+          incomeAhead = lines.map(l => ahead([l], 'income'));
+        }
+        const total = incomeAhead.reduce((t, m) => t + sum(m), 0);
+        // Never more than is left of the budgeted income, and, for a milestone with no
+        // cost, exactly what is left, in the Budget tab's shape.
+        const f = total ? (budget.cost > 0 ? Math.min(1, left / total) : left / total) : 0;
+        incomeAhead = incomeAhead.map(m => scale(m, f));
+      }
+
+      lines.forEach((l, i) => {
+        const months = {};
+        Object.keys(costAhead[i]).concat(Object.keys(incomeAhead[i])).forEach(k => { months[k] = true; });
+        Object.keys(months).sort().forEach(mk => {
+          const cost = costAhead[i][mk] || 0, income = incomeAhead[i][mk] || 0;
+          if (cost || income) out.push(monthLine(l, mk, cost, income, l.project));
+        });
+      });
+    });
+    return Object.assign({}, src, { lines: out });
+  });
+}
+
+/**
  * Top-level: compute the forecast bundle for one funding source's budget lines.
  * The funding-source `Budget` tab is keyed on milestone, not chart-of-accounts:
  *   expense = day-weighted `Cost`, income = day-weighted `Income`.

@@ -256,6 +256,8 @@ function buildHealth(budgets, actualLines, ctx) {
     // --- A11: cost forecast with no income forecast beside it ---
     // A forecast moves a milestone's spend; with nothing on its Revenue row the income
     // keeps the Budget tab's timing, and the two drift apart on every view that plans.
+    // Not raised once the plan runs from today (CONFIG.PLAN_REMAINING): there a blank
+    // Revenue row follows the cost, which is the fix A11 asks for.
     const incomeBudget = {};
     (b.lines || []).forEach(l => {
       const code = itemCode_(l.item);
@@ -265,7 +267,7 @@ function buildHealth(budgets, actualLines, ctx) {
     const fc = b.forecast || {};
     const noIncome = Object.keys(incomeBudget).filter(code => incomeBudget[code] > 0 &&
       hasEntry(fc.cost, code) && !hasEntry(fc.income, code)).sort();
-    if (noIncome.length) {
+    if (noIncome.length && !CONFIG.PLAN_REMAINING) {
       add('A11', withBase_(base, {
         amount: Math.round(noIncome.reduce((t, c) => t + incomeBudget[c], 0)),
         detail: noIncome.join(', ') + ' forecast cost but no income' }));
