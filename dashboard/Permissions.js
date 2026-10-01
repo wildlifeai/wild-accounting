@@ -11,16 +11,23 @@
 // ---- Settings spreadsheet management ----
 
 /**
- * Open the configured Settings spreadsheet, or auto-create one inside the Budgets
- * root folder if none is configured/found, persisting its id for next time.
+ * Open the configured Settings spreadsheet, or create one inside the Budgets root folder
+ * when none has ever been configured, persisting its id for next time.
+ *
+ * A configured sheet that will not open is an error, never a reason to make a new one. It
+ * used to be: one failed open, a Drive hiccup or a revoked share, replaced the Permissions
+ * tab with a fresh one naming only the script owner and pointed the cockpit at it, which
+ * silently locked everyone else out until somebody noticed and repaired the property.
  */
 function openOrCreateSettingsSpreadsheet_() {
   var id = getSettingsSheetId();
-  if (id) {
-    try { return SpreadsheetApp.openById(id); }
-    catch (e) { /* id stale/inaccessible — fall through and recreate */ }
+  if (!id) return createSettingsSpreadsheet_();
+  try {
+    return SpreadsheetApp.openById(id);
+  } catch (e) {
+    throw new Error('The Cockpit Settings sheet (' + id + ') could not be opened: ' + e.message +
+      '. Check the script owner can still open it; the cockpit will not replace it.');
   }
-  return createSettingsSpreadsheet_();
 }
 
 function createSettingsSpreadsheet_() {
