@@ -61,7 +61,7 @@ because nothing said when a tag was missing.
 
 ## The eleven requirements
 
-Status as at 29 September 2026. This table is the test specification: "does the cockpit work"
+Status as at 2 October 2026. This table is the test specification: "does the cockpit work"
 means "does it answer these".
 
 | # | What | Freq | Persona | Source of truth | Today |
@@ -75,7 +75,7 @@ means "does it answer these".
 | 7 | Funding source income and expense variance | M | Project lead | Cockpit | Exists, on Quarterly tracking. Monthly cadence not enforced |
 | 8 | Funding source budget | per funder | GM | Sheets template | Template and validation exist: health checks across sheet structure, data quality, metadata, Xero coding, reconciliation and the funding pipeline |
 | 9 | Funding source summary | per funder | Funder | Cockpit export | **Absent.** No funder-facing output of any kind; every funder report is hand-built |
-| 10 | Project budget overview | per project | Project lead, GM | Cockpit rollup | Exists: Overview grouped by project, and the Project planner |
+| 10 | Project budget overview | per project | Project lead, GM | Cockpit rollup | Exists: the Overview's runway grouped by project, and the Project planner |
 | 11 | YTD P&L | Q | Project lead, then Board | Cockpit, per project YTD | Partial |
 
 ### The gaps that cost the most

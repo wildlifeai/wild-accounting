@@ -108,7 +108,7 @@ row has any entry, its blank cells count as 0 for every quarter the tab has a co
 | D4 | error | Actuals coded to a `Funding source` with no budget sheet | Either the sheet is missing or the tag is a typo. |
 | D5 | warning | A secured source was expected to spend something by the end of the last finished quarter, and nothing is coded to it | Usually a missing or misspelt Xero tag. "Expected" is the tracking grid's rule: the `Forecast` row where it has any entry, its blanks counting as 0, otherwise the `Budget` baseline. If the work has slipped, put the new timing on the `Forecast` tab. Finished quarters only, so it stays quiet while the first quarter of spend is under way; D4 catches a misspelt tag sooner. |
 | D6 | error | Actuals against a funding source whose `Funding end` has passed, or whose sheet is archived | Almost always a stale recurring journal or template. |
-| D7 | warning | Xero moves a source's income by manual journal (the accountant's deferral and release), but its sheet is not marked `Income recognition: as spent` | Only seen once journals are read. If the grant is released as it is spent, mark it; otherwise its income follows the releases, which lag by up to a quarter. |
+| D8 | warning | Xero moves a source's income by manual journal (the accountant's deferral and release), but its sheet is not marked `Income recognition: as spent` | If the grant is released as it is spent, mark it; otherwise its income follows the releases, which lag by up to a quarter. |
 
 ### E. Reconciliation
 
