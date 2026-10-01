@@ -68,7 +68,7 @@ means "does it answer these".
 |---|---|---|---|---|---|
 | 1 | Forecast reported to Board | Q | Board | Cockpit: secured + weighted pipeline, frozen | Runway on the Overview on secured, weighted and all-proposed money, and a gap after pipeline. **Freezing does not exist**: the snapshot is overwritten every 6 hours, so August's figure is gone by November |
 | 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | Exists. General's overhead is derived from each sheet's `Contribution policy`, the same way in every view |
-| 3 | P&L (income and expenses) | Q | Board | Xero | Approved bank transactions, invoices and bills. Payroll posts as Xero Payroll bills and reaches the cockpit; milestone grain depends on each line carrying an item code, which D3 reports |
+| 3 | P&L (income and expenses) | Q | Board | Xero | Approved bank transactions, invoices and bills, and posted manual journals, counted as Xero's P&L counts them. Payroll posts as Xero Payroll bills and reaches the cockpit; milestone grain depends on each line carrying an item code, which D3 reports |
 | 4 | Working capital balance and forecast | Q | Board, Treasurer | Xero balance sheet + deferred grants | **Absent.** Needs a Xero scope the cockpit does not hold |
 | 5 | Bill payments | M | Bookkeeper | Xero | Native Xero. Deliberately out of scope |
 | 6 | Payroll | F | Bookkeeper | Xero Payroll | Posts as bills with both tracking categories. The Health tab flags untagged spend (D1, D2), missing item codes (D3), tags with no sheet (D4) and spend after a grant ended (D6). **Not routed to the bookkeeper**: someone has to read the Health tab |
@@ -104,9 +104,6 @@ Ranked by how badly they hurt the persona who depends on them:
 - **Cash runway is out of scope** (decided 2026-09-21). It needs `accounting.reports.read`, a Xero
   re-consent and a balance-sheet read, and scopes cannot be removed from a live token without
   re-consent, so adding one is not a casual change.
-- **Manual journals are read only behind `CONFIG.ACTUALS_EARNED`, which is off.** Until it is on,
-  anything booked as a journal, the accountant's grant deferrals and releases included, is
-  invisible. How they are read is in [`SKILL.md`](../.agents/skills/SKILL.md) §4.
 
 ## Decisions
 
@@ -146,6 +143,18 @@ Ranked by how badly they hurt the persona who depends on them:
   replaced "a blank cell means the budget stands", which made work moved to a later quarter count
   twice unless the quarter it left was zeroed. G1 still judges the budget, the agreement with the
   funder, not the forecast.
+- **2026-10-02: actuals are counted as Xero's P&L counts them** (`CONFIG.ACTUALS_EARNED`). Posted
+  manual journals are read and each line's account decides income or expense. A grant paid upfront
+  is deferred and released by the accountant a quarter late, so a sheet marked
+  `Income recognition: as spent` earns its income from its own spend instead, the accountant's own
+  rule, capped at its budgeted income; its invoice and release journals are dropped. How journals
+  are read is in [`SKILL.md`](../.agents/skills/SKILL.md) §4.
+- **2026-10-02: the plan runs from today** (`CONFIG.PLAN_REMAINING`). Months gone are actuals;
+  months to come are a typed forecast, or what is left of the budget spread over the lines'
+  remaining months; income with no Revenue row follows its cost, capped at the source's budgeted
+  income, not each milestone's, as the accountant's releases are. Counting income when earned had
+  moved unspent grant money out of today, and the plan has to put it back ahead of today, which
+  budget dates already past could not. The tracking grid, D5 and E2 still judge against the budget.
 
 ## History
 

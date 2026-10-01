@@ -45,10 +45,10 @@ because runway always runs from today.
 
 1. **Summary cards**: totals for the period picked in the selector, the current
    financial year by default, a later one, or all time (finished years are only inside all
-   time): forecast budget, secured funding, actual spent, the **unsecured gap** (budget not yet
-   covered by secured funding) and the **gap after pipeline** (what is still uncovered once
-   applications are counted at their probability). When income covers the budget, the card
-   shows the **surplus** instead.
+   time): **expected cost** (actual spend for the months gone, plus the plan for the rest),
+   secured funding, actual spent, the **unsecured gap** (expected cost not yet covered by secured
+   funding) and the **gap after pipeline** (what is still uncovered once applications are counted
+   at their probability). When income covers the cost, the card shows the **surplus** instead.
 2. **Runway**: *Net position today* is income received minus spend to date. The tiles give the
    months until cumulative spend overtakes cumulative income: on secured money only, on the
    probability-weighted pipeline, and if every application lands, each naming the month it goes
@@ -77,7 +77,7 @@ Grouped by milestone, those shares appear as lines named like `SPY_26_UOA (contr
 | Secured vs proposed | Which **folder** the budget sits in (`secured/` or `proposed/`) | Budgets Drive |
 | Which project a line counts toward | The **`Project` column** on the `Budget` tab; blank means the budget's own project folder | Budgets Drive |
 | General's overhead from other projects, the `(contribution)` rows | Each sheet's **`Contribution policy`**: `percent_of_income:40` sends 40% of that source's income to General | `Funding_info` tab |
-| Actual spent and received | **Approved Xero transactions**, split by the *Projects* and *Funding source* tracking categories | Xero |
+| Actual spent and received | **Approved Xero transactions and the accountant's posted journals**, counted as Xero's P&L counts them, split by the *Projects* and *Funding source* tracking categories. A sheet marked `Income recognition: as spent` earns its income as it spends instead | Xero |
 | Milestone-level actuals | The **product/service** code on each Xero line (`WW_25_TOI_002` and so on) | Xero |
 | Quarterly forecasts | The funding source's own **`Forecast` tab** | Budgets Drive |
 
@@ -125,14 +125,24 @@ The grid has **milestones down the side and quarters across the top**, and each 
   where no forecast was written ("budget, no override").
 
 **To change a forecast, edit the funding source's own `Forecast` tab**, not the dashboard; the
-grid is read-only and picks the change up at the next refresh. Two rules matter:
+grid is read-only and picks the change up at the next refresh. On the Overview, the planner and
+the runway the plan works like this:
 
-- **A row left entirely blank means "the budget still stands"** for that milestone. An untouched
-  `Forecast` tab therefore means the budget is still your best estimate, which is the normal state.
+- **Months already gone are what Xero shows.** A forecast only shapes the months to come.
+- **A row left entirely blank means "what is left of the budget"**: the budget minus what has
+  been spent so far, spread over the line's remaining months in the `Budget` tab's shape. So an
+  untouched `Forecast` tab is fine, and an underspend rolls forward on its own. A line whose end
+  date has passed plans nothing more: if the work is late, type it into a later quarter.
 - **Once a row has any number, that row is the plan** for every quarter the tab has a column for,
-  and its blank cells count as `0`. The `Budget` tab's dates stop applying to those quarters, on
-  the grid, the Overview, the runway and the planner alike, so a row that starts in Oct-Dec needs
-  nothing typed in the quarters before it. Quarters the tab has no column for keep the budget.
+  and its blank cells count as `0`, so a row that starts in Oct-Dec needs nothing typed in the
+  quarters before it. Quarters the tab has no column for keep the budget.
+- **Leave a Revenue row blank when income follows the spend**, as a grant's does: it then follows
+  the milestone's cost forecast at the budget's income-to-cost ratio, and never takes the funding
+  source past its budgeted income. Type a Revenue row only when the money arrives on its own
+  timetable, such as a contract paid per milestone.
+
+The grid itself still shows the budget as each quarter's baseline, and the forecast or the budget
+for quarters to come, so it stays the place to compare against what was agreed.
 
 The `Comments` column on the `Forecast` tab appears beside each milestone: use it to say why a
 forecast differs from the budget.
@@ -160,6 +170,13 @@ Only **approved** invoices and bills count. Drafts and anything awaiting approva
 as they are from Xero's own reports; the Health tab says how many are waiting (F6). Payroll
 posts through Xero Payroll as bills, so salary lines need the same three tags.
 
+The accountant's **posted manual journals** count too, as Xero's P&L counts them, so each journal
+line needs the Projects and Funding source tags. Journals cannot carry an item code, so they land
+on the funding source rather than a milestone. A refund coded to an expense account lowers that
+spend. A grant paid upfront and released by journal as it is spent is marked
+`Income recognition: as spent` on its sheet, and then earns its income from its own spend; D7
+names any the journals defer that are not marked.
+
 The Health tab reports what is missing: spend with no Projects tag (D1), no Funding source tag
 (D2), no item code (D3), a Funding source with no budget sheet (D4), and spend still arriving
 after a grant has ended (D6), which is usually a stale repeating template.
@@ -170,6 +187,11 @@ When a grant has finished and been reported, rename its sheet with the `Z_ARCH_`
 it to the project's `archived/` folder. It leaves the dashboard at the next refresh, and so does
 its spend, so organisation totals never show spend with no budget beside it. Keep its item codes
 unchanged in Xero, so historical actuals still reconcile.
+
+**Only archived funding-source sheets belong in `archived/`.** The cockpit treats the name of
+every sheet in that folder as an archived funding source and drops Xero money tagged with it, so
+an old file called `General` there once hid everything tagged `General`. Other old files go to
+`Z_ARCH_old_budgets`.
 
 ## If a project looks off
 
