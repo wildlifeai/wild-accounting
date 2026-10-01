@@ -315,6 +315,17 @@ function runTests() {
 
   check('D3 counts spend with no item code',
     idsFor([sheet_()], [spend_(900, '2026-07-01', { item: '' })]).indexOf('D3') !== -1);
+  // The detail names the lines, largest first, so they can be found in Xero.
+  var d3Lines = [];
+  for (var d3i = 1; d3i <= D3_LINES_SHOWN + 2; d3i++) {
+    d3Lines.push(spend_(d3i * 10, '2026-07-01', { item: '' }));
+  }
+  var d3 = buildHealth([sheet_()], d3Lines, { now: NOW, xeroConnected: true })
+    .filter(function (f) { return f.id === 'D3'; })[0];
+  check('D3 names the largest lines, and says when there are more',
+    /The largest: 2026-07-01 /.test(d3.detail) &&
+    d3.detail.indexOf(', ' + (D3_LINES_SHOWN + 2) * 10) !== -1 &&
+    d3.detail.split(';').length === D3_LINES_SHOWN);
   check('D4 catches actuals tagged to a source with no sheet',
     idsFor([sheet_()], [spend_(900, '2026-07-01', { fundingSource: 'XXX_27_TYPO' })])
       .indexOf('D4') !== -1);
