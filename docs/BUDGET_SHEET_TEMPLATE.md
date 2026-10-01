@@ -172,14 +172,17 @@ any, plus `Project` where a line belongs elsewhere.
 
 ## `Forecast` tab
 
-Optional, and only worth using when you need to override the budget. **A quarter with no entry
-here falls back to the budget baseline**, so an empty or absent `Forecast` tab is a valid state: it
+Optional, and only worth using when you need to override the budget. **A row with no entry here
+falls back to the budget baseline**, so an empty or absent `Forecast` tab is a valid state: it
 means "the budget is still our best estimate". Record a forecast when you know something the budget
 does not: a delayed hire, a grant ending early, a re-profiled milestone.
 
-**When you move work to a later quarter, enter `0` in the quarter it left.** A blank there means
-the budget still stands, so the grid counts that quarter's budget as well as your new forecast, and
-the same work appears twice.
+**A row with any number owns every quarter the tab has a column for, and its blanks count as `0`.**
+The `Budget` tab's dates then no longer place that milestone's money in those quarters; the
+forecast does, everywhere in the cockpit. Quarters with no column keep the budget, so give the tab a
+column for every quarter the work could fall in. Fill the `Revenue` row as well as the `Expenses`
+row: a milestone forecast for cost but not income is flagged (A11), and its income keeps the
+budget's timing meanwhile.
 
 Layout, as parsed by `BudgetReader.parseForecastTab_`:
 
@@ -257,4 +260,4 @@ Forecast values are per quarter, not per month, and are absolute amounts rather 
 | Everything in one `(unassigned)` row | `Xero Inventory Item` blank |
 | Actuals present, budget shows `0` | sheet name does not match the Xero *Funding source* value |
 | Spend looks impossibly low | Xero transactions missing the `Projects` tracking tag are dropped (D1) |
-| Forecast total looks doubled | work moved to a later quarter with the old quarter left blank rather than `0` |
+| Forecast total higher than the budget | a row has entries but the tab has no column for a quarter the budget covers, so that quarter keeps its budget as well |

@@ -122,11 +122,12 @@ The grid has **milestones down the side and quarters across the top**, and each 
 **To change a forecast, edit the funding source's own `Forecast` tab**, not the dashboard; the
 grid is read-only and picks the change up at the next refresh. Two rules matter:
 
-- **A blank cell means "the budget still stands"** for that quarter. An untouched `Forecast` tab
-  therefore means the budget is still your best estimate, which is the normal state.
-- **If work moves to a later quarter, enter `0` in the quarter it left.** Leave that cell blank
-  and the grid counts the budget there as well as your new forecast, so the same work appears
-  twice.
+- **A row left entirely blank means "the budget still stands"** for that milestone. An untouched
+  `Forecast` tab therefore means the budget is still your best estimate, which is the normal state.
+- **Once a row has any number, that row is the plan** for every quarter the tab has a column for,
+  and its blank cells count as `0`. The `Budget` tab's dates stop applying to those quarters, on
+  the grid, the Overview, the runway and the planners alike, so a row that starts in Oct-Dec needs
+  nothing typed in the quarters before it. Quarters the tab has no column for keep the budget.
 
 The `Comments` column on the `Forecast` tab appears beside each milestone: use it to say why a
 forecast differs from the budget.

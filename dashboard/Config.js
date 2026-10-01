@@ -158,8 +158,8 @@ const CONFIG = {
   GENERAL_FORECAST_QUARTERS: 6, // 1.5 years
   // The plan every view shows: false is the Budget tab's own dates; true is each sheet's
   // Forecast tab where it has an entry, a row's blanks then counting as 0 (planBudgets_).
-  // Held false until reportForecastPlan's dry run has been read.
-  PLAN_FROM_FORECAST: false,
+  // On since 2026-09-30, after reportForecastPlan's dry run was read.
+  PLAN_FROM_FORECAST: true,
 
   // ---- Caching ------------------------------------------------------------
   // The snapshot is stored as a JSON file in Drive (no size ceiling, unlike

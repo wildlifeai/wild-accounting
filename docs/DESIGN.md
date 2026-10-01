@@ -97,10 +97,6 @@ Ranked by how badly they hurt the persona who depends on them:
 - **The current quarter shows actual to date** in the tracking grid rather than the forecast, so
   mid-quarter it understates that column and annual Expected with it. Whether it should be actual
   plus the rest of the forecast is undecided.
-- **Blank forecast cells mean "the budget stands".** Work moved to a later quarter must be zeroed
-  where it left, or the grid, D5 and E2 count it twice. G1 deliberately ignores the forecast for
-  this reason. A contract in which a written forecast replaces a milestone's whole remaining plan
-  would remove the trap; it is not built.
 - **Two income attributions.** The project rollup behind the organisation totals splits a source's
   income by each project's share of its cost, while the Overview breakdown credits each line's own
   income. They agree for most sheets and can differ slightly for one whose lines are not priced in
@@ -143,6 +139,13 @@ Ranked by how badly they hurt the persona who depends on them:
   by the end of the last finished quarter, not by its contract dates.
 - **2026-09-28: General's overhead is derived from each sheet's `Contribution policy`**, and G1
   allows ten points either side of it.
+- **2026-09-30: once a milestone has a forecast, the forecast is its plan.** The `Budget` tab's
+  dates are for building the budget; after it is confirmed, leads re-profile by quarter against it.
+  A `Forecast` row with any number owns every quarter the tab has a column for, its blanks counting
+  as 0, in every view (`CONFIG.PLAN_FROM_FORECAST`). A row left blank keeps the budget. This
+  replaced "a blank cell means the budget stands", which made work moved to a later quarter count
+  twice unless the quarter it left was zeroed. G1 still judges the budget, the agreement with the
+  funder, not the forecast.
 
 ## History
 
