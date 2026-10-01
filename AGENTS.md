@@ -106,7 +106,7 @@ snapshot that the dashboard reads instantly. The data model it relies on is in `
 | `WebApp.js` | `doGet`, the client API (`google.script.run`), per-person filtering |
 | `Index/Stylesheet/JavaScript.html` | The dashboard UI |
 | `Tests.js` | `runTests()`: the checks above, with no Drive or Xero |
-| `Probe.js` | Read-only diagnostics run by hand from the editor, currently the contribution and forecast-plan dry runs. Never on a trigger |
+| `Probe.js` | Read-only diagnostics run by hand from the editor, currently the contribution and forecast-plan dry runs and the Xero journals probe. Never on a trigger |
 
 ## Deploying a change
 

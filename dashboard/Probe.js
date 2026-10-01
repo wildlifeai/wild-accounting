@@ -3,10 +3,12 @@
  * Read-only diagnostics, run by hand from the Apps Script editor. Nothing in a refresh
  * calls them, and none of them writes to Drive, the snapshot or Xero.
  *
- *   reportContributions()  – what deriving General's overhead from each sheet's
+ *   reportContributions()  : what deriving General's overhead from each sheet's
  *                            Contribution policy moves between projects.
- *   reportForecastPlan()   – what planning from each sheet's Forecast tab, instead of
+ *   reportForecastPlan()   : what planning from each sheet's Forecast tab, instead of
  *                            the Budget tab's dates, moves on the Overview and runway.
+ *   reportXeroJournals()   : which accounts the income the cockpit counts sits on, and what
+ *                            Xero's manual journals would add if they were read.
  *
  * One-off probes are deleted once their question is answered. The two that asked whether
  * payroll reached the cockpit went on 2026-09-29: payroll posts as Xero Payroll bills,
@@ -140,5 +142,141 @@ function reportForecastPlan() {
   say('\nMilestones with a cost forecast and no income forecast (A11):');
   if (!a11.length) say('  none');
   a11.forEach(f => say('  ' + pad(f.fundingSource, 14) + f.detail));
+  return out.join('\n');
+}
+
+
+/**
+ * PROBE: before the cockpit counts income when it is earned, as Xero's P&L does, rather
+ * than when it is invoiced. Answers three questions and changes nothing; it only sends
+ * GET requests to Xero.
+ *   1. Which account each income line the cockpit counts today sits on, so a grant
+ *      invoiced to a liability such as Income in Advance shows up.
+ *   2. Whether the current Xero connection can read manual journals at all.
+ *   3. What the posted journals carry: account class, tracking, item codes in the
+ *      description, and, per funding source and month, what reading them would add.
+ * Journal amounts are signed in Xero (debit positive), so income is the negative of the
+ * line amount and an accrual and its reversal net to zero.
+ */
+function reportXeroJournals() {
+  const out = [];
+  const say = (s) => { out.push(s); Logger.log(s); };
+  const money = n => (n < 0 ? '-' : '') + Math.round(Math.abs(n)).toLocaleString('en-NZ');
+  const pad = (s, w) => { s = String(s); while (s.length < w) s += ' '; return s + ' '; };
+  const monthsOf = m => Object.keys(m).sort().map(k => k + ' ' + money(m[k])).join(', ');
+
+  if (!isXeroConnected()) { say('Xero is not connected. Connect it from the web app first.'); return; }
+  const now = new Date();
+  const since = fyBounds_(new Date(now.getFullYear() - 1, now.getMonth(), 1)).start;
+  say('==================== XERO JOURNALS PROBE ====================');
+  say('Nothing is changed. Journals and income from ' + isoDate_(since) + ' on.');
+
+  // Account code -> { name, class }. Class is ASSET, LIABILITY, EQUITY, REVENUE or EXPENSE.
+  const accounts = {};
+  (xeroGet_('/Accounts').Accounts || []).forEach(a => {
+    accounts[a.Code] = { name: a.Name, cls: a.Class || '', type: a.Type || '' };
+  });
+  const classOfLabel = label => {
+    const m = /\((\d+)\)\s*$/.exec(String(label || ''));
+    return m && accounts[m[1]] ? accounts[m[1]].cls : '?';
+  };
+
+  // 1. Income the cockpit counts today, by account and funding source.
+  say('\n1. Income the cockpit counts today, by account (invoices and bank receipts):');
+  const income = {};
+  fetchXeroActuals(since).forEach(l => {
+    if (l.kind === 'expense') return;
+    const k = l.account + '||' + (l.fundingSource || '(no funding source)');
+    const e = income[k] || (income[k] = { total: 0, months: {} });
+    const mk = DateMath.monthKey(new Date(l.date));
+    e.total += l.amount;
+    e.months[mk] = (e.months[mk] || 0) + l.amount;
+  });
+  const incomeKeys = Object.keys(income).sort();
+  if (!incomeKeys.length) say('  none');
+  incomeKeys.forEach(k => {
+    const p = k.split('||'), cls = classOfLabel(p[0]);
+    say('  ' + pad(p[0], 34) + pad(cls, 9) + pad(p[1], 16) + money(income[k].total) +
+      (cls !== 'REVENUE' ? '   <- not income in Xero\'s P&L' : ''));
+    say('      ' + monthsOf(income[k].months));
+  });
+
+  // 2. Can this connection read manual journals? Paged on purpose: an unpaged request
+  // returns journals without their lines.
+  say('\n2. Manual journals:');
+  const journals = [];
+  try {
+    for (let page = 1; page < 200; page++) {
+      const rows = (xeroGet_('/ManualJournals', { page: page }).ManualJournals) || [];
+      rows.forEach(j => journals.push(j));
+      if (rows.length < 100) break;
+    }
+  } catch (e) {
+    say('  The current Xero connection cannot read them: ' + String(e.message).slice(0, 200));
+    say('  Reading them needs a scope the connection does not hold, so a Xero re-consent.');
+    return out.join('\n');
+  }
+  const posted = journals.filter(j => j.Status === 'POSTED' &&
+    (parseXeroDate_(j.Date) || new Date(j.DateString)) >= since);
+  const byStatus = {};
+  journals.forEach(j => (byStatus[j.Status] = (byStatus[j.Status] || 0) + 1));
+  say('  Readable. ' + journals.length + ' journal(s) in all (' + Object.keys(byStatus)
+    .map(s => byStatus[s] + ' ' + s).join(', ') + '); ' + posted.length + ' posted since ' +
+    isoDate_(since) + '.');
+
+  // 3. What the posted journals carry.
+  const P = CONFIG.XERO.PROJECT_TRACKING_CATEGORY, F = CONFIG.XERO.FUNDING_TRACKING_CATEGORY;
+  const byClass = {}, bySource = {}, samples = { REVENUE: {}, EXPENSE: {} };
+  posted.forEach(j => {
+    const date = parseXeroDate_(j.Date) || new Date(j.DateString);
+    const mk = DateMath.monthKey(date);
+    (j.JournalLines || []).forEach(li => {
+      const acct = accounts[li.AccountCode] || { name: '(' + li.AccountCode + ')', cls: '?' };
+      const amt = Number(li.LineAmount) || 0;
+      const project = trackingValue_(li.Tracking, P), source = trackingValue_(li.Tracking, F);
+      const c = byClass[acct.cls] || (byClass[acct.cls] = { lines: 0, both: 0, one: 0,
+        none: 0, coded: 0, effect: 0 });
+      c.lines++;
+      if (project && source) c.both++; else if (project || source) c.one++; else c.none++;
+      if (codeFromDescription_(li.Description)) c.coded++;
+      // P&L effect: income is a credit, so its sign flips; expense is a debit.
+      const effect = acct.cls === 'REVENUE' ? -amt : amt;
+      c.effect += effect;
+      if (acct.cls !== 'REVENUE' && acct.cls !== 'EXPENSE') return;
+      const s = bySource[(source || '(no funding source)') + '||' + acct.cls] ||
+        (bySource[(source || '(no funding source)') + '||' + acct.cls] = { total: 0, months: {} });
+      s.total += effect;
+      s.months[mk] = (s.months[mk] || 0) + effect;
+      const text = String(li.Description || j.Narration || '').slice(0, 60);
+      if (Object.keys(samples[acct.cls]).length < 8) samples[acct.cls][text] = true;
+    });
+  });
+
+  say('\n3. Posted journal lines by account class:');
+  say('  ' + pad('class', 10) + pad('lines', 6) + pad('both tags', 10) + pad('one tag', 8) +
+    pad('no tag', 7) + pad('item code', 10) + 'P&L effect');
+  Object.keys(byClass).sort().forEach(k => {
+    const c = byClass[k];
+    say('  ' + pad(k, 10) + pad(c.lines, 6) + pad(c.both, 10) + pad(c.one, 8) +
+      pad(c.none, 7) + pad(c.coded, 10) +
+      (k === 'REVENUE' || k === 'EXPENSE' ? money(c.effect) : '(balance sheet, never counted)'));
+  });
+
+  say('\n4. What reading them would add, P&L lines by funding source:');
+  const sourceKeys = Object.keys(bySource).sort();
+  if (!sourceKeys.length) say('  nothing: no posted journal touches an income or expense account');
+  sourceKeys.forEach(k => {
+    const p = k.split('||');
+    say('  ' + pad(p[0], 22) + pad(p[1] === 'REVENUE' ? 'income' : 'expense', 8) +
+      money(bySource[k].total));
+    say('      ' + monthsOf(bySource[k].months));
+  });
+
+  say('\n5. Sample descriptions (to see whether an item code leads them):');
+  ['REVENUE', 'EXPENSE'].forEach(cls => {
+    const t = Object.keys(samples[cls]);
+    say('  ' + (cls === 'REVENUE' ? 'income' : 'expense') + ': ' +
+      (t.length ? t.map(x => '"' + x + '"').join(' | ') : 'none'));
+  });
   return out.join('\n');
 }
