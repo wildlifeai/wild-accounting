@@ -33,7 +33,6 @@
     snapshot = s;
     if (s.coverage && s.coverage.timeZone) TZ = s.coverage.timeZone;
     var syncText = 'synced ' + syncedAt(s.generatedAt);
-    if (s._userEmail) syncText += ' · ' + s._userEmail;
     if (s._accessLevel && s._accessLevel !== 'admin') syncText += ' (' + s._accessLevel + ')';
     document.getElementById('sync-label').textContent = syncText;
 
@@ -46,12 +45,6 @@
       }).apiXeroStatus();
     }
 
-    // Today sits in the header so every tab shows it, not only the Overview.
-    var todayEl = document.getElementById('today-label');
-    if (todayEl && s.coverage) todayEl.textContent = dayMonthYear(s.coverage.today);
-
-    // #totals and the coverage line are both written inside renderOverview(), so they
-    // always describe the same filtered, FY-scoped selection.
     buildFySelector(s);
     buildFilters();
     renderOverview();
@@ -210,10 +203,8 @@
 
   function fyOf(quarterLabel) { return String(quarterLabel).split(' ')[0]; }
 
-  // The selector lives in the Organisation overview subtitle, which renderCoverage
-  // rewrites on every render. So it is a persistent element created once and re-appended,
-  // rather than markup: rebuilding it each time would drop the user's choice and its
-  // change listener.
+  // The selector is created once and kept, rather than rebuilt from markup on each
+  // render: rebuilding it would drop the user's choice and its change listener.
   var fySelect = null;
   var fyChosen = false; // true once the user picks a year; until then, the current FY
 
@@ -226,8 +217,19 @@
       // Changing the year only re-totals per-quarter buckets already in the snapshot,
       // so no server round trip is needed.
       fySelect.addEventListener('change', function () { fyChosen = true; renderOverview(); });
+      document.getElementById('fy-slot').appendChild(fySelect);
     }
     return fySelect;
+  }
+
+  // "26/27 (Apr 2026 to Mar 2027)": the option says which months it covers, since there
+  // is no sentence under the toolbar to say so. The year starts in the month the
+  // snapshot's current financial year starts.
+  function fyOptionLabel(fyLabel, c) {
+    var m = c && c.fyStart ? parseInt(zoned(c.fyStart, { month: 'numeric' }).month, 10) : 4;
+    var y = 2000 + parseInt(fyLabel.slice(0, 2), 10);
+    var endM = ((m + 10) % 12) + 1, endY = m === 1 ? y : y + 1;
+    return fyLabel + ' (' + MONTHS[m - 1] + ' ' + y + ' to ' + MONTHS[endM - 1] + ' ' + endY + ')';
   }
 
   function selectedFy() {
@@ -263,7 +265,9 @@
     });
     var keep = sel.value;
     sel.innerHTML = '<option value="all">All time</option>' +
-      years.map(function (y) { return '<option value="' + esc(y) + '">' + esc(y) + '</option>'; }).join('');
+      years.map(function (y) {
+        return '<option value="' + esc(y) + '">' + esc(fyOptionLabel(y, snap.coverage)) + '</option>';
+      }).join('');
     // Keep a year the user picked across refreshes; otherwise the current FY, or the
     // earliest year to come if the current one has nothing in it.
     if (fyChosen && (keep === 'all' || years.indexOf(keep) !== -1)) sel.value = keep;
@@ -289,11 +293,8 @@
       return true;
     });
 
-    var minStart = null, maxEnd = null;
     var totBudget = 0, totSecured = 0, totActual = 0, totWeighted = 0;
     rows.forEach(function (r) {
-      if (r.start && (!minStart || r.start < minStart)) minStart = r.start;
-      if (r.end && (!maxEnd || r.end > maxEnd)) maxEnd = r.end;
       totBudget += isFy ? sumFy(r.budgetByQ, fy) : r.budget;
       totSecured += isFy ? sumFy(r.securedByQ, fy) : r.secured;
       totActual += isFy ? sumFy(r.actualByQ, fy) : r.actual;
@@ -301,8 +302,6 @@
       // all-time view rather than passing a null year into sumFy, which matches nothing.
       totWeighted += isFy ? sumFy(r.weightedByQ, fy) : sumAllQ(r.weightedByQ);
     });
-
-    renderCoverage(snapshot.coverage, minStart, maxEnd, isFy ? fy : null);
 
     // With the plan running from today, the cost card is actual spend so far plus what is
     // left, so it is named for that rather than for the budget.
@@ -354,19 +353,43 @@
     });
   });
 
-  // Close filter dropdowns on outside click (and only keep one open at a time).
+  // Close filter dropdowns and help notes on outside click (and only keep one open at
+  // a time).
   document.addEventListener('click', function (e) {
     Array.prototype.slice.call(document.querySelectorAll('.bd-dd[open]')).forEach(function (d) {
       if (!d.contains(e.target)) d.removeAttribute('open');
     });
+    if (!e.target.closest || !e.target.closest('.help')) closeHelp();
   });
   // Close on Escape.
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       Array.prototype.slice.call(document.querySelectorAll('.bd-dd[open]'))
         .forEach(function (d) { d.removeAttribute('open'); });
+      closeHelp();
     }
   });
+
+  // The "?" beside a heading or at the end of a toolbar: the explanation that used to sit
+  // on the page, shown on tap. One open at a time, and it stays on screen: a note near the
+  // right edge opens leftwards.
+  Array.prototype.slice.call(document.querySelectorAll('.help-btn')).forEach(function (b) {
+    b.addEventListener('click', function () {
+      var pop = document.getElementById(b.getAttribute('aria-controls'));
+      var wasOpen = !pop.classList.contains('hidden');
+      closeHelp();
+      if (wasOpen) return;
+      pop.classList.remove('hidden');
+      b.setAttribute('aria-expanded', 'true');
+      pop.classList.toggle('flip', pop.getBoundingClientRect().right > window.innerWidth - 8);
+    });
+  });
+  function closeHelp() {
+    Array.prototype.slice.call(document.querySelectorAll('.help-pop'))
+      .forEach(function (p) { p.classList.add('hidden'); });
+    Array.prototype.slice.call(document.querySelectorAll('.help-btn'))
+      .forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+  }
 
   function card(label, value, cls, note) {
     return '<div class="card"><div class="label">' + label + '</div>' +
@@ -394,9 +417,12 @@
   var GROUP_COLORS = ['var(--grp-1)', 'var(--grp-2)', 'var(--grp-3)', 'var(--grp-4)',
     'var(--grp-5)', 'var(--grp-6)', 'var(--grp-7)'];
   var GROUP_OTHER_COLOR = 'var(--grp-8)';
-  var GROUP_NOUN = { project: 'project', fundingSource: 'funding source', milestone: 'milestone' };
-  // Tile colour thresholds in months. Presentation only; nothing else reads them.
+  // Colour thresholds for a line's horizon, in months. Presentation only.
   var RUNWAY_DANGER_MONTHS = 6, RUNWAY_AMBER_MONTHS = 12;
+  // The chart starts this many months before the current financial year. The walk still
+  // runs from the first budgeted month, so the lines open at their position then; the
+  // earlier months are closed years and only flattened the part that matters.
+  var RUNWAY_MONTHS_BEFORE_FY = 3;
 
   function netMoney(n) { return n < 0 ? '-' + fmtMoney(-n) : fmtMoney(n); }
   function compactMoney(n) {
@@ -439,9 +465,7 @@
     if (!rw || !(rw.months || []).length) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');
 
-    var tiles = document.getElementById('runway-tiles');
     var chart = document.getElementById('runway-chart');
-    var legend = document.getElementById('runway-legend');
     var table = document.getElementById('runway-table');
     var statuses = selectedStatuses();
     // A snapshot written before the parts existed still draws the organisation's lines.
@@ -449,16 +473,8 @@
     var mode = rw.parts ? runwayGroupBy() : 'status';
     var rows = total.months || [];
 
-    // One line. The user guide carries the longer explanation.
-    document.getElementById('runway-caption').innerHTML =
-      '<span>Income minus spend, cumulative. <b>Actuals</b> to last month, <b>budget</b> ' +
-      'from this month on. Funded, not cash. Follows show and filter above, not the year.' +
-      (mode === 'status' ? '' : ' One line per ' + GROUP_NOUN[mode] + ', ' +
-        (statuses.indexOf('proposed') !== -1 ? 'applications counted at their probability.'
-                                             : 'secured money only.')) + '</span>';
-
     function empty(note) {
-      tiles.innerHTML = ''; legend.innerHTML = ''; table.innerHTML = '';
+      table.innerHTML = '';
       chart.innerHTML = '<div class="rw-note">' + note + '</div>';
     }
     if (!rows.length) return empty('Nothing matches show and filter above.');
@@ -473,23 +489,25 @@
       return statuses.indexOf(s.key === 'secured' ? 'secured' : 'proposed') !== -1;
     });
     var last = rows[rows.length - 1].month;
-    var net = total.openingNet || 0;
-    tiles.innerHTML =
-      card('Net position today', netMoney(net), net < 0 ? 'danger' : '') +
-      scenarios.map(function (s) { return runwayTile(s, total, last); }).join('');
 
     var series = mode === 'status'
       ? scenarios.map(function (s) {
           return { label: s.label, color: s.color, cross: total.crossover[s.key],
+            horizon: runwayHorizon(s.key, total, last),
             values: rows.map(function (r) { return r[s.key] - r.spend; }) };
         })
       : groupSeries(rw, mode, rows);
 
-    renderRunwayChart(rows, series, chart, mode === 'status');
-    legend.innerHTML = series.map(function (s) {
-      return '<span><i class="sw line" style="background:' + s.color + '"></i> ' +
-        esc(s.label) + '</span>';
-    }).join('');
+    // Crop after the walk, so the lines open at their true cumulative position.
+    var from = runwayFromKey();
+    var cut = 0;
+    while (cut < rows.length - 1 && rows[cut].month < from) cut++;
+    if (cut) {
+      rows = rows.slice(cut);
+      series.forEach(function (s) { s.values = s.values.slice(cut); });
+    }
+
+    renderRunwayChart(rows, series, chart, mode === 'status', total.openingNet || 0);
     table.innerHTML = runwayTable(rows, series, mode === 'status');
     table.querySelector('details').addEventListener('toggle', function (ev) {
       runwayTableOpen = ev.target.open;
@@ -527,26 +545,39 @@
     return named;
   }
 
-  function runwayTile(s, rw, lastMonth) {
-    var n = rw.monthsOfRunway ? rw.monthsOfRunway[s.key] : null;
-    var at = rw.crossover ? rw.crossover[s.key] : null;
-    if (n === null || n === undefined) {
-      // No shortfall inside the budgeted horizon. Not the same as safe: it may only
-      // mean the budgets stop, which is why the value names the month they stop.
-      return card(s.label, 'Beyond ' + esc(fmtMonthKey(lastMonth)), '');
-    }
+  // The line's second label line: the month it goes short and how far off that is, or
+  // that it stays above zero to the last budgeted month. Not the same as safe: it may
+  // only mean the budgets stop, which is why that month is named.
+  function runwayHorizon(key, rw, lastMonth) {
+    var n = rw.monthsOfRunway ? rw.monthsOfRunway[key] : null;
+    var at = rw.crossover ? rw.crossover[key] : null;
+    if (n === null || n === undefined) return { text: 'beyond ' + fmtMonthKey(lastMonth), cls: '' };
     var cls = n < RUNWAY_DANGER_MONTHS ? 'danger' : (n < RUNWAY_AMBER_MONTHS ? 'amber' : '');
-    var value = n === 0 ? 'Short now' : n + (n === 1 ? ' month' : ' months');
-    return card(s.label, value, cls, 'short from ' + esc(fmtMonthKey(at)));
+    if (n === 0) return { text: 'short now', cls: cls };
+    return { text: n + (n === 1 ? ' month' : ' months') + ', short from ' + fmtMonthKey(at),
+      cls: cls };
   }
 
-  // `series` is most important first: { label, color, values (net per month), cross }.
-  function renderRunwayChart(rows, series, host, withSpend) {
+  // The first month the chart draws: RUNWAY_MONTHS_BEFORE_FY before the current
+  // financial year, as a 'YYYY-MM' key.
+  function runwayFromKey() {
+    var c = snapshot && snapshot.coverage;
+    if (!c || !c.fyStart) return '';
+    var p = zoned(c.fyStart, { month: 'numeric', year: 'numeric' });
+    var y = parseInt(p.year, 10), m = parseInt(p.month, 10) - RUNWAY_MONTHS_BEFORE_FY;
+    if (m < 1) { m += 12; y--; }
+    return y + '-' + ('0' + m).slice(-2);
+  }
+
+  // `series` is most important first: { label, color, values (net per month), cross,
+  // horizon }. `net` is the net position today, income received minus spend to date.
+  function renderRunwayChart(rows, series, host, withSpend, net) {
     // Sized to the container once at render, so text is 1:1 rather than scaled with
     // the viewBox. If the Overview is hidden when a refresh lands, the fallback width
     // still scales cleanly because the SVG is also width:100%.
+    var twoLine = series.some(function (s) { return s.horizon; });
     var W = Math.max(480, host.clientWidth || 720), H = 240;
-    var padL = 64, padR = 150, padT = 22, padB = 30;
+    var padL = 64, padR = twoLine ? 180 : 150, padT = 22, padB = 30;
     var pw = W - padL - padR, ph = H - padT - padB;
     var n = rows.length;
     var xStep = pw / Math.max(1, n - 1);
@@ -565,7 +596,10 @@
       '" role="img" aria-label="Net funded position by month, ' + series.length +
       ' line' + (series.length === 1 ? '' : 's') + '">'];
 
-    // Wash and today rule first, so the lines sit on top of them.
+    // Wash and today rule first, so the lines sit on top of them. The rule carries the
+    // net position today, which is where the budget months start from.
+    var netLabel = '<tspan class="rw-net' + (net < 0 ? ' danger' : '') + '"> · net position ' +
+      esc(netMoney(net)) + '</tspan>';
     var firstFuture = -1;
     for (var i = 0; i < n; i++) { if (!rows[i].actual) { firstFuture = i; break; } }
     if (firstFuture > 0) {
@@ -574,12 +608,13 @@
         (padL + pw - tx) + '" height="' + ph + '"/>');
       svg.push('<line class="rw-today" x1="' + tx + '" x2="' + tx + '" y1="' + padT +
         '" y2="' + (padT + ph) + '"/>');
-      svg.push('<text class="rw-axis" x="' + (tx + 4) + '" y="' + (padT - 8) + '">today</text>');
+      svg.push('<text class="rw-axis" x="' + (tx + 4) + '" y="' + (padT - 8) + '">today' +
+        netLabel + '</text>');
     } else if (firstFuture === 0) {
       svg.push('<rect class="rw-future" x="' + padL + '" y="' + padT + '" width="' + pw +
         '" height="' + ph + '"/>');
       svg.push('<text class="rw-axis" x="' + padL + '" y="' + (padT - 8) +
-        '">every month shown is budget</text>');
+        '">every month shown is budget' + netLabel + '</text>');
     }
 
     // Grid, one hairline per tick, with the zero line a shade stronger.
@@ -598,7 +633,7 @@
     }
 
     // Lines, least important first so the first series draws on top. A hollow dot on the
-    // zero line marks each crossover month; the tiles carry the number, so no text here.
+    // zero line marks each crossover month; the line's label names it, so no text here.
     var ends = [];
     series.slice().reverse().forEach(function (s) {
       var d = s.values.map(function (val, k) {
@@ -621,18 +656,28 @@
       svg.push('<circle class="rw-dot" cx="' + e.x + '" cy="' + e.y + '" r="5" fill="' +
         e.s.color + '"/>');
     });
-    // Direct labels at the line ends. Where two ends coincide only the more important
-    // line is labelled and the legend carries the other, rather than stacking text away
-    // from its line. Long names are cut to fit the margin; the legend has them whole.
+    // Direct labels at the line ends: the name, and under it the horizon when the series
+    // has one. These are the only legend, so where ends coincide the labels are pushed
+    // apart down the page rather than hidden, then back up from the bottom edge. Long
+    // group names are cut to fit the margin; the tooltip and the table have them whole.
+    var gap = twoLine ? 28 : 14;
+    ends.sort(function (a, b) { return a.y - b.y; });
+    ends.forEach(function (e, k) {
+      e.ly = k && e.y - ends[k - 1].ly < gap ? ends[k - 1].ly + gap : e.y;
+    });
+    var over = ends.length ? ends[ends.length - 1].ly + gap / 2 - H : 0;
+    if (over > 0) ends.forEach(function (e) { e.ly -= over; });
     ends.forEach(function (e) {
-      var hidden = ends.some(function (f) {
-        return f !== e && Math.abs(f.y - e.y) < 14 && f.rank < e.rank;
-      });
-      if (!hidden) {
-        var name = e.s.label.length > 22 ? e.s.label.slice(0, 21) + '…' : e.s.label;
-        svg.push('<text class="rw-end" x="' + (e.x + 10) + '" y="' + (e.y + 4) + '">' +
+      var name = e.s.label.length > 22 ? e.s.label.slice(0, 21) + '…' : e.s.label;
+      if (!e.s.horizon) {
+        svg.push('<text class="rw-end" x="' + (e.x + 10) + '" y="' + (e.ly + 4) + '">' +
           esc(name) + '</text>');
+        return;
       }
+      svg.push('<text class="rw-end" x="' + (e.x + 10) + '" y="' + (e.ly - 2) + '">' +
+        esc(name) + '</text>');
+      svg.push('<text class="rw-end-sub ' + e.s.horizon.cls + '" x="' + (e.x + 10) + '" y="' +
+        (e.ly + 11) + '">' + esc(e.s.horizon.text) + '</text>');
     });
 
     // Crosshair and the hit area, last so the hit area is on top.
@@ -712,42 +757,6 @@
         }).join('') + '</tr>';
     });
     return h + '</tbody></table></div></details>';
-  }
-
-  function monthYear(iso) {
-    if (!iso) return '—';
-    var p = zoned(iso, { month: 'numeric', year: 'numeric' });
-    return MONTHS[parseInt(p.month, 10) - 1] + ' ' + p.year;
-  }
-  function dayMonthYear(iso) {
-    if (!iso) return '—';
-    var p = zoned(iso, { day: 'numeric', month: 'numeric', year: 'numeric' });
-    return p.day + ' ' + MONTHS[parseInt(p.month, 10) - 1] + ' ' + p.year;
-  }
-  function renderCoverage(c, overrideStart, overrideEnd, fyLabel) {
-    var el = document.getElementById('coverage');
-    if (!c) { el.innerHTML = ''; return; }
-    var start = overrideStart || c.forecastStart;
-    var end = overrideEnd || c.forecastEnd;
-
-    // The scope text says what is actually on screen. It used to report the all-time
-    // budget span regardless of scope, so it contradicted the FY-scoped cards sitting
-    // directly beneath it, which was a large part of why the Overview read as confusing.
-    var scope = fyLabel
-      ? 'Showing <b>' + esc(fyLabel) + '</b>'
-      : 'Showing <b>all time</b> · budgeted &amp; forecast ' + monthYear(start) +
-        ' – ' + monthYear(end);
-
-    // The selector is rebuilt into this line every render, so its options are preserved
-    // and reattached rather than recreated from scratch. See keepFySelector.
-    el.innerHTML =
-      '<span id="fy-slot"></span>' +
-      '<span>' + scope + '</span>' +
-      '<span class="sep">·</span>' +
-      '<span>Current financial year <b>' + c.fyLabel + '</b> (' + monthYear(c.fyStart) +
-        ' – ' + monthYear(c.fyEnd) + ')</span>';
-    var slot = document.getElementById('fy-slot');
-    if (slot && fySelect) slot.appendChild(fySelect);
   }
 
   // ---- Refresh progress ---------------------------------------------------
@@ -912,6 +921,7 @@
       document.getElementById('track-grid').innerHTML = '';
       document.getElementById('track-totals').innerHTML = '';
       document.getElementById('track-sheet-links').innerHTML = '';
+      document.getElementById('track-title').textContent = '';
       document.getElementById('track-status').textContent = 'No sources selected.';
       return;
     }
@@ -935,9 +945,15 @@
     document.querySelectorAll('.measure').forEach(function (x) {
       x.classList.toggle('active', x.dataset.measure === measure);
     });
-    var meta = (t.type === 'project' ? 'project' : (t.type === 'composite' ? t.label : (t.status + ' · ' + t.project)));
-    document.getElementById('track-status').textContent =
-      meta + ' · ' + measure + ' · current ' + t.currentQuarter;
+    // The title names everything the controls chose, so the grid reads on its own in a
+    // screenshot: what is tracked, its project and status, the measure, the quarter.
+    var what = t.type === 'project' ? [t.project + ' (project)']
+      : t.type === 'composite' ? [t.label]
+      : [t.label, t.project, statusLabel(t.status)];
+    document.getElementById('track-title').textContent = what.concat([
+      measure.charAt(0).toUpperCase() + measure.slice(1),
+      'current quarter ' + t.currentQuarter]).join(' · ');
+    document.getElementById('track-status').textContent = '';
 
     // Sheet links — render into header bar (next to source selector)
     var linkEl = document.getElementById('track-sheet-links');
@@ -1181,11 +1197,13 @@
     milestones = plannerData;
     var grid = document.getElementById('planner-grid');
     var status = document.getElementById('planner-status');
+    var title = document.getElementById('planner-title');
+    status.textContent = '';
 
     if (!milestones || !milestones.length) {
       grid.innerHTML = '<div style="padding:24px;color:var(--muted)">' +
         'No milestones found for this project.</div>';
-      status.textContent = '';
+      title.textContent = '';
       return;
     }
 
@@ -1227,10 +1245,22 @@
       });
     });
 
+    // The title names the project, what is shown and the horizon, so the grid reads on
+    // its own in a screenshot, with the milestone count beside it.
+    var shown = {};
+    rows.forEach(function (r) { shown[r.milestone] = true; });
+    var nShown = Object.keys(shown).length;
+    title.textContent = [
+      document.getElementById('planner-project').value,
+      statuses.length === 2 ? 'Secured and Proposed' : statuses.length ? statusLabel(statuses[0]) + ' only' : 'nothing shown',
+      fmtMonthShort(hStart) + ' to ' + fmtMonthShort(hEnd),
+      (nShown < milestones.length ? nShown + ' of ' + milestones.length : nShown) +
+        (milestones.length === 1 ? ' milestone' : ' milestones')
+    ].join(' · ');
+
     if (!rows.length) {
       grid.innerHTML = '<div style="padding:24px;color:var(--muted)">' +
         'Nothing matches the current filters.</div>';
-      status.textContent = '0 of ' + milestones.length + ' milestones shown';
       return;
     }
 
@@ -1331,8 +1361,6 @@
     }
 
     grid.innerHTML = '<table class="gantt">' + head + body + foot + '</table>';
-    status.textContent = rows.length + ' row(s) · ' + fmtMonthShort(hStart) +
-      ' – ' + fmtMonthShort(hEnd);
   }
 
 </script>

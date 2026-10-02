@@ -17,12 +17,21 @@
   body { margin: 0; background: var(--bg2); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 14px; line-height: 1.5; }
-  .wrap { margin: 0 auto; padding: 24px 20px 48px; }
-  header { display: flex; align-items: center; justify-content: space-between;
-    flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
-  .title { font-size: 19px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .wrap { margin: 0 auto; padding: 16px 20px 48px; }
+  /* Header: tabs, title, refresh. Three columns so the title sits in the middle of the
+     page whatever the tabs and the button measure; on a narrow screen the tabs take a
+     row of their own underneath. */
+  header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    gap: 12px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .title { font-size: 19px; font-weight: 500; display: flex; align-items: center; gap: 8px;
+    padding-bottom: 6px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
-  .sync { font-size: 12px; color: var(--hint); display: flex; align-items: center; gap: 10px; }
+  .sync { font-size: 12px; color: var(--hint); display: flex; flex-direction: column;
+    align-items: flex-end; gap: 2px; justify-self: end; padding-bottom: 6px; }
+  @media (max-width: 1100px) {
+    header { grid-template-columns: 1fr auto; }
+    header .tabs { grid-column: 1 / -1; grid-row: 2; }
+  }
   button { font: inherit; font-size: 13px; background: var(--bg); color: var(--text);
     border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
   button:hover { background: var(--bg2); }
@@ -33,11 +42,26 @@
   .banner a { color: var(--danger-text); font-weight: 500; margin-left: 8px; }
   .hidden { display: none; }
 
-  .today { font-weight: 500; color: var(--muted); }
+  /* The "?" beside a heading or at the end of a toolbar, and the note it opens. */
+  .help { position: relative; display: inline-block; vertical-align: middle; }
+  .help-btn { width: 20px; height: 20px; padding: 0; border-radius: 50%; font-size: 12px;
+    line-height: 18px; color: var(--muted); }
+  .help-btn[aria-expanded="true"] { border-color: var(--green); color: var(--text); }
+  .help-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 10; width: 380px;
+    max-width: 80vw; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-size: 13px; font-weight: 400; line-height: 1.5;
+    color: var(--muted); box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+  .help-pop.flip { left: auto; right: 0; }
+  .help-pop b, .help-pop strong { color: var(--text); font-weight: 500; }
+
+  /* The title over a grid: what the controls chose, so a screenshot of the grid says what
+     it is. */
+  .grid-title { font-size: 14px; font-weight: 500; margin: 0 0 8px; min-height: 21px; }
+  .grid-title-row { display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: space-between; gap: 6px 16px; }
 
   /* Planner: the optional Cost / Income / Profit and loss columns sit between the label
      and the month grid, so they stay readable when the Gantt scrolls sideways. */
-  .planner-controls { align-items: flex-start; margin: 4px 0 12px; }
   .gantt-fig { white-space: nowrap; font-variant-numeric: tabular-nums;
     border-right: 1px solid var(--line); padding-left: 14px; }
   .gantt-fig.pos { color: var(--green); }
@@ -52,8 +76,8 @@
   .badge-error { background: var(--red); }
   .badge-warning { background: var(--amber); }
 
-  .fy-select { font: inherit; font-size: 12px; background: var(--bg); color: var(--text);
-    border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; margin-right: 4px; }
+  .fy-select { font: inherit; font-size: 13px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
 
   /* Refresh progress. A refresh is around a minute, almost all of it opening one
      spreadsheet at a time, so the wait has to look bounded rather than broken.
@@ -66,15 +90,17 @@
     border-radius: 3px; transition: width .4s ease; }
   .refresh-bar-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
 
-  .overview-section { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+  .overview-section { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
   .overview-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-  .overview-section > h2 { font-size: 16px; font-weight: 600; color: var(--text); margin: 0 0 16px 0; }
+  .overview-section > h2 { font-size: 16px; font-weight: 600; color: var(--text); margin: 0 0 10px 0;
+    display: flex; align-items: center; gap: 8px; }
 
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px; }
-  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-  .card .label { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
-  .card .value { font-size: 23px; font-weight: 500; }
+  /* A strip of fixed-width cards, not boxes stretched across the page. */
+  .cards { display: flex; flex-wrap: wrap; gap: 10px; }
+  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 16px; min-width: 150px; }
+  .card .label { font-size: 12px; color: var(--muted); margin-bottom: 2px; white-space: nowrap; }
+  .card .value { font-size: 20px; font-weight: 500; }
   .card .value.danger { color: var(--red); }
   .card .value.amber { color: var(--amber-text); }
   .card .note { font-size: 12px; color: var(--hint); margin-top: 4px; }
@@ -92,6 +118,10 @@
   .rw-dot { stroke: var(--bg); stroke-width: 2; }
   .rw-cross { fill: var(--bg); stroke: rgba(0,0,0,.45); stroke-width: 1.5; }
   .rw-end { fill: var(--muted); font-size: 12px; }
+  .rw-end-sub { fill: var(--hint); font-size: 11px; }
+  .rw-end-sub.danger, .rw-net.danger { fill: var(--danger-text); }
+  .rw-end-sub.amber { fill: var(--amber-text); }
+  .rw-net { fill: var(--muted); }
   .rw-note { font-size: 13px; color: var(--muted); padding: 8px 6px 12px; }
   .rw-tip { position: absolute; pointer-events: none; background: var(--bg);
     border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px;
@@ -101,7 +131,6 @@
   .rw-tip .r b { min-width: 76px; text-align: right; font-variant-numeric: tabular-nums; }
   .rw-tip .k { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
   .rw-tip .l { color: var(--muted); }
-  .sw.line { width: 14px; height: 2px; border-radius: 1px; }
   .rw-table { margin-top: 10px; font-size: 12px; }
   .rw-table summary { cursor: pointer; color: var(--muted); }
   /* Scrolls rather than clips: this table is the chart's accessibility twin, so a
@@ -117,8 +146,6 @@
   .num { text-align: right; }
   tbody tr { border-top: 1px solid var(--line); }
 
-  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px;
-    font-size: 11px; color: var(--hint); }
   .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; }
   .sw.ok { background: var(--green); } .sw.warn { background: var(--amber); } .sw.danger { background: var(--red); }
   .muted { color: var(--hint); }
@@ -150,15 +177,13 @@
 
   .coverage { font-size: 13px; color: var(--muted); margin: 0 0 16px; display: flex;
     flex-wrap: wrap; gap: 8px 18px; }
-  .coverage b { font-weight: 500; color: var(--text); }
-  .coverage .sep { color: var(--hint); }
 
-  /* Show and filter under the Organisation overview heading, and group by above the chart.
-     Left-aligned, since they sit over what they change rather than beside a title. */
-  .ov-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px;
-    margin: -4px 0 16px; }
-  .rw-controls { margin: 16px 0 0; flex-wrap: wrap; }
-  .bd-controls-wrap { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  /* One toolbar per tab: every control on a line, wrapping on a narrow screen. Group by
+     sits above the chart on its own, since it changes the chart alone. */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px;
+    margin: 0 0 14px; font-size: 13px; }
+  .toolbar > label { color: var(--muted); }
+  .rw-controls { margin: 0; flex-wrap: wrap; }
   .bd-controls { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--text); }
   .bd-controls .bd-label { color: var(--muted); }
   .bd-controls label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
@@ -178,14 +203,12 @@
   .bd-dd-list label { display: flex; align-items: center; gap: 6px; padding: 3px 0;
     font-size: 13px; white-space: nowrap; }
 
-  .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin: 4px 0 20px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: -1px; }
   .tab { border: none; border-bottom: 2px solid transparent; border-radius: 0;
-    background: none; color: var(--muted); padding: 8px 12px; }
+    background: none; color: var(--muted); padding: 10px 12px; }
   .tab:hover { background: none; color: var(--text); }
   .tab.active { color: var(--text); border-bottom-color: var(--green); }
 
-  .track-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
-  .track-head label { font-size: 13px; color: var(--muted); }
   .measure-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   .measure-toggle .measure { border: none; border-radius: 0; padding: 6px 12px; font-size: 13px;
     background: var(--bg); color: var(--muted); border-left: 1px solid var(--line); }
@@ -195,9 +218,7 @@
   select { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--line);
     border-radius: 8px; background: var(--bg); color: var(--text); }
   .track-status { font-size: 12px; color: var(--hint); }
-  .track-help { font-size: 12px; color: var(--muted); margin: 0 0 14px; line-height: 1.5; }
-  .track-sheet-links { font-size: 12px; display: inline-flex; flex-wrap: wrap; gap: 8px;
-    margin-left: 4px; }
+  .track-sheet-links { font-size: 12px; display: inline-flex; flex-wrap: wrap; gap: 8px; }
   .track-sheet-links a { color: var(--green); text-decoration: none; }
   .track-sheet-links a:hover { text-decoration: underline; }
   .cmt-text { font-size: 12px; color: var(--muted); }
@@ -249,11 +270,9 @@
   .track-totals .lbl { color: var(--muted); margin-right: 6px; }
 
   /* ---- Project planner (Gantt) ------------------------------------------ */
-  .planner-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-  .planner-head label { font-size: 13px; color: var(--muted); }
-  .planner-link { font-size: 13px; color: var(--green); text-decoration: none; margin-left: 6px; }
+  .planner-link { font-size: 13px; color: var(--green); text-decoration: none; }
   .planner-link:hover { text-decoration: underline; }
-  .planner-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;
+  .planner-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 8px;
     font-size: 11px; color: var(--hint); }
 
   .planner-grid { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px;
