@@ -230,7 +230,7 @@ function quarterBounds_(qi) {
  * The Budget tab is the budget as agreed with the funder and stays the baseline the
  * tracking grid compares against. Once a source is under way its Forecast tab, quarter by
  * quarter, is the plan, so everything that shows what is expected when (the Overview,
- * runway and the planner) reads these lines instead.
+ * runway and the timeline) reads these lines instead.
  *
  * A quarter's forecast is shared between a milestone's lines in proportion to each
  * line's budget for that field, or evenly when the milestone budgets none of it, and
@@ -320,7 +320,7 @@ function planBudgets_(budgets) {
 /**
  * The plan from today (CONFIG.PLAN_REMAINING): actuals for the months already gone, and
  * what is left of each milestone for the months to come. Lines in, lines out, so every
- * view that reads the plan (the Overview's cards, the planner, runway) needs no change.
+ * view that reads the plan (the Overview's cards, the timeline, runway) needs no change.
  *
  * Months gone: the source's actual cost and income, month by month, on the milestone and
  * project Xero coded them to. Actuals on no budgeted milestone land on "(unassigned)", so

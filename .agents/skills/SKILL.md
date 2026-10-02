@@ -229,7 +229,7 @@ Rules that follow from this:
 * A funding source can span projects: the per-line `Project` column overrides the parent folder.
 * Xero transactions must carry **both** tracking categories plus the item code. A line with no
   `Projects` value is dropped from project and organisation totals (D1); a line with no `Funding
-  source` falls out of the quarterly grid (D2).
+  source` falls out of Project tracking (D2).
 * Project abbreviations are `SPY`, `GEN`, `WAI`, `WW`. Do not change them: see §1,
   Verify-Before-Applying.
 
@@ -259,7 +259,7 @@ changing code:
   "simplify" it back.
 * **A row with any entry owns its tab's quarters**: `ownedForecast_` fills its blanks with 0, and
   with `CONFIG.PLAN_FROM_FORECAST` on, `planBudgets_` re-times the lines so every view (Overview,
-  runway, planner) follows the forecast. Quarters with no column keep the budget. `buildSnapshot`
+  runway, timeline) follows the forecast. Quarters with no column keep the budget. `buildSnapshot`
   passes `planned` budgets to the views and `judged` ones (original lines, owned forecast) to the
   grid and health checks. See `docs/DESIGN.md`, decisions, 2026-09-30.
 * **The plan runs from today**: with `CONFIG.PLAN_REMAINING` on, `remainingPlan_` rebuilds
@@ -278,7 +278,8 @@ Never add a code path that drops data without a finding.
 
 # 4. Xero Integration Rules
 
-`dashboard/XeroClient.js` fetches actuals from **bank transactions and invoices** only.
+`dashboard/XeroClient.js` fetches actuals from **bank transactions and invoices**, and from
+**posted manual journals** with `CONFIG.ACTUALS_EARNED` on (see the notes under Payroll).
 
 * **Only approved documents count.** Status is filtered in `paginate_`, in one place, with an
   allowlist (`POSTED_STATUS`): invoices `AUTHORISED` or `PAID`, bank transactions `AUTHORISED`.
@@ -337,7 +338,7 @@ in its `Contribution policy`. The rates live in each sheet's `Funding_info`, not
 list copied into this file drifts from the sheets: `reportContributions()` prints the current ones.
 
 `contributionRate_` and `lineContribution_` in `Aggregator.js` are the one statement of the rule,
-used by the Overview, the planner, General's tracking view and G1.
+used by the Overview, the timeline, General's tracking view and G1.
 `percent_of_income` takes its share from lines not already on General; `per_line` and `none`
 derive nothing. Organisation totals and runway do not move; only the split between projects does.
 

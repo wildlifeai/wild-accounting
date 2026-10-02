@@ -246,13 +246,13 @@ function buildSnapshot() {
   const breakdownRows = buildBreakdownRows_(budgetByKey, actualByKey, actualByKeyFY,
                                             actualByKeyQ, sourceStatus);
 
-  // Quarterly tracking grid (baseline + actual per funding source / milestone /
+  // Project tracking grid (baseline + actual per funding source / milestone /
   // quarter). Forecast is layered on at view time from the live Forecast sheet,
   // so GM edits show immediately without a full refresh.
   const tracking = buildTracking_(judged, actualLines);
 
-  // Project planner timeline: milestone segments color-coded by funding status.
-  const timeline = buildTimeline_(planned, actualLines, itemToMilestone, fy, now);
+  // Project tracking timeline: the months each milestone's funding runs, by source.
+  const timeline = buildTimeline_(planned);
 
   // Funded runway: cumulative income against cumulative spend, month by month.
   const runway = buildRunway_(planned, actualLines, now, exclusivityReps, itemToMilestone);
@@ -604,98 +604,53 @@ function chooseExclusivityReps_(budgets) {
 }
 
 /**
- * Build timeline data for the Project Planner view.
- * For each (project, milestone) pair, produces an array of funding-source segments
- * with date ranges and monthly cost distributions, plus actual spend to date.
- * The UI renders these as a Gantt chart with green (secured), amber (proposed),
- * and gray (unplanned gap) bars.
+ * The timeline for Project tracking: for each (project, milestone) pair, the funding
+ * sources paying for it, each with its status and the months its budget lines run from
+ * and to. composeProjectTracking turns those into each bar's first and last quarter;
+ * amounts come from the tracking entries, not from here. A line counts toward the
+ * project it names, not the folder its sheet sits in.
  */
-function buildTimeline_(budgets, actualLines, itemToMilestone, fy, now) {
-  // Group budget lines by project+milestone, keeping each funding source as a segment.
-  const byProjMile = {}; // 'project||milestone' -> { segments: [], actualExpense: 0 }
+function buildTimeline_(budgets) {
+  const byProjMile = {}; // 'project||milestone' -> { project, milestone, segments }
 
   budgets.forEach(src => {
     src.lines.forEach(l => {
       const pName = l.project || CONFIG.DEFAULT_PROJECT;
       const mile = l.milestone || '(unassigned)';
       const pmKey = pName + '||' + mile;
-      if (!byProjMile[pmKey]) byProjMile[pmKey] = { project: pName, milestone: mile, segments: [], actualExpense: 0 };
-
-      // Income as well as cost, so the planner can offer Cost / Income / Profit and loss
-      // per milestone. Profit and loss is derived in the client rather than stored: it is
-      // income minus cost, and storing a third series invites the three to disagree.
-      const monthlyCost = distributeByMonth_([l], 'cost');
-      const monthlyIncome = distributeByMonth_([l], 'income');
+      if (!byProjMile[pmKey]) byProjMile[pmKey] = { project: pName, milestone: mile, segments: [] };
       byProjMile[pmKey].segments.push({
         source: src.name,
         status: src.status,
         start: l.start ? DateMath.monthKey(l.start) : null,
-        end: l.end ? DateMath.monthKey(l.end) : null,
-        cost: round_(l.cost),
-        income: round_(l.income),
-        monthlyCost: roundMapValues_(monthlyCost),
-        monthlyIncome: roundMapValues_(monthlyIncome)
+        end: l.end ? DateMath.monthKey(l.end) : null
       });
     });
   });
 
-  // Sum actuals per (project, milestone) using itemToMilestone lookup.
-  actualLines.forEach(l => {
-    if (l.kind !== 'expense') return;
-    if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
-    const fs = l.fundingSource || '(unassigned)';
-    const code = itemCode_(l.item);
-    const mile = (code && itemToMilestone[fs + '||' + code]) || '(unassigned)';
-    const pmKey = l.project + '||' + mile;
-    if (byProjMile[pmKey]) {
-      byProjMile[pmKey].actualExpense += l.amount;
-    }
-  });
-
-  // General's contribution: one row per contributing source, carrying the share of that
-  // source's income its Contribution policy sends to General, from lines not already on
-  // General. One row per source rather than one row of many segments, because the
-  // planner reads each month from a single segment and overlapping sources would hide
-  // one another. Income, not cost: this used to be every source's whole margin entered
-  // as cost, which both ignored the policy and turned General's inflow into spend.
+  // General's contribution: one row per contributing source, running the months the
+  // policy's share of that source's income falls in, from lines not already on General.
   budgets.forEach(src => {
     const rate = contributionRate_(src);
     if (!rate) return;
     const monthly = {};
     src.lines.forEach(l => {
-      if (lineContribution_(l, rate)) addInto_(monthly, scaleMap_(distributeByMonth_([l], 'income'), rate));
+      if (lineContribution_(l, rate)) addInto_(monthly, distributeByMonth_([l], 'income'));
     });
     const months = Object.keys(monthly).sort();
     if (!months.length) return;
     const mile = contributionMilestone_(src.name);
-    const total = months.reduce((t, mk) => t + monthly[mk], 0);
     byProjMile[CONFIG.GENERAL_PROJECT + '||' + mile] = {
-      project: CONFIG.GENERAL_PROJECT, milestone: mile, actualExpense: 0,
+      project: CONFIG.GENERAL_PROJECT, milestone: mile,
       segments: [{ source: src.name, status: src.status, start: months[0],
-        end: months[months.length - 1], cost: 0, income: round_(total),
-        monthlyCost: {}, monthlyIncome: roundMapValues_(monthly) }]
+        end: months[months.length - 1] }]
     };
   });
 
-  // Horizon: FY start through today + 16 months.
-  const horizonStart = DateMath.monthKey(fy.start);
-  const hEnd = new Date(now.getFullYear(), now.getMonth() + 16, 1);
-  const horizonEnd = DateMath.monthKey(hEnd);
-
   return Object.keys(byProjMile).map(key => {
     const entry = byProjMile[key];
-    // Sort segments by start date.
     entry.segments.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-    const totalBudget = entry.segments.reduce((t, s) => t + s.cost, 0);
-    return {
-      project: entry.project,
-      milestone: entry.milestone,
-      segments: entry.segments,
-      totalBudget: round_(totalBudget),
-      totalActual: round_(entry.actualExpense),
-      horizonStart: horizonStart,
-      horizonEnd: horizonEnd
-    };
+    return entry;
   }).sort((a, b) => a.project.localeCompare(b.project) || a.milestone.localeCompare(b.milestone));
 }
 
@@ -824,7 +779,7 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
  * covering cumulative spend.
  *
  * Self-contained on purpose. The page receives this function's own source (Index.html),
- * so the chart and its tiles run exactly the code the tests run here. It may not call
+ * so the chart runs exactly the code the tests run here. It may not call
  * anything outside itself.
  *
  * This is NOT cash runway. There is no bank balance anywhere in this system and the Xero

@@ -2,7 +2,9 @@
 
 Wildlife.ai's budgeting and accounting tools. The main one is the **Funding Cockpit**: a
 dashboard that puts every funding source's budget next to what Xero says was actually spent and
-received, and shows how long the money lasts.
+received, and shows how long the money lasts. Three tabs: **Overview** (the organisation's
+figures and runway), **Project tracking** (one project's funding sources quarter by quarter, as
+actual and forecast or as a timeline) and **Health** (what needs fixing in a sheet or in Xero).
 
 ## Open the Funding Cockpit
 
@@ -16,8 +18,7 @@ the projects you have access to. **To get access, or access to more projects, as
 | I want to | Where |
 |---|---|
 | See where the money is: budget, secured funding, spend and runway | The cockpit's **Overview**, explained in the [user guide](docs/USER_GUIDE.md) |
-| Track one funding source quarter by quarter | **Quarterly tracking**, see [tracking and forecasting](docs/USER_GUIDE.md#tracking-and-forecasting-quarterly) |
-| See what a project delivers over the coming years, and whether it is paid for | **Project planner** |
+| Track a project's funding sources quarter by quarter, as actual and forecast or as a timeline | **Project tracking**, see [tracking and forecasting](docs/USER_GUIDE.md#tracking-and-forecasting-quarterly) |
 | Change a forecast | The funding source's own `Forecast` tab, see [the user guide](docs/USER_GUIDE.md#tracking-and-forecasting-quarterly) |
 | Start a budget for a new grant or application | Download the [budget template](docs/Budget_sheet_template.xlsx), then follow the [budget sheet guide](docs/BUDGET_SHEET_TEMPLATE.md) |
 | Understand a warning on the Health tab | [Health checks](docs/HEALTH_CHECKS.md): what each one means and what to do |

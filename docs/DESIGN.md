@@ -72,10 +72,10 @@ means "does it answer these".
 | 4 | Working capital balance and forecast | Q | Board, Treasurer | Xero balance sheet + deferred grants | **Absent.** Needs a Xero scope the cockpit does not hold |
 | 5 | Bill payments | M | Bookkeeper | Xero | Native Xero. Deliberately out of scope |
 | 6 | Payroll | F | Bookkeeper | Xero Payroll | Posts as bills with both tracking categories. The Health tab flags untagged spend (D1, D2), missing item codes (D3), tags with no sheet (D4) and spend after a grant ended (D6). **Not routed to the bookkeeper**: someone has to read the Health tab |
-| 7 | Funding source income and expense variance | M | Project lead | Cockpit | Exists, on Quarterly tracking. Monthly cadence not enforced |
+| 7 | Funding source income and expense variance | M | Project lead | Cockpit | Exists, on Project tracking. Monthly cadence not enforced |
 | 8 | Funding source budget | per funder | GM | Sheets template | Template and validation exist: health checks across sheet structure, data quality, metadata, Xero coding, reconciliation and the funding pipeline |
 | 9 | Funding source summary | per funder | Funder | Cockpit export | **Absent.** No funder-facing output of any kind; every funder report is hand-built |
-| 10 | Project budget overview | per project | Project lead, GM | Cockpit rollup | Exists: the Overview's runway grouped by project, and the Project planner |
+| 10 | Project budget overview | per project | Project lead, GM | Cockpit rollup | Exists: the Overview's runway grouped by project, and Project tracking's timeline |
 | 11 | YTD P&L | Q | Project lead, then Board | Cockpit, per project YTD | Partial |
 
 ### The gaps that cost the most
@@ -155,6 +155,13 @@ Ranked by how badly they hurt the persona who depends on them:
   income, not each milestone's, as the accountant's releases are. Counting income when earned had
   moved unspent grant money out of today, and the plan has to put it back ahead of today, which
   budget dates already past could not. The tracking grid, D5 and E2 still judge against the budget.
+- **2026-10-02: one Project tracking tab, by quarter.** Quarterly tracking and the monthly Project
+  planner answered one question at two grains, so they became one tab: a project's funding
+  sources, each under its own heading, as an actual-and-forecast grid whose Before column keeps
+  the totals whole, or as a timeline of bars by quarter. The month grain went with the planner.
+  Each tab's controls are a ribbon of dropdown boxes with a title under it naming what was
+  chosen. The Overview's combined-years option totals the years it names; finished years are
+  left out, where All time counted them.
 
 ## History
 

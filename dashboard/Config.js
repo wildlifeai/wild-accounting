@@ -157,8 +157,6 @@ const CONFIG = {
   // Quarters in the tracking screen follow this financial year. 4 = April start
   // (Apr-Mar), so Q1 = Apr-Jun, Q2 = Jul-Sep, Q3 = Oct-Dec, Q4 = Jan-Mar.
   FINANCIAL_YEAR_START_MONTH: 4,
-  // How far ahead the General project view forecasts (quarters past current).
-  GENERAL_FORECAST_QUARTERS: 6, // 1.5 years
   // The plan every view shows: false is the Budget tab's own dates; true is each sheet's
   // Forecast tab where it has an entry, a row's blanks then counting as 0 (planBudgets_).
   // On since 2026-09-30, after its dry run was read.

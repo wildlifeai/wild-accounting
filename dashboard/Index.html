@@ -6,14 +6,21 @@
 </head>
 <body>
   <div class="wrap">
+    <!-- One row: the tabs, the title in the middle, refresh on the right with the sync
+         time under it. Nothing else lives up here. -->
     <header>
-      <div class="title"><span class="dot"></span> Funding cockpit</div>
+      <nav class="tabs">
+        <button class="tab active" data-view="overview">Overview</button>
+        <button class="tab" data-view="tracking">Project tracking</button>
+        <!-- The count badge is not decoration. Health used to sit at the foot of the
+             Overview where it was unavoidable; behind a tab, nothing would tell you there
+             were fourteen errors unless the tab says so. -->
+        <button class="tab" data-view="health">Health <span id="health-badge" class="badge hidden"></span></button>
+      </nav>
+      <div class="title"><span class="dot"></span> Wild Funding Cockpit</div>
       <div class="sync">
-        <!-- Today sits with the title so it is on every tab, not buried in the
-             Overview's subtitle where the other two tabs never saw it. -->
-        <span id="today-label" class="today"></span>
-        <span id="sync-label">loading…</span>
         <button id="refresh">Refresh now</button>
+        <span id="sync-label">loading…</span>
       </div>
     </header>
 
@@ -32,69 +39,91 @@
       <a id="xero-link" href="#" target="_blank">Connect Xero</a>
     </div>
 
-    <nav class="tabs">
-      <button class="tab active" data-view="overview">Overview</button>
-      <button class="tab" data-view="tracking">Quarterly tracking</button>
-      <button class="tab" data-view="planner">Project planner</button>
-      <!-- The count badge is not decoration. Health used to sit at the foot of the
-           Overview where it was unavoidable; behind a tab, nothing would tell you there
-           were fourteen errors unless the tab says so. -->
-      <button class="tab" data-view="health">Health <span id="health-badge" class="badge hidden"></span></button>
-    </nav>
-
     <div id="view-overview">
       <div class="overview-section">
-        <h2>Organisation overview</h2>
-        <!-- The timeframe selector lives in the subtitle, ahead of the scope text, so the
-             control and the description of what is on screen read as one line. -->
-        <div id="coverage" class="coverage"></div>
-        <!-- Show and filter apply to everything on this tab, the cards and the runway alike.
-             The year selector above applies to the cards only: runway always runs from today. -->
-        <div class="ov-controls">
-          <div class="bd-controls">
-            <span class="bd-label">show:</span>
-            <label><input type="checkbox" class="bd-status" value="secured" checked> Secured (confirmed)</label>
-            <label><input type="checkbox" class="bd-status" value="proposed" checked> Proposed</label>
+        <!-- The controls as a ribbon: three groups, each named underneath. Filter (the year,
+             filled by buildFySelector, applies to the cards only since runway always runs
+             from today; projects and sources apply to everything), Group by (the chart
+             only: Status draws the three scenario lines, any other choice one expected-case
+             line per group) and Show (everything on the tab). -->
+        <div class="ribbon">
+          <div class="ribbon-group">
+            <div class="ribbon-items">
+              <span id="fy-slot"></span>
+              <details class="bd-dd">
+                <summary id="filter-projects-sum">Projects</summary>
+                <div class="bd-dd-panel">
+                  <div class="bd-dd-actions"><a data-target="filter-projects" data-act="all">all</a>
+                    <a data-target="filter-projects" data-act="none">none</a></div>
+                  <div class="bd-dd-list" id="filter-projects"></div>
+                </div>
+              </details>
+              <details class="bd-dd">
+                <summary id="filter-sources-sum">Funding sources</summary>
+                <div class="bd-dd-panel">
+                  <div class="bd-dd-actions"><a data-target="filter-sources" data-act="all">all</a>
+                    <a data-target="filter-sources" data-act="none">none</a></div>
+                  <div class="bd-dd-list" id="filter-sources"></div>
+                </div>
+              </details>
+            </div>
+            <div class="ribbon-label">Filter</div>
           </div>
-          <div class="bd-controls">
-            <span class="bd-label">filter:</span>
-            <details class="bd-dd left-aligned">
-              <summary id="filter-projects-sum">Projects</summary>
-              <div class="bd-dd-panel">
-                <div class="bd-dd-actions"><a data-target="filter-projects" data-act="all">all</a>
-                  <a data-target="filter-projects" data-act="none">none</a></div>
-                <div class="bd-dd-list" id="filter-projects"></div>
-              </div>
-            </details>
-            <details class="bd-dd left-aligned">
-              <summary id="filter-sources-sum">Funding sources</summary>
-              <div class="bd-dd-panel">
-                <div class="bd-dd-actions"><a data-target="filter-sources" data-act="all">all</a>
-                  <a data-target="filter-sources" data-act="none">none</a></div>
-                <div class="bd-dd-list" id="filter-sources"></div>
-              </div>
-            </details>
+          <div class="ribbon-group">
+            <div class="ribbon-items">
+              <select id="rw-group" class="dd-select rw-group" aria-label="Group the runway by">
+                <option value="status">Status</option>
+                <option value="project">Project</option>
+                <option value="fundingSource">Funding source</option>
+                <option value="milestone">Milestone</option>
+              </select>
+            </div>
+            <div class="ribbon-label">Group by</div>
+          </div>
+          <div class="ribbon-group">
+            <div class="ribbon-items">
+              <details class="bd-dd">
+                <summary id="filter-status-sum">Secured and Proposed</summary>
+                <div class="bd-dd-panel">
+                  <div class="bd-dd-list" id="filter-status">
+                    <label><input type="checkbox" class="bd-status" value="secured" checked> Secured (confirmed)</label>
+                    <label><input type="checkbox" class="bd-status" value="proposed" checked> Proposed</label>
+                  </div>
+                </div>
+              </details>
+            </div>
+            <div class="ribbon-label">Show</div>
           </div>
         </div>
-        <section class="cards" id="totals"></section>
+        <!-- The title names what the ribbon chose, so a screenshot carries its own
+             context, as the Project tracking title does. The "?" at its right holds the
+             explanation of the cards and the chart. -->
+        <div class="grid-title-row">
+          <div id="ov-title" class="grid-title"></div>
+          <span class="help">
+            <button type="button" class="help-btn" aria-expanded="false"
+              aria-controls="overview-help" aria-label="What this tab shows">?</button>
+            <div class="help-pop hidden" id="overview-help">
+              The cards total the years, projects, funding sources and statuses chosen. The
+              chart is runway: income minus spend, cumulative, <b>actuals</b> to last month and
+              <b>budget</b> from this month on. Funded, not cash: the cockpit reads no bank
+              balance. It follows Show and Filter, not the year. Each line's label says the
+              month it goes short, or that it stays above zero to the last budgeted month,
+              which only means the budgets stop there. Grouped by project, funding source or
+              milestone, each line is one group's expected case: applications at their
+              probability, or secured money only when Proposed is unticked.
+            </div>
+          </span>
+        </div>
       </div>
 
-      <div class="overview-section hidden" id="runway-section">
-        <h2>Runway</h2>
-        <div class="coverage" id="runway-caption"></div>
-        <section class="cards" id="runway-tiles"></section>
-        <!-- Group by changes the chart only. Status draws the three scenario lines; any
-             other choice draws one expected-case line per group. -->
-        <div class="bd-controls rw-controls">
-          <span class="bd-label">group by:</span>
-          <label><input type="radio" name="rw-group" class="rw-group" value="status" checked> Status</label>
-          <label><input type="radio" name="rw-group" class="rw-group" value="project"> Project</label>
-          <label><input type="radio" name="rw-group" class="rw-group" value="fundingSource"> Funding source</label>
-          <label><input type="radio" name="rw-group" class="rw-group" value="milestone"> Milestone</label>
+      <div class="overview-section">
+        <section class="cards" id="totals"></section>
+        <!-- Project-scoped users are not sent the runway, so the chart hides on its own. -->
+        <div id="runway-section" class="hidden">
+          <div class="rw-wrap" id="runway-chart"></div>
+          <div id="runway-table"></div>
         </div>
-        <div class="rw-wrap" id="runway-chart"></div>
-        <div class="legend" id="runway-legend"></div>
-        <div id="runway-table"></div>
       </div>
     </div>
 
@@ -110,89 +139,118 @@
     </div>
 
     <div id="view-tracking" class="hidden">
-      <div class="track-head">
-        <label for="track-sources-sum">Track</label>
-        <details class="bd-dd left-aligned">
-          <summary id="track-sources-sum">Select sources...</summary>
-          <div class="bd-dd-panel">
-            <div class="bd-dd-actions"><a data-target="track-sources" data-act="all">all</a>
-              <a data-target="track-sources" data-act="none">none</a></div>
-            <div class="bd-dd-list" id="track-sources"></div>
+      <!-- The same ribbon as the Overview, for both views: Project, View (the measure acts
+           on the grid and the columns on the timeline, so each view shows only its own),
+           Filter and Show. What it chooses is named in the title above the grid, so a
+           screenshot carries its own context. -->
+      <div class="ribbon">
+        <div class="ribbon-group">
+          <div class="ribbon-items">
+            <select id="tr-project" class="dd-select" aria-label="Project"></select>
+            <a id="tr-folder" href="#" target="_blank" class="hidden tr-link">📁 Drive folder</a>
           </div>
-        </details>
-        <div class="measure-toggle">
-          <button class="measure active" data-measure="cost">Cost</button>
-          <button class="measure" data-measure="income">Income</button>
-          <button class="measure" data-measure="net">Net</button>
+          <div class="ribbon-label">Project</div>
         </div>
-        <span id="track-status" class="track-status"></span>
-        <span id="track-sheet-links" class="track-sheet-links"></span>
+        <div class="ribbon-group">
+          <div class="ribbon-items">
+            <select id="tr-view" class="dd-select" aria-label="View">
+              <option value="grid">Actual and forecast</option>
+              <option value="timeline">Timeline</option>
+            </select>
+            <select id="tr-measure" class="dd-select" aria-label="Measure">
+              <option value="cost">Cost</option>
+              <option value="income">Income</option>
+              <option value="net">Net</option>
+            </select>
+            <details class="bd-dd hidden" id="tr-columns">
+              <summary id="tr-cols-sum">Columns</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-list" id="tr-cols">
+                  <label><input type="checkbox" class="tr-col" value="cost"> Cost</label>
+                  <label><input type="checkbox" class="tr-col" value="income"> Income</label>
+                  <label><input type="checkbox" class="tr-col" value="pl"> Profit &amp; loss</label>
+                </div>
+              </div>
+            </details>
+          </div>
+          <div class="ribbon-label">View</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-items">
+            <!-- Filled from the project's quarters by buildQuarterRange. -->
+            <select id="tr-from" class="dd-select" aria-label="First quarter shown"></select>
+            <span class="bd-label">to</span>
+            <select id="tr-to" class="dd-select" aria-label="Last quarter shown"></select>
+            <details class="bd-dd">
+              <summary id="tr-sources-sum">Funding sources</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-actions"><a data-target="tr-sources" data-act="all">all</a>
+                  <a data-target="tr-sources" data-act="none">none</a></div>
+                <div class="bd-dd-list" id="tr-sources"></div>
+              </div>
+            </details>
+            <details class="bd-dd">
+              <summary id="tr-milestones-sum">Milestones</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-actions"><a data-target="tr-milestones" data-act="all">all</a>
+                  <a data-target="tr-milestones" data-act="none">none</a></div>
+                <div class="bd-dd-list" id="tr-milestones"></div>
+              </div>
+            </details>
+          </div>
+          <div class="ribbon-label">Filter</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-items">
+            <details class="bd-dd">
+              <summary id="tr-show-sum">Secured and Proposed</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-list" id="tr-show">
+                  <label><input type="checkbox" class="tr-status" value="secured" checked> Secured (confirmed)</label>
+                  <label><input type="checkbox" class="tr-status" value="proposed" checked> Proposed</label>
+                  <!-- Unticked, milestones with nothing in the quarters shown and over
+                       before them drop out. -->
+                  <label><input type="checkbox" id="tr-finished" checked> Finished milestones</label>
+                </div>
+              </div>
+            </details>
+          </div>
+          <div class="ribbon-label">Show</div>
+        </div>
       </div>
-      <p class="track-help">
-        Past quarters show <strong>actual</strong> from Xero; the current quarter shows
-        <strong>actual so far</strong>. Future quarters show the <strong>forecast</strong>
-        from each funding source's <em>Forecast</em> tab (with <strong>baseline</strong>
-        underneath). To edit forecasts, click the 📄 link to open the source spreadsheet,
-        update the Forecast tab, then hit <strong>Refresh now</strong>.
-      </p>
-      <div class="track-grid-wrap">
-        <table id="track-grid"></table>
-      </div>
-      <div id="track-totals" class="track-totals"></div>
-    </div>
-
-    <div id="view-planner" class="hidden">
-      <div class="planner-head">
-        <label for="planner-project">Project</label>
-        <select id="planner-project"></select>
-        <a id="planner-project-link" href="#" target="_blank" class="hidden planner-link">📁 Gdrive folder</a>
-        <span id="planner-status" class="track-status"></span>
-      </div>
-
-      <!-- The same controls as the Overview, so the two views answer the same question
-           at different grains: the Overview by financial year, this one by month. -->
-      <div class="bd-controls-wrap planner-controls">
-        <div class="bd-controls">
-          <span class="bd-label">group by:</span>
-          <label><input type="checkbox" class="pl-dim" value="fundingSource"> Funding source</label>
-          <label><input type="checkbox" class="pl-dim" value="status"> Status</label>
-        </div>
-        <div class="bd-controls">
-          <span class="bd-label">show:</span>
-          <label><input type="checkbox" class="pl-status" value="secured" checked> Secured (confirmed)</label>
-          <label><input type="checkbox" class="pl-status" value="proposed" checked> Proposed</label>
-        </div>
-        <div class="bd-controls">
-          <span class="bd-label">columns:</span>
-          <label><input type="checkbox" class="pl-col" value="cost"> Cost</label>
-          <label><input type="checkbox" class="pl-col" value="income"> Income</label>
-          <label><input type="checkbox" class="pl-col" value="pl"> Profit &amp; loss</label>
-        </div>
-        <div class="bd-controls">
-          <span class="bd-label">filter:</span>
-          <details class="bd-dd">
-            <summary id="pl-sources-sum">Funding sources</summary>
-            <div class="bd-dd-panel">
-              <div class="bd-dd-actions"><a data-target="pl-sources" data-act="all">all</a>
-                <a data-target="pl-sources" data-act="none">none</a></div>
-              <div class="bd-dd-list" id="pl-sources"></div>
+      <div class="grid-title-row">
+        <div id="tr-title" class="grid-title"></div>
+        <div class="title-tools">
+          <!-- Loading and errors only. -->
+          <span id="tr-status" class="track-status"></span>
+          <div class="tr-legend hidden" id="tr-legend">
+            <span><i class="sw ok"></i> Secured (confirmed)</span>
+            <span><i class="sw warn"></i> Proposed</span>
+          </div>
+          <span class="help">
+            <button type="button" class="help-btn" aria-expanded="false"
+              aria-controls="tr-help" aria-label="What this tab shows">?</button>
+            <div class="help-pop hidden" id="tr-help">
+              <b>Actual and forecast</b>: past quarters show the <b>actual</b> from Xero, the
+              current quarter the actual so far, and quarters to come the <b>forecast</b> from
+              each funding source's <em>Forecast</em> tab, with the budget underneath.
+              <b>Before</b> lumps every quarter earlier than the first shown, so the totals on
+              the right are always the whole source. <b>Timeline</b>: a bar across the quarters
+              each milestone runs, green when its money is secured, amber when proposed; hover a
+              quarter for its budget and actual. Click a funding source to fold its milestones
+              away. To change a forecast, open the sheet from its 📄 link, edit the Forecast
+              tab, then click <b>Refresh now</b>.
             </div>
-          </details>
+          </span>
         </div>
       </div>
-
-      <div class="planner-legend">
-        <span><i class="sw ok"></i> Secured (confirmed)</span>
-        <span><i class="sw warn"></i> Proposed</span>
-        <span class="muted">Bars show when work is scheduled, month by month. Optional
-          columns total the whole bar: Profit &amp; loss is income minus cost.</span>
-      </div>
-      <div id="planner-grid" class="planner-grid"></div>
+      <div class="track-grid-wrap" id="tr-grid"></div>
+      <div id="tr-totals" class="track-totals"></div>
     </div>
   </div>
 
-  <!-- The runway walk the server runs, sent as its own source, so the chart and its tiles
-       cannot drift from the tested code. See runwayWalk_ in Aggregator.js. -->
+  <!-- The runway walk the server runs, sent as its own source, so the chart cannot drift
+       from the tested code. See runwayWalk_ in Aggregator.js. -->
   <script><?!= runwayWalk_.toString() ?></script>
   <?!= include('JavaScript'); ?>
 </body>

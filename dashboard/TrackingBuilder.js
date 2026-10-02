@@ -1,174 +1,133 @@
 /**
  * TrackingBuilder.js
- * Builds the quarterly tracking grid for one entity (a funding source, or the
- * General project aggregated across sources), merging the three layers:
- *   baseline (frozen budget)  +  actual (Xero)  +  forecast (GM-editable).
+ * Builds the Project tracking payload for one project: every funding source with a
+ * milestone on that project, and for each milestone its budget (frozen Budget tab),
+ * actual (Xero) and forecast (the source's Forecast tab) per quarter, for cost and for
+ * income, plus the quarters its bar spans. One call serves both views of the tab: the
+ * client lays the quarters out as the actual-and-forecast grid or the timeline, picks
+ * the quarters shown, the measure and the filters, and sums.
  *
- * Columns follow the financial year (CONFIG.FINANCIAL_YEAR_START_MONTH) and differ
- * by entity type:
- *   - funding source: an "Up to last FY" aggregate, then this FY's four quarters,
- *     then next FY's quarters if the source extends into it (+ a "Later" aggregate
- *     for anything beyond next FY).
- *   - General project: the elapsed quarters of this FY shown individually, plus a
- *     rolling 1.5-year (CONFIG.GENERAL_FORECAST_QUARTERS) forecast horizon.
+ * Per quarter the "effective" figure is what we expect that quarter to end up as:
+ * actual for past quarters and the current one (still accumulating), else the
+ * Forecast-tab override, else the budget. No entry on the Forecast tab means the budget
+ * carries forward: a forecast is an exception you record when you know something the
+ * budget does not, not mandatory quarterly data entry. Reading 0 there once made every
+ * source with an unmaintained Forecast tab look certain to underspend. The rule lives in
+ * forecastOrBaseline_ so health check D5 applies the same one.
  *
- * Per milestone x quarter the "effective" expected spend is actual for past
- * quarters, else the forecast override (or budget baseline). Aggregate columns are
- * always historical (show actual, not editable). Each milestone also carries one
- * free-text Comment explaining its forecast.
- *
- * `entity` = { id, label, type: 'source' | 'project', source?, status?, project?,
- *              milestones: [{ item, milestone, source, baseline:{q:n}, actual:{q:n} }] }
+ * `tracking` is snapshot.tracking: [{ source, status, sheetUrl, contributionRate,
+ *   milestones: [{ item, milestone, project, baseline:{q:n}, actual, incomeBaseline,
+ *   incomeActual, costForecast, incomeForecast, forecastComment, actualOnly }] }].
+ * `timeline` is snapshot.timeline: [{ project, milestone, segments: [{ source, start:
+ *   'YYYY-MM', end }] }], which gives each bar its first and last quarter.
  */
 
-function composeTracking(entity, currentQi, measure) {
-  measure = measure || 'cost'; // 'cost' | 'income' | 'net'
-  const columns = buildColumns_(entity, currentQi);
+/** The heading General's inflow from the other projects' sources sits under. */
+const CONTRIBUTIONS_HEADING = 'Contributions from other projects';
 
-  // Pick the baseline/actual/forecast maps per measure.
-  function layers_(m) {
-    if (measure === 'income') return { base: m.incomeBaseline || {}, act: m.incomeActual || {},
-      fc: m.incomeForecast || {} };
-    if (measure === 'net') return { base: diffMap_(m.incomeBaseline, m.baseline),
-      act: diffMap_(m.incomeActual, m.actual),
-      fc: diffMap_(m.incomeForecast || {}, m.costForecast || {}) };
-    return { base: m.baseline || {}, act: m.actual || {},
-      fc: m.costForecast || {} };
+function composeProjectTracking(tracking, timeline, project, currentQi) {
+  // Bar extents by source and milestone: the first and last quarter any budget line of
+  // that milestone runs through, from the segments the budget lines were cut into.
+  const span = {};
+  (timeline || []).forEach(t => {
+    if (t.project !== project) return;
+    (t.segments || []).forEach(seg => {
+      if (!seg.start || !seg.end) return;
+      const key = seg.source + '||' + t.milestone;
+      const a = qiOfMonthKey_(seg.start), b = qiOfMonthKey_(seg.end);
+      const s = span[key] || (span[key] = { from: a, to: b });
+      if (a < s.from) s.from = a;
+      if (b > s.to) s.to = b;
+    });
+  });
+
+  const qis = {};
+  const sources = [];
+  (tracking || []).forEach(t => {
+    // A milestone counts toward the project its lines name, not the folder its sheet
+    // sits in, so a WW_25_TOI line tagged General lands under General.
+    const mine = (t.milestones || []).filter(m => m.project === project);
+    if (!mine.length) return;
+    sources.push({
+      source: t.source, status: t.status || null, sheetUrl: t.sheetUrl || null,
+      milestones: mine.map(m => milestoneRow_(m, span[t.source + '||' + m.milestone], currentQi, qis))
+    });
+  });
+
+  // General's inflow from the other projects' sources, by each one's Contribution policy,
+  // under a heading of its own. Each row keeps its source's status, since that is what
+  // says whether the money is secured.
+  if (project === CONFIG.GENERAL_PROJECT) {
+    const statusOf = {};
+    (tracking || []).forEach(t => (statusOf[t.source] = t.status || null));
+    const rows = contributionMilestones_(tracking).map(m => {
+      const row = milestoneRow_(m, span[m.source + '||' + m.milestone], currentQi, qis);
+      row.status = statusOf[m.source];
+      return row;
+    });
+    if (rows.length) {
+      sources.push({ source: CONTRIBUTIONS_HEADING, status: null, sheetUrl: null,
+        contributions: true, milestones: rows });
+    }
   }
 
-  const milestones = entity.milestones.map(m => {
-    const L = layers_(m);
-    const cells = columns.map(col => {
-      if (col.type === 'aggregate') {
-        const baseline = sumOver_(L.base, col.quarters);
-        const actual = sumOver_(L.act, col.quarters);
-        return { type: 'aggregate', baseline: Math.round(baseline), actual: Math.round(actual),
-          forecast: null, effective: Math.round(actual), current: false };
-      }
-      const q = col.label;
-      const baseline = L.base[q] || 0;
-      const actual = L.act[q] || 0;
-      const hasForecast = L.fc[q] !== undefined;
-      // No entry in the funding source's Forecast tab means the budget baseline
-      // carries forward. A forecast is an exception you record when you know
-      // something the budget does not - not mandatory quarterly data entry.
-      // Reading 0 here made every source with an unmaintained Forecast tab appear
-      // certain to underspend, and silently understated org-wide expected spend.
-      // The rule lives in forecastOrBaseline_ so health check D5 applies the same one.
-      const forecast = forecastOrBaseline_(L.fc, L.base, q);
-      const isCurrent = col.qi === currentQi;
-      // Past quarters: effective = actual
-      // Current quarter: effective = actual (partial, still accumulating)
-      // Future quarters: effective = the Forecast-tab override, else the baseline
-      const effective = col.past ? actual : (isCurrent ? actual : forecast);
-      return { type: 'quarter', baseline: Math.round(baseline), actual: Math.round(actual),
-        forecast: Math.round(forecast), hasForecast: hasForecast,
-        effective: Math.round(effective), current: isCurrent };
-    });
-    const baselineTotal = sumField_(cells, 'baseline');
-    const expectedTotal = sumField_(cells, 'effective');
-    return {
-      item: m.item, milestone: m.milestone, source: m.source,
-      comment: m.forecastComment || '',
-      cells: cells,
-      baselineTotal: baselineTotal,
-      actualToDate: sumField_(cells, 'actual'),
-      expectedTotal: expectedTotal,
-      variance: expectedTotal - baselineTotal
+  // Every quarter from the first with anything in it to the last, with no gaps, and the
+  // current financial year whatever the data, so the default range has its columns.
+  const fyStart = Math.floor(currentQi / 4) * 4;
+  for (let qi = fyStart; qi < fyStart + 4; qi++) qis[qi] = true;
+  const all = Object.keys(qis).map(Number);
+  const lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+  const quarters = [];
+  for (let qi = lo; qi <= hi; qi++) {
+    quarters.push({ label: labelOfQi_(qi), past: qi < currentQi, current: qi === currentQi });
+  }
+
+  return { project: project, currentQuarter: labelOfQi_(currentQi), quarters: quarters,
+    sources: sources };
+}
+
+/**
+ * One milestone: its cells by quarter label, each { cost, income } of
+ * { budget, actual, forecast (null when the Forecast tab has no entry), effective },
+ * and the quarters its bar runs from and to. With no segment to go by, the bar spans the
+ * budgeted quarters; an actual-only row (unbudgeted or unassigned spend) has no bar.
+ */
+function milestoneRow_(m, span, currentQi, qis) {
+  const byQ = {};
+  const labels = {};
+  [m.baseline, m.actual, m.incomeBaseline, m.incomeActual, m.costForecast, m.incomeForecast]
+    .forEach(map => Object.keys(map || {}).forEach(q => (labels[q] = true)));
+  Object.keys(labels).forEach(q => {
+    const qi = qiOfLabel_(q);
+    qis[qi] = true;
+    byQ[q] = {
+      cost: cell_(m.baseline, m.actual, m.costForecast, q, qi, currentQi),
+      income: cell_(m.incomeBaseline, m.incomeActual, m.incomeForecast, q, qi, currentQi)
     };
   });
 
-  const colTotals = columns.map((col, i) => ({
-    label: col.label, type: col.type,
-    baseline: sumAt_(milestones, i, 'baseline'),
-    actual: sumAt_(milestones, i, 'actual'),
-    effective: sumAt_(milestones, i, 'effective')
-  }));
-
-  // Collect sheet URLs from the entity's source tracking entries.
-  const sheetUrls = {};
-  (entity.sheetUrls || []).forEach(su => { if (su.source && su.url) sheetUrls[su.source] = su.url; });
-
-  return {
-    id: entity.id, label: entity.label, type: entity.type, measure: measure,
-    status: entity.status || null, project: entity.project || null,
-    currentQuarter: labelOfQi_(currentQi),
-    sheetUrls: sheetUrls,
-    columns: columns.map(c => ({ label: c.label, type: c.type,
-      past: c.past || false, current: c.qi === currentQi })),
-    milestones: milestones,
-    colTotals: colTotals,
-    totals: {
-      baseline: sumField_(milestones, 'baselineTotal'),
-      actual: sumField_(milestones, 'actualToDate'),
-      expected: sumField_(milestones, 'expectedTotal'),
-      variance: sumField_(milestones, 'variance')
+  let from = span ? span.from : null, to = span ? span.to : null;
+  if (from === null) {
+    const budgeted = Object.keys(m.baseline || {}).concat(Object.keys(m.incomeBaseline || {}))
+      .map(qiOfLabel_);
+    if (budgeted.length) {
+      from = Math.min.apply(null, budgeted);
+      to = Math.max.apply(null, budgeted);
     }
+  }
+  return {
+    item: m.item, milestone: m.milestone, comment: m.forecastComment || '',
+    actualOnly: !!m.actualOnly, byQ: byQ,
+    from: from === null ? null : labelOfQi_(from),
+    to: to === null ? null : labelOfQi_(to)
   };
 }
 
-/** Element-wise (a - b) over the union of quarter keys. */
-function diffMap_(a, b) {
-  a = a || {}; b = b || {};
-  const out = {};
-  Object.keys(a).forEach(q => (out[q] = (out[q] || 0) + a[q]));
-  Object.keys(b).forEach(q => (out[q] = (out[q] || 0) - b[q]));
-  return out;
-}
-
-/** Generate the ordered column spec for an entity. */
-function buildColumns_(entity, currentQi) {
-  const dataQis = collectDataQis_(entity.milestones);
-  const fyStart = Math.floor(currentQi / 4) * 4; // qi of this FY's Q1
-  const cols = [];
-
-  if (entity.type === 'project') {
-    // Elapsed quarters of this FY + rolling 1.5-year forecast horizon.
-    const last = currentQi + (CONFIG.GENERAL_FORECAST_QUARTERS || 6);
-    for (let qi = fyStart; qi <= last; qi++) cols.push(quarterCol_(qi, currentQi));
-    return cols;
-  }
-
-  // funding source
-  const prior = dataQis.filter(qi => qi < fyStart).sort((a, b) => a - b);
-  if (prior.length) {
-    cols.push({ type: 'aggregate', label: 'Up to last FY',
-      quarters: prior.map(labelOfQi_), qi: prior[prior.length - 1] });
-  }
-  for (let qi = fyStart; qi <= fyStart + 3; qi++) cols.push(quarterCol_(qi, currentQi)); // this FY
-
-  const maxQi = dataQis.length ? Math.max.apply(null, dataQis) : fyStart + 3;
-  if (maxQi >= fyStart + 4) { // extends into next FY
-    for (let qi = fyStart + 4; qi <= fyStart + 7; qi++) cols.push(quarterCol_(qi, currentQi));
-    const later = dataQis.filter(qi => qi > fyStart + 7).sort((a, b) => a - b);
-    if (later.length) {
-      cols.push({ type: 'aggregate', label: 'Later', quarters: later.map(labelOfQi_),
-        qi: later[later.length - 1] });
-    }
-  }
-  return cols;
-}
-
-function quarterCol_(qi, currentQi) {
-  return { type: 'quarter', qi: qi, label: labelOfQi_(qi), past: qi < currentQi };
-}
-
-function collectDataQis_(milestones) {
-  const set = {};
-  milestones.forEach(m => {
-    [m.baseline, m.actual, m.costForecast, m.incomeForecast].forEach(map => {
-      if (map) Object.keys(map).forEach(q => (set[qiOfLabel_(q)] = true));
-    });
-  });
-  return Object.keys(set).map(Number);
-}
-
-function sumOver_(map, quarterLabels) {
-  return quarterLabels.reduce((t, q) => t + (map[q] || 0), 0);
-}
-function sumField_(arr, field) {
-  return Math.round(arr.reduce((t, x) => t + (x[field] || 0), 0));
-}
-function sumAt_(milestones, colIndex, field) {
-  return Math.round(milestones.reduce((t, m) => t + (m.cells[colIndex][field] || 0), 0));
+function cell_(base, act, fc, q, qi, currentQi) {
+  const budget = Math.round((base || {})[q] || 0);
+  const actual = Math.round((act || {})[q] || 0);
+  const entered = fc && fc[q] !== undefined;
+  const forecast = Math.round(forecastOrBaseline_(fc, base, q));
+  return { budget: budget, actual: actual, forecast: entered ? forecast : null,
+    effective: qi <= currentQi ? actual : forecast };
 }
