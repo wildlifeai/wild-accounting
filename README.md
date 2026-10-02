@@ -2,7 +2,9 @@
 
 Wildlife.ai's budgeting and accounting tools. The main one is the **Funding Cockpit**: a
 dashboard that puts every funding source's budget next to what Xero says was actually spent and
-received, and shows how long the money lasts.
+received, and shows how long the money lasts. Three tabs: **Overview** (the organisation's
+figures and runway), **Project tracking** (one project's funding sources quarter by quarter, as
+actual and forecast or as a timeline) and **Health** (what needs fixing in a sheet or in Xero).
 
 ## Open the Funding Cockpit
 

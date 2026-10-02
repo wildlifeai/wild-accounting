@@ -35,9 +35,9 @@ in (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
   clean. Each finding says what is wrong, where, the amount at stake and what to do, with a
   link to the sheet. [Health checks](HEALTH_CHECKS.md) explains every one.
 
-The **?** on each tab opens a short reminder of what is on screen; this guide has the rest. The
-title above the Project tracking grid names what the controls chose, so a screenshot of it says
-what it is.
+Each tab's controls sit in a ribbon of dropdown boxes, grouped and named underneath. The title
+under the ribbon names what was chosen, so a screenshot says what it is, and the **?** at its
+right opens a short reminder of what is on screen; this guide has the rest.
 
 ## What you're looking at (Overview)
 
