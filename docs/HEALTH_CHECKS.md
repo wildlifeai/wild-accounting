@@ -119,6 +119,10 @@ row has any entry, its blank cells count as 0 for every quarter the tab has a co
 D1 to D4 and D6 leave out spend on an archived funding source or project: no total or grid
 includes it, so coding it better would change nothing.
 
+D1, D2, D3, D6 and F6 look only at transactions dated in the current financial year: they ask for
+a change in Xero, and earlier years' books are closed. D4 looks at every year, because its spend
+is in the totals whatever its date and its fix is usually in Drive.
+
 ### E. Reconciliation
 
 | id | Sev | Check | Action shown |

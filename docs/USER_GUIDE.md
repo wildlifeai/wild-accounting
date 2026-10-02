@@ -180,7 +180,8 @@ names any the journals defer that are not marked.
 The Health tab reports what is missing: spend with no Projects tag (D1), no Funding source tag
 (D2), no item code (D3), a Funding source with no budget sheet (D4), and spend still arriving
 after a grant has ended (D6), which is usually a stale repeating template. **Show the lines**
-under each lists the transactions to fix in Xero.
+under each lists the transactions to fix in Xero. All but D4 look at this financial year only,
+since earlier years' books are closed.
 
 ## Archiving a funding source
 
