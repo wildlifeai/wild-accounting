@@ -82,7 +82,7 @@ Apps Script web app (HtmlService)  ->  staff open one URL, Google login
   rebuilt every 6h by a time trigger, and by "Refresh now"
         |
         v
-  Overview, Quarterly tracking, Project planner, Health
+  Overview, Project tracking, Health
 ```
 
 **Why a cache.** Crawling the budget sheets plus a full Xero pull takes about a minute and can
@@ -98,9 +98,9 @@ snapshot that the dashboard reads instantly. The data model it relies on is in `
 | `XeroClient.js` | Xero OAuth2, and fetching actuals as normalised lines |
 | `BudgetReader.js` | Walk Drive, parse each sheet's `Funding_info`, `Budget` and `Forecast` tabs |
 | `ForecastEngine.js` | Pure forecasting maths and quarter helpers, unit-testable |
-| `Aggregator.js` | Join budgets and actuals into the snapshot: breakdown rows, contribution, tracking, planner, runway |
+| `Aggregator.js` | Join budgets and actuals into the snapshot: breakdown rows, contribution, tracking, timeline, runway |
 | `Permissions.js` | The Permissions tab of the Cockpit Settings sheet: which projects each person may see |
-| `TrackingBuilder.js` | Merge budget, actual and forecast into the quarterly grid |
+| `TrackingBuilder.js` | One project's sources and milestones by quarter, budget, actual and forecast, for both views of Project tracking |
 | `HealthCheck.js` | Turns silent wrongness into named findings. Pure, so it runs offline |
 | `Snapshot.js` | The cache in Drive, the refresh trigger, and refresh progress |
 | `WebApp.js` | `doGet`, the client API (`google.script.run`), per-person filtering |

@@ -246,12 +246,12 @@ function buildSnapshot() {
   const breakdownRows = buildBreakdownRows_(budgetByKey, actualByKey, actualByKeyFY,
                                             actualByKeyQ, sourceStatus);
 
-  // Quarterly tracking grid (baseline + actual per funding source / milestone /
+  // Project tracking grid (baseline + actual per funding source / milestone /
   // quarter). Forecast is layered on at view time from the live Forecast sheet,
   // so GM edits show immediately without a full refresh.
   const tracking = buildTracking_(judged, actualLines);
 
-  // Project planner timeline: milestone segments color-coded by funding status.
+  // Project tracking timeline: milestone segments color-coded by funding status.
   const timeline = buildTimeline_(planned, actualLines, itemToMilestone, fy, now);
 
   // Funded runway: cumulative income against cumulative spend, month by month.
@@ -604,7 +604,7 @@ function chooseExclusivityReps_(budgets) {
 }
 
 /**
- * Build timeline data for the Project Planner view.
+ * Build timeline data for Project tracking: the quarters each bar spans come from here.
  * For each (project, milestone) pair, produces an array of funding-source segments
  * with date ranges and monthly cost distributions, plus actual spend to date.
  * The UI renders these as a Gantt chart with green (secured), amber (proposed),
@@ -621,7 +621,7 @@ function buildTimeline_(budgets, actualLines, itemToMilestone, fy, now) {
       const pmKey = pName + '||' + mile;
       if (!byProjMile[pmKey]) byProjMile[pmKey] = { project: pName, milestone: mile, segments: [], actualExpense: 0 };
 
-      // Income as well as cost, so the planner can offer Cost / Income / Profit and loss
+      // Income as well as cost, so the timeline can offer Cost / Income / Profit and loss
       // per milestone. Profit and loss is derived in the client rather than stored: it is
       // income minus cost, and storing a third series invites the three to disagree.
       const monthlyCost = distributeByMonth_([l], 'cost');
@@ -655,7 +655,7 @@ function buildTimeline_(budgets, actualLines, itemToMilestone, fy, now) {
   // General's contribution: one row per contributing source, carrying the share of that
   // source's income its Contribution policy sends to General, from lines not already on
   // General. One row per source rather than one row of many segments, because the
-  // planner reads each month from a single segment and overlapping sources would hide
+  // timeline reads each month from a single segment and overlapping sources would hide
   // one another. Income, not cost: this used to be every source's whole margin entered
   // as cost, which both ignored the policy and turned General's inflow into spend.
   budgets.forEach(src => {
