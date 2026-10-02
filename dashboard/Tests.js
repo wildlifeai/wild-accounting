@@ -339,6 +339,25 @@ function runTests() {
       spend_(900, '2026-07-01', { item: '', fundingSource: CONFIG.ARCHIVE_PREFIX + 'General' }),
       spend_(900, '2026-07-01', { item: '', project: CONFIG.ARCHIVE_PREFIX + 'Old' })
     ]).indexOf('D3') === -1);
+  // Earlier years' books are closed, so the checks that ask for a Xero change look at this
+  // financial year only. NOW is 14 Aug 2026, so the year began on 1 Apr 2026.
+  var lastFY = buildHealth([sheet_()], [
+    spend_(62, '2026-03-24', { item: '' }),
+    spend_(70, '2026-03-31', { project: '' }),
+    spend_(80, '2026-03-31', { fundingSource: '' })
+  ], { now: NOW, xeroConnected: true }).map(function (f) { return f.id; });
+  check('D1, D2 and D3 leave out lines from before this financial year',
+    lastFY.indexOf('D1') === -1 && lastFY.indexOf('D2') === -1 && lastFY.indexOf('D3') === -1);
+  check('D3 still counts a line from the first day of this financial year',
+    idsFor([sheet_()], [spend_(62, '2026-04-01', { item: '' })]).indexOf('D3') !== -1);
+  check('D4 still counts every year: its spend is in the totals whatever its date',
+    idsFor([sheet_()], [spend_(900, '2025-06-01', { fundingSource: 'XXX_27_TYPO' })])
+      .indexOf('D4') !== -1);
+  check('D6 leaves out spend after the end that falls before this financial year',
+    idsFor([sheet_({ metadata: { 'funding end': '31/Dec/25' } })],
+      [spend_(500, '2026-02-01')]).indexOf('D6') === -1 &&
+    idsFor([sheet_({ metadata: { 'funding end': '31/Dec/25' } })],
+      [spend_(500, '2026-05-01')]).indexOf('D6') !== -1);
   check('D1 leaves out archived spend too',
     idsFor([sheet_()], [spend_(900, '2026-07-01',
       { project: '', fundingSource: CONFIG.ARCHIVE_PREFIX + 'General' })]).indexOf('D1') === -1);
@@ -859,6 +878,16 @@ function runTests() {
   check('F6 lists the documents, largest first',
     f6.lines.length === 2 && f6.lines[0].document === 'Bill B-12' &&
     f6.lines[0].contact === 'Acme Ltd' && f6.lines[1].date === '2026-06-02');
+  var oldDraft = unpostedDoc_('Invoices', { Type: 'ACCPAY', Status: 'DRAFT',
+    DateString: '2026-03-20T00:00:00' }, 5000);
+  var f6Old = function (docs) {
+    return hOf(buildHealth([], [], { now: d(2026, 6, 15), xeroConnected: true,
+      exclusion: { count: 0, total: 0 }, secretsMissing: [],
+      unposted: { count: docs.length, total: 0, docs: docs } }), 'F6');
+  };
+  check('F6 leaves out drafts dated before this financial year, from the count and total',
+    !f6Old([oldDraft]) && f6Old([oldDraft, draftBill]).amount === 1000 &&
+    /^1 document/.test(f6Old([oldDraft, draftBill]).detail));
   var hClean = buildHealth([], [], { now: d(2026, 6, 15), xeroConnected: true,
     exclusion: { count: 0, total: 0 }, unposted: { count: 0, total: 0 },
     secretsMissing: [] });

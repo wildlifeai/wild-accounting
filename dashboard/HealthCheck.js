@@ -198,6 +198,11 @@ function buildHealth(budgets, actualLines, ctx) {
   // Passed in rather than read from the clock, so the date-based checks (C4, C5, D5, D6,
   // E2) are reproducible in a test.
   const now = ctx.now ? new Date(ctx.now) : null;
+  // D1, D2, D3, D6 and F6 ask for a Xero transaction to be changed, and earlier financial
+  // years' books are closed, so those checks look at this year's only. D4 still looks at
+  // every year: its fix is usually in Drive, and its spend is in the totals whatever its date.
+  const fyStart = now ? fyBounds_(now).start : null;
+  const thisFY = l => !fyStart || !l.date || new Date(l.date) >= fyStart;
 
   function add(id, fields) {
     const f = finding_(id, fields);
@@ -416,8 +421,8 @@ function buildHealth(budgets, actualLines, ctx) {
     // D3: spend with no item code falls out of the quarterly grid entirely. Journal lines
     // are left out: Xero journals cannot carry a Product/Service, so the advice would be
     // impossible to follow. So is archived spend, which no total or grid counts anyway.
-    const noItem = (actualLines || []).filter(l =>
-      l.kind === 'expense' && !l.journal && !archivedLine_(l) && !itemCode_(l.item));
+    const noItem = (actualLines || []).filter(l => l.kind === 'expense' && !l.journal &&
+      !archivedLine_(l) && thisFY(l) && !itemCode_(l.item));
     if (noItem.length) {
       add('D3', withLines_({ amount: Math.round(sumAmount_(noItem)),
         detail: noItem.length + ' expense line(s) carry no Product/Service, so they sit ' +
@@ -436,7 +441,7 @@ function buildHealth(budgets, actualLines, ctx) {
         return;
       }
       const end = parseSheetDate_((byName[fs].metadata || {})['funding end']);
-      if (end && l.date && new Date(l.date) > end) {
+      if (end && l.date && new Date(l.date) > end && thisFY(l)) {
         (afterEnd[fs] = afterEnd[fs] || []).push(l);
       }
     });
@@ -584,7 +589,7 @@ function buildHealth(budgets, actualLines, ctx) {
   // spend is left out, as in D3: no total counts it, tagged or not. ---
   const noProject = [], noSource = [];
   (actualLines || []).forEach(l => {
-    if (l.kind !== 'expense' || archivedLine_(l)) return;
+    if (l.kind !== 'expense' || archivedLine_(l) || !thisFY(l)) return;
     if (!l.project) noProject.push(l);
     else if (!l.fundingSource) noSource.push(l);
   });
@@ -612,9 +617,12 @@ function buildHealth(budgets, actualLines, ctx) {
     (actualLines || []).length + ' actual line(s) after excluding ' + excl.count +
     ' on balance-sheet accounts (' + excl.total + ')' });
   const unp = ctx.unposted || { count: 0, total: 0 };
-  if (unp.count) {
-    add('F6', withLines_({ detail: unp.count + ' document(s) in draft or awaiting approval, ' +
-      'totalling ' + Math.round(unp.total), amount: Math.round(unp.total) }, unp.docs || []));
+  const docs = unp.docs ? unp.docs.filter(thisFY) : null;
+  const unpCount = docs ? docs.length : unp.count;
+  const unpTotal = docs ? sumAmount_(docs) : unp.total;
+  if (unpCount) {
+    add('F6', withLines_({ detail: unpCount + ' document(s) in draft or awaiting approval, ' +
+      'totalling ' + Math.round(unpTotal), amount: Math.round(unpTotal) }, docs || []));
   }
 
   out.sort(healthOrder_);
