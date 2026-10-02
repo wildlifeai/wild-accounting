@@ -60,8 +60,10 @@
   /* The title over a grid: what the controls chose, so a screenshot of the grid says what
      it is. */
   .grid-title { font-size: 14px; font-weight: 500; margin: 0 0 8px; min-height: 21px; }
-  .grid-title-row { display: flex; flex-wrap: wrap; align-items: baseline;
-    justify-content: space-between; gap: 6px 16px; }
+  .grid-title-row { display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: space-between; gap: 6px 16px; margin-bottom: 8px; }
+  .grid-title-row .grid-title { margin-bottom: 0; }
+  .title-tools { display: flex; align-items: center; gap: 14px; }
 
   /* Planner: the optional Cost / Income / Profit and loss columns sit between the label
      and the month grid, so they stay readable when the Gantt scrolls sideways. */
@@ -79,8 +81,13 @@
   .badge-error { background: var(--red); }
   .badge-warning { background: var(--amber); }
 
-  .fy-select { font: inherit; font-size: 13px; background: var(--bg); color: var(--text);
-    border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+  /* Every dropdown box looks the same, a native select or a filter list: the same
+     border, padding and the same grey arrow as the .bd-dd summary draws. */
+  .dd-select { appearance: none; -webkit-appearance: none; font: inherit; font-size: 13px;
+    color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+    padding: 4px 24px 4px 10px; cursor: pointer; line-height: 1.5;
+    background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0h8L4 5z' fill='%23888780'/%3E%3C/svg%3E") no-repeat right 9px center; }
+  .dd-select:focus-visible { outline: 2px solid var(--green); outline-offset: -1px; }
 
   /* Refresh progress. A refresh is around a minute, almost all of it opening one
      spreadsheet at a time, so the wait has to look bounded rather than broken.
@@ -110,7 +117,7 @@
 
   /* Runway chart. Marks are thin, chrome is hairline, and the only loud thing is the data. */
   .rw-wrap { position: relative; background: var(--bg); border: 1px solid var(--line);
-    border-radius: 10px; padding: 12px 8px 4px; margin-top: 12px; outline: none; }
+    border-radius: 10px; padding: 12px 8px 4px; margin-top: 16px; outline: none; }
   .rw-wrap:focus-visible { box-shadow: 0 0 0 2px var(--green); }
   .rw-wrap svg { display: block; width: 100%; height: auto; font-size: 11px; }
   .rw-axis { fill: var(--hint); }
@@ -181,12 +188,16 @@
   .coverage { font-size: 13px; color: var(--muted); margin: 0 0 16px; display: flex;
     flex-wrap: wrap; gap: 8px 18px; }
 
-  /* One toolbar per tab: every control on a line, wrapping on a narrow screen. Group by
-     sits above the chart on its own, since it changes the chart alone. */
-  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px;
-    margin: 0 0 14px; font-size: 13px; }
-  .toolbar > label { color: var(--muted); }
-  .rw-controls { margin: 0; flex-wrap: wrap; }
+  /* Each tab's controls as a ribbon: groups side by side, each named underneath, a
+     hairline between them, wrapping on a narrow screen. */
+  .ribbon { display: flex; flex-wrap: wrap; align-items: stretch; background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 4px 2px; margin: 0 0 14px; }
+  .ribbon-group { display: flex; flex-direction: column; justify-content: space-between;
+    gap: 6px; padding: 6px 16px; border-right: 1px solid var(--line); }
+  .ribbon-group:last-child { border-right: none; }
+  .ribbon-items { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    font-size: 13px; min-height: 30px; }
+  .ribbon-label { font-size: 11px; color: var(--hint); text-align: center; }
   .bd-controls { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--text); }
   .bd-controls .bd-label { color: var(--muted); }
   .bd-controls label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
@@ -212,14 +223,6 @@
   .tab:hover { background: none; color: var(--text); }
   .tab.active { color: var(--text); border-bottom-color: var(--green); }
 
-  .measure-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .measure-toggle .measure { border: none; border-radius: 0; padding: 6px 12px; font-size: 13px;
-    background: var(--bg); color: var(--muted); border-left: 1px solid var(--line); }
-  .measure-toggle .measure:first-child { border-left: none; }
-  .measure-toggle .measure.active { background: var(--green); color: #fff; }
-  .measure-toggle .measure:hover:not(.active) { background: var(--bg2); }
-  select { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--line);
-    border-radius: 8px; background: var(--bg); color: var(--text); }
   .track-status { font-size: 12px; color: var(--hint); }
   .cmt-text { font-size: 12px; color: var(--muted); }
   /* A funding source's heading row, in both views: its sheet link, its status, its sums. */
