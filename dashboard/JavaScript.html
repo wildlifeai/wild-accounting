@@ -210,12 +210,14 @@
   var fySelect = null;
   var fyChosen = false; // true once the user picks a year; until then, the current FY
 
+  var fyYears = []; // the years the selector lists, the current FY onwards
+
   function fySelectEl() {
     if (!fySelect) {
       fySelect = document.createElement('select');
       fySelect.id = 'bd-fy';
-      fySelect.className = 'fy-select';
-      fySelect.innerHTML = '<option value="all">All time</option>';
+      fySelect.className = 'dd-select';
+      fySelect.setAttribute('aria-label', 'Financial year');
       // Changing the year only re-totals per-quarter buckets already in the snapshot,
       // so no server round trip is needed.
       fySelect.addEventListener('change', function () { fyChosen = true; renderOverview(); });
@@ -224,38 +226,32 @@
     return fySelect;
   }
 
-  // "26/27 (Apr 2026 to Mar 2027)": the option says which months it covers, since there
-  // is no sentence under the toolbar to say so. The year starts in the month the
-  // snapshot's current financial year starts.
-  function fyOptionLabel(fyLabel, c) {
-    var m = c && c.fyStart ? parseInt(zoned(c.fyStart, { month: 'numeric' }).month, 10) : 4;
-    var y = 2000 + parseInt(fyLabel.slice(0, 2), 10);
-    var endM = ((m + 10) % 12) + 1, endY = m === 1 ? y : y + 1;
-    return fyLabel + ' (' + MONTHS[m - 1] + ' ' + y + ' to ' + MONTHS[endM - 1] + ' ' + endY + ')';
+  // The years the cards total: one, or every year the selector lists.
+  function selectedFys() {
+    var v = fySelect ? fySelect.value : 'all';
+    return v === 'all' ? fyYears : [v];
   }
 
-  function selectedFy() {
-    return fySelect ? fySelect.value : 'all';
+  // "26/27", "26/27 and 27/28", "26/27 to 28/29".
+  function fysLabel(fys) {
+    if (fys.length <= 1) return fys[0] || '';
+    if (fys.length === 2) return fys.join(' and ');
+    return fys[0] + ' to ' + fys[fys.length - 1];
   }
 
-  function sumAllQ(byQuarter) {
-    var total = 0;
-    Object.keys(byQuarter || {}).forEach(function (q) { total += byQuarter[q]; });
-    return total;
-  }
-
-  function sumFy(byQuarter, fyLabel) {
+  function sumFys(byQuarter, fys) {
     var total = 0;
     Object.keys(byQuarter || {}).forEach(function (q) {
-      if (fyOf(q) === fyLabel) total += byQuarter[q];
+      if (fys.indexOf(fyOf(q)) !== -1) total += byQuarter[q];
     });
     return total;
   }
 
   /**
-   * Populate the selector from the quarters the snapshot covers, the current FY onwards.
-   * A finished year is still inside "All time"; on its own it answers nothing the
-   * Overview is for. Labels are "26/27", so they order as strings.
+   * Populate the selector from the quarters the snapshot covers, the current FY onwards:
+   * each year on its own, and when there is more than one, all of them together. A
+   * finished year answers nothing the Overview is for. Labels are "26/27", so they order
+   * as strings.
    */
   function buildFySelector(snap) {
     var sel = fySelectEl();
@@ -265,24 +261,26 @@
       var fy = fyOf(q);
       if (fy >= current && years.indexOf(fy) === -1) years.push(fy);
     });
+    fyYears = years;
     var keep = sel.value;
-    sel.innerHTML = '<option value="all">All time</option>' +
-      years.map(function (y) {
-        return '<option value="' + esc(y) + '">' + esc(fyOptionLabel(y, snap.coverage)) + '</option>';
-      }).join('');
+    sel.innerHTML = years.map(function (y) {
+        return '<option value="' + esc(y) + '">' + esc(y) + ' Financial year</option>';
+      }).join('') +
+      (years.length > 1
+        ? '<option value="all">' + esc(fysLabel(years)) + ' Financial years</option>' : '');
     // Keep a year the user picked across refreshes; otherwise the current FY, or the
     // earliest year to come if the current one has nothing in it.
-    if (fyChosen && (keep === 'all' || years.indexOf(keep) !== -1)) sel.value = keep;
+    if (fyChosen && ((keep === 'all' && years.length > 1) || years.indexOf(keep) !== -1)) sel.value = keep;
     else if (years.indexOf(current) !== -1) sel.value = current;
     else if (years.length) sel.value = years[0];
   }
 
-  // The Organisation overview cards: totals for the chosen year over whatever show and
-  // filter select, from the snapshot's per-quarter breakdown rows.
+  // The Overview cards: totals for the chosen years over whatever show and filter
+  // select, from the snapshot's per-quarter breakdown rows.
   function renderOverview() {
     if (!snapshot) return;
-    var fy = selectedFy();
-    var isFy = (fy !== 'all');
+    var fys = selectedFys();
+    var fy = fysLabel(fys);
     var statuses = selectedStatuses();
     var projects = selectedValues('filter-projects');
     var sources = selectedValues('filter-sources');
@@ -297,23 +295,49 @@
 
     var totBudget = 0, totSecured = 0, totActual = 0, totWeighted = 0;
     rows.forEach(function (r) {
-      totBudget += isFy ? sumFy(r.budgetByQ, fy) : r.budget;
-      totSecured += isFy ? sumFy(r.securedByQ, fy) : r.secured;
-      totActual += isFy ? sumFy(r.actualByQ, fy) : r.actual;
-      // Expected income has no all-time scalar on the row, so sum every quarter for the
-      // all-time view rather than passing a null year into sumFy, which matches nothing.
-      totWeighted += isFy ? sumFy(r.weightedByQ, fy) : sumAllQ(r.weightedByQ);
+      totBudget += sumFys(r.budgetByQ, fys);
+      totSecured += sumFys(r.securedByQ, fys);
+      totActual += sumFys(r.actualByQ, fys);
+      totWeighted += sumFys(r.weightedByQ, fys);
     });
+
+    // The title: the years as the option reads, the statuses, and which projects and
+    // sources, by name when a few are picked and by count otherwise.
+    var sel = fySelectEl();
+    function picked(id, noun) {
+      var all = document.querySelectorAll('#' + id + ' input').length;
+      var on = selectedValues(id);
+      if (on.length === all) return 'all ' + noun;
+      if (!on.length) return 'no ' + noun;
+      return on.length <= 3 ? on.join(', ') : on.length + ' of ' + all + ' ' + noun;
+    }
+    document.getElementById('ov-title').textContent = [
+      sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '',
+      statusText(statuses),
+      picked('filter-projects', 'projects'),
+      picked('filter-sources', 'funding sources')
+    ].join(' · ');
 
     // With the plan running from today, the cost card is actual spend so far plus what is
     // left, so it is named for that rather than for the budget.
     var costName = snapshot.planBasis === 'remaining' ? 'expected cost' : 'forecast budget';
     document.getElementById('totals').innerHTML =
-      card((isFy ? fy + ' ' : 'Total ') + costName, fmtMoney(totBudget)) +
-      card((isFy ? fy + ' secured funding' : 'Secured funding'), fmtMoney(totSecured)) +
-      card((isFy ? fy + ' actual' : 'Actual to date'), fmtMoney(totActual)) +
-      gapCard(isFy ? fy + ' unsecured' : 'Unsecured', totBudget - totSecured, 'danger') +
-      gapCard(isFy ? fy + ' after pipeline' : 'After pipeline', totBudget - totWeighted, 'amber');
+      card(fy + ' ' + costName, fmtMoney(totBudget)) +
+      card(fy + ' secured funding', fmtMoney(totSecured)) +
+      card(fy + ' actual', fmtMoney(totActual)) +
+      gapCard(fy + ' unsecured', totBudget - totSecured, 'danger') +
+      gapCard(fy + ' after pipeline', totBudget - totWeighted, 'amber');
+  }
+
+  // "Secured and Proposed", "Secured (confirmed) only", "Nothing shown": the Show box
+  // and the titles read the same.
+  function statusText(statuses) {
+    if (statuses.length === 2) return 'Secured and Proposed';
+    return statuses.length ? statusLabel(statuses[0]) + ' only' : 'Nothing shown';
+  }
+  function updateStatusSummary() {
+    var sum = document.getElementById('filter-status-sum');
+    if (sum) sum.textContent = statusText(selectedStatuses());
   }
 
   // Cost minus income. A shortfall is a gap, in colour; more income than cost is a
@@ -332,7 +356,9 @@
   // Everything here is arithmetic over the snapshot already in the page, so no control
   // needs a server round trip. Show changes the cards and the runway; group by the chart.
   Array.prototype.slice.call(document.querySelectorAll('.bd-status'))
-    .forEach(function (c) { c.addEventListener('change', function () { renderOverview(); renderRunway(); }); });
+    .forEach(function (c) { c.addEventListener('change', function () {
+      updateStatusSummary(); renderOverview(); renderRunway(); }); });
+  updateStatusSummary();
   Array.prototype.slice.call(document.querySelectorAll('.rw-group'))
     .forEach(function (c) { c.addEventListener('change', renderRunway); });
 
@@ -436,8 +462,7 @@
   }
 
   function runwayGroupBy() {
-    var r = document.querySelector('.rw-group:checked');
-    return r ? r.value : 'status';
+    return document.getElementById('rw-group').value || 'status';
   }
 
   /** The runway parts the show and filter controls select. */
@@ -940,31 +965,33 @@
       renderTracking();
     });
   });
-  Array.prototype.slice.call(document.querySelectorAll('.tr-status, .tr-col, #tr-hide-finished'))
-    .forEach(function (c) { c.addEventListener('change', renderTracking); });
-  Array.prototype.slice.call(document.querySelectorAll('.measure')).forEach(function (b) {
-    b.addEventListener('click', function () {
-      trMeasure = b.dataset.measure;
-      document.querySelectorAll('.measure').forEach(function (x) {
-        x.classList.toggle('active', x === b);
-      });
-      renderTracking();
-    });
+  // The Show and Columns boxes say what they hold, as the Overview's Show box does.
+  function updateTrShowSummary() {
+    var statuses = Array.prototype.slice.call(document.querySelectorAll('.tr-status:checked'))
+      .map(function (c) { return c.value; });
+    document.getElementById('tr-show-sum').textContent = statusText(statuses) +
+      (document.getElementById('tr-finished').checked ? '' : ' · finished hidden');
+    var cols = Array.prototype.slice.call(document.querySelectorAll('.tr-col:checked'))
+      .map(function (c) { return c.parentElement.textContent.trim(); });
+    document.getElementById('tr-cols-sum').textContent = cols.length ? cols.join(', ') : 'Columns';
+  }
+  updateTrShowSummary();
+  Array.prototype.slice.call(document.querySelectorAll('.tr-status, .tr-col, #tr-finished'))
+    .forEach(function (c) { c.addEventListener('change', function () {
+      updateTrShowSummary(); renderTracking(); }); });
+  document.getElementById('tr-measure').addEventListener('change', function () {
+    trMeasure = this.value;
+    renderTracking();
   });
   // The measure belongs to the grid and the columns to the timeline, so each view shows
-  // only the controls that act on it.
-  Array.prototype.slice.call(document.querySelectorAll('.tr-view')).forEach(function (b) {
-    b.addEventListener('click', function () {
-      trView = b.getAttribute('data-tr-view');
-      document.querySelectorAll('.tr-view').forEach(function (x) {
-        x.classList.toggle('active', x === b);
-      });
-      var grid = trView === 'grid';
-      document.getElementById('tr-measure').classList.toggle('hidden', !grid);
-      document.getElementById('tr-columns').classList.toggle('hidden', grid);
-      document.getElementById('tr-legend').classList.toggle('hidden', grid);
-      renderTracking();
-    });
+  // only the box that acts on it.
+  document.getElementById('tr-view').addEventListener('change', function () {
+    trView = this.value;
+    var grid = trView === 'grid';
+    document.getElementById('tr-measure').classList.toggle('hidden', !grid);
+    document.getElementById('tr-columns').classList.toggle('hidden', grid);
+    document.getElementById('tr-legend').classList.toggle('hidden', grid);
+    renderTracking();
   });
 
   // "26/27 Q3" as a number that orders: the server's qiOfLabel_.
@@ -1001,7 +1028,7 @@
       .map(function (c) { return c.value; });
     var sources = selectedValues('tr-sources');
     var names = selectedValues('tr-milestones');
-    var hideFinished = document.getElementById('tr-hide-finished').checked;
+    var hideFinished = !document.getElementById('tr-finished').checked;
     var fromQ = document.getElementById('tr-from').value, toQ = document.getElementById('tr-to').value;
     var fromQi = qiOf(fromQ), toQi = qiOf(toQ);
     var inRange = t.quarters.filter(function (q) {
@@ -1042,8 +1069,7 @@
     // screenshot: project, status, measure, quarters and how many milestones.
     document.getElementById('tr-title').textContent = [
       t.project,
-      statuses.length === 2 ? 'Secured and Proposed'
-        : statuses.length ? statusLabel(statuses[0]) + ' only' : 'nothing shown',
+      statusText(statuses),
       trView === 'grid' ? trMeasure.charAt(0).toUpperCase() + trMeasure.slice(1) : null,
       fromQ + ' to ' + toQ,
       (shown < total ? shown + ' of ' + total : shown) + (total === 1 ? ' milestone' : ' milestones')

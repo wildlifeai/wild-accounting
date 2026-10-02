@@ -41,68 +41,90 @@
 
     <div id="view-overview">
       <div class="overview-section">
-        <!-- One toolbar, no heading. The year selector (filled by buildFySelector) applies
-             to the cards only: runway always runs from today. Show and filter apply to
-             everything on the tab, the cards and the runway alike. -->
-        <div class="toolbar">
-          <span id="fy-slot"></span>
-          <div class="bd-controls">
-            <span class="bd-label">show:</span>
-            <label><input type="checkbox" class="bd-status" value="secured" checked> Secured (confirmed)</label>
-            <label><input type="checkbox" class="bd-status" value="proposed" checked> Proposed</label>
+        <!-- The controls as a ribbon: three groups, each named underneath. Filter (the year,
+             filled by buildFySelector, applies to the cards only since runway always runs
+             from today; projects and sources apply to everything), Group by (the chart
+             only: Status draws the three scenario lines, any other choice one expected-case
+             line per group) and Show (everything on the tab). -->
+        <div class="ribbon">
+          <div class="ribbon-group">
+            <div class="ribbon-items">
+              <span id="fy-slot"></span>
+              <details class="bd-dd left-aligned">
+                <summary id="filter-projects-sum">Projects</summary>
+                <div class="bd-dd-panel">
+                  <div class="bd-dd-actions"><a data-target="filter-projects" data-act="all">all</a>
+                    <a data-target="filter-projects" data-act="none">none</a></div>
+                  <div class="bd-dd-list" id="filter-projects"></div>
+                </div>
+              </details>
+              <details class="bd-dd left-aligned">
+                <summary id="filter-sources-sum">Funding sources</summary>
+                <div class="bd-dd-panel">
+                  <div class="bd-dd-actions"><a data-target="filter-sources" data-act="all">all</a>
+                    <a data-target="filter-sources" data-act="none">none</a></div>
+                  <div class="bd-dd-list" id="filter-sources"></div>
+                </div>
+              </details>
+            </div>
+            <div class="ribbon-label">Filter</div>
           </div>
-          <div class="bd-controls">
-            <span class="bd-label">filter:</span>
-            <details class="bd-dd left-aligned">
-              <summary id="filter-projects-sum">Projects</summary>
-              <div class="bd-dd-panel">
-                <div class="bd-dd-actions"><a data-target="filter-projects" data-act="all">all</a>
-                  <a data-target="filter-projects" data-act="none">none</a></div>
-                <div class="bd-dd-list" id="filter-projects"></div>
-              </div>
-            </details>
-            <details class="bd-dd left-aligned">
-              <summary id="filter-sources-sum">Funding sources</summary>
-              <div class="bd-dd-panel">
-                <div class="bd-dd-actions"><a data-target="filter-sources" data-act="all">all</a>
-                  <a data-target="filter-sources" data-act="none">none</a></div>
-                <div class="bd-dd-list" id="filter-sources"></div>
-              </div>
-            </details>
+          <div class="ribbon-group">
+            <div class="ribbon-items">
+              <select id="rw-group" class="dd-select rw-group" aria-label="Group the runway by">
+                <option value="status">Status</option>
+                <option value="project">Project</option>
+                <option value="fundingSource">Funding source</option>
+                <option value="milestone">Milestone</option>
+              </select>
+            </div>
+            <div class="ribbon-label">Group by</div>
+          </div>
+          <div class="ribbon-group">
+            <div class="ribbon-items">
+              <details class="bd-dd left-aligned">
+                <summary id="filter-status-sum">Secured and Proposed</summary>
+                <div class="bd-dd-panel">
+                  <div class="bd-dd-list" id="filter-status">
+                    <label><input type="checkbox" class="bd-status" value="secured" checked> Secured (confirmed)</label>
+                    <label><input type="checkbox" class="bd-status" value="proposed" checked> Proposed</label>
+                  </div>
+                </div>
+              </details>
+            </div>
+            <div class="ribbon-label">Show</div>
           </div>
         </div>
-        <section class="cards" id="totals"></section>
-      </div>
-
-      <div class="overview-section hidden" id="runway-section">
-        <!-- The explanation sits behind the "?" rather than under the heading. The
-             line-end labels on the chart carry what the tiles used to say. -->
-        <h2>Runway
+        <!-- The title names what the ribbon chose, so a screenshot carries its own
+             context, as the Project tracking title does. The "?" at its right holds the
+             explanation of the cards and the chart. -->
+        <div class="grid-title-row">
+          <div id="ov-title" class="grid-title"></div>
           <span class="help">
             <button type="button" class="help-btn" aria-expanded="false"
-              aria-controls="runway-help" aria-label="What runway shows">?</button>
-            <div class="help-pop hidden" id="runway-help">
-              Income minus spend, cumulative. <b>Actuals</b> to last month, <b>budget</b> from
-              this month on. Funded, not cash: the cockpit reads no bank balance. Follows show
-              and filter above, not the year. Each line's label says the month it goes short,
-              or that it stays above zero to the last budgeted month, which only means the
-              budgets stop there. Grouped by project, funding source or milestone, each line is
-              one group's expected case: applications at their probability, or secured money
-              only when Proposed is unticked.
+              aria-controls="overview-help" aria-label="What this tab shows">?</button>
+            <div class="help-pop hidden" id="overview-help">
+              The cards total the years, projects, funding sources and statuses chosen. The
+              chart is runway: income minus spend, cumulative, <b>actuals</b> to last month and
+              <b>budget</b> from this month on. Funded, not cash: the cockpit reads no bank
+              balance. It follows Show and Filter, not the year. Each line's label says the
+              month it goes short, or that it stays above zero to the last budgeted month,
+              which only means the budgets stop there. Grouped by project, funding source or
+              milestone, each line is one group's expected case: applications at their
+              probability, or secured money only when Proposed is unticked.
             </div>
           </span>
-        </h2>
-        <!-- Group by changes the chart only. Status draws the three scenario lines; any
-             other choice draws one expected-case line per group. -->
-        <div class="bd-controls rw-controls">
-          <span class="bd-label">group by:</span>
-          <label><input type="radio" name="rw-group" class="rw-group" value="status" checked> Status</label>
-          <label><input type="radio" name="rw-group" class="rw-group" value="project"> Project</label>
-          <label><input type="radio" name="rw-group" class="rw-group" value="fundingSource"> Funding source</label>
-          <label><input type="radio" name="rw-group" class="rw-group" value="milestone"> Milestone</label>
         </div>
-        <div class="rw-wrap" id="runway-chart"></div>
-        <div id="runway-table"></div>
+      </div>
+
+      <div class="overview-section">
+        <section class="cards" id="totals"></section>
+        <!-- Project-scoped users are not sent the runway, so the chart hides on its own.
+             The line-end labels on the chart carry what the tiles used to say. -->
+        <div id="runway-section" class="hidden">
+          <div class="rw-wrap" id="runway-chart"></div>
+          <div id="runway-table"></div>
+        </div>
       </div>
     </div>
 
@@ -118,82 +140,108 @@
     </div>
 
     <div id="view-tracking" class="hidden">
-      <!-- One toolbar for both views. What it chooses is named in the title above the
-           grid, so a screenshot carries its own context. The measure acts on the grid and
-           the columns on the timeline, so each view shows only its own. -->
-      <div class="toolbar">
-        <label for="tr-project">Project</label>
-        <select id="tr-project"></select>
-        <a id="tr-folder" href="#" target="_blank" class="hidden tr-link">📁 Drive folder</a>
-        <div class="measure-toggle">
-          <button class="tr-view active" data-tr-view="grid">Actual and forecast</button>
-          <button class="tr-view" data-tr-view="timeline">Timeline</button>
-        </div>
-        <!-- Filled from the project's quarters by buildQuarterRange. -->
-        <div class="bd-controls">
-          <span class="bd-label">quarters:</span>
-          <select id="tr-from" class="fy-select" aria-label="First quarter shown"></select>
-          <span class="bd-label">to</span>
-          <select id="tr-to" class="fy-select" aria-label="Last quarter shown"></select>
-        </div>
-        <div class="bd-controls">
-          <span class="bd-label">show:</span>
-          <label><input type="checkbox" class="tr-status" value="secured" checked> Secured (confirmed)</label>
-          <label><input type="checkbox" class="tr-status" value="proposed" checked> Proposed</label>
-        </div>
-        <div class="bd-controls">
-          <span class="bd-label">filter:</span>
-          <details class="bd-dd left-aligned">
-            <summary id="tr-sources-sum">Funding sources</summary>
-            <div class="bd-dd-panel">
-              <div class="bd-dd-actions"><a data-target="tr-sources" data-act="all">all</a>
-                <a data-target="tr-sources" data-act="none">none</a></div>
-              <div class="bd-dd-list" id="tr-sources"></div>
-            </div>
-          </details>
-          <details class="bd-dd left-aligned">
-            <summary id="tr-milestones-sum">Milestones</summary>
-            <div class="bd-dd-panel">
-              <div class="bd-dd-actions"><a data-target="tr-milestones" data-act="all">all</a>
-                <a data-target="tr-milestones" data-act="none">none</a></div>
-              <div class="bd-dd-list" id="tr-milestones"></div>
-            </div>
-          </details>
-          <label><input type="checkbox" id="tr-hide-finished"> Hide finished milestones</label>
-        </div>
-        <div class="measure-toggle" id="tr-measure">
-          <button class="measure active" data-measure="cost">Cost</button>
-          <button class="measure" data-measure="income">Income</button>
-          <button class="measure" data-measure="net">Net</button>
-        </div>
-        <div class="bd-controls hidden" id="tr-columns">
-          <span class="bd-label">columns:</span>
-          <label><input type="checkbox" class="tr-col" value="cost"> Cost</label>
-          <label><input type="checkbox" class="tr-col" value="income"> Income</label>
-          <label><input type="checkbox" class="tr-col" value="pl"> Profit &amp; loss</label>
-        </div>
-        <!-- Loading and errors only. -->
-        <span id="tr-status" class="track-status"></span>
-        <span class="help">
-          <button type="button" class="help-btn" aria-expanded="false"
-            aria-controls="tr-help" aria-label="What this tab shows">?</button>
-          <div class="help-pop hidden" id="tr-help">
-            <b>Actual and forecast</b>: past quarters show the <b>actual</b> from Xero, the
-            current quarter the actual so far, and quarters to come the <b>forecast</b> from
-            each funding source's <em>Forecast</em> tab, with the budget underneath.
-            <b>Before</b> lumps every quarter earlier than the first shown, so the totals on
-            the right are always the whole source. <b>Timeline</b>: a bar across the quarters
-            each milestone runs, green when its money is secured, amber when proposed; hover a
-            quarter for its budget and actual. To change a forecast, open the sheet from its
-            📄 link, edit the Forecast tab, then click <b>Refresh now</b>.
+      <!-- The same ribbon as the Overview, for both views: Project, View (the measure acts
+           on the grid and the columns on the timeline, so each view shows only its own),
+           Filter and Show. What it chooses is named in the title above the grid, so a
+           screenshot carries its own context. -->
+      <div class="ribbon">
+        <div class="ribbon-group">
+          <div class="ribbon-items">
+            <select id="tr-project" class="dd-select" aria-label="Project"></select>
+            <a id="tr-folder" href="#" target="_blank" class="hidden tr-link">📁 Drive folder</a>
           </div>
-        </span>
+          <div class="ribbon-label">Project</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-items">
+            <select id="tr-view" class="dd-select" aria-label="View">
+              <option value="grid">Actual and forecast</option>
+              <option value="timeline">Timeline</option>
+            </select>
+            <select id="tr-measure" class="dd-select" aria-label="Measure">
+              <option value="cost">Cost</option>
+              <option value="income">Income</option>
+              <option value="net">Net</option>
+            </select>
+            <details class="bd-dd left-aligned hidden" id="tr-columns">
+              <summary id="tr-cols-sum">Columns</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-list" id="tr-cols">
+                  <label><input type="checkbox" class="tr-col" value="cost"> Cost</label>
+                  <label><input type="checkbox" class="tr-col" value="income"> Income</label>
+                  <label><input type="checkbox" class="tr-col" value="pl"> Profit &amp; loss</label>
+                </div>
+              </div>
+            </details>
+          </div>
+          <div class="ribbon-label">View</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-items">
+            <!-- Filled from the project's quarters by buildQuarterRange. -->
+            <select id="tr-from" class="dd-select" aria-label="First quarter shown"></select>
+            <span class="bd-label">to</span>
+            <select id="tr-to" class="dd-select" aria-label="Last quarter shown"></select>
+            <details class="bd-dd left-aligned">
+              <summary id="tr-sources-sum">Funding sources</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-actions"><a data-target="tr-sources" data-act="all">all</a>
+                  <a data-target="tr-sources" data-act="none">none</a></div>
+                <div class="bd-dd-list" id="tr-sources"></div>
+              </div>
+            </details>
+            <details class="bd-dd left-aligned">
+              <summary id="tr-milestones-sum">Milestones</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-actions"><a data-target="tr-milestones" data-act="all">all</a>
+                  <a data-target="tr-milestones" data-act="none">none</a></div>
+                <div class="bd-dd-list" id="tr-milestones"></div>
+              </div>
+            </details>
+          </div>
+          <div class="ribbon-label">Filter</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-items">
+            <details class="bd-dd left-aligned">
+              <summary id="tr-show-sum">Secured and Proposed</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-list" id="tr-show">
+                  <label><input type="checkbox" class="tr-status" value="secured" checked> Secured (confirmed)</label>
+                  <label><input type="checkbox" class="tr-status" value="proposed" checked> Proposed</label>
+                  <!-- Unticked, milestones with nothing in the quarters shown and over
+                       before them drop out. -->
+                  <label><input type="checkbox" id="tr-finished" checked> Finished milestones</label>
+                </div>
+              </div>
+            </details>
+          </div>
+          <div class="ribbon-label">Show</div>
+        </div>
       </div>
       <div class="grid-title-row">
         <div id="tr-title" class="grid-title"></div>
-        <div class="tr-legend hidden" id="tr-legend">
-          <span><i class="sw ok"></i> Secured (confirmed)</span>
-          <span><i class="sw warn"></i> Proposed</span>
+        <div class="title-tools">
+          <!-- Loading and errors only. -->
+          <span id="tr-status" class="track-status"></span>
+          <div class="tr-legend hidden" id="tr-legend">
+            <span><i class="sw ok"></i> Secured (confirmed)</span>
+            <span><i class="sw warn"></i> Proposed</span>
+          </div>
+          <span class="help">
+            <button type="button" class="help-btn" aria-expanded="false"
+              aria-controls="tr-help" aria-label="What this tab shows">?</button>
+            <div class="help-pop hidden" id="tr-help">
+              <b>Actual and forecast</b>: past quarters show the <b>actual</b> from Xero, the
+              current quarter the actual so far, and quarters to come the <b>forecast</b> from
+              each funding source's <em>Forecast</em> tab, with the budget underneath.
+              <b>Before</b> lumps every quarter earlier than the first shown, so the totals on
+              the right are always the whole source. <b>Timeline</b>: a bar across the quarters
+              each milestone runs, green when its money is secured, amber when proposed; hover a
+              quarter for its budget and actual. To change a forecast, open the sheet from its
+              📄 link, edit the Forecast tab, then click <b>Refresh now</b>.
+            </div>
+          </span>
         </div>
       </div>
       <div class="track-grid-wrap" id="tr-grid"></div>

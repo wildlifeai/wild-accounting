@@ -41,13 +41,15 @@ what it is.
 
 ## What you're looking at (Overview)
 
-**Show** (secured, proposed) and **filter** (projects, funding sources), on the toolbar, apply to
-everything on the tab: the cards and the runway. The year selector applies to the cards only,
-because runway always runs from today.
+The ribbon at the top has three groups. **Filter** (the year, projects, funding sources) and
+**Show** (secured, proposed) apply to everything on the tab, the cards and the runway, except
+that the year applies to the cards only, because runway always runs from today. **Group by**
+changes the runway chart only. The title under the ribbon names what was chosen, and the **?**
+at its right explains the cards and the chart. Under the line come the cards, then the chart.
 
 1. **Summary cards**: totals for the period picked in the selector, the current
-   financial year by default, a later one, or all time (finished years are only inside all
-   time): **expected cost** (actual spend for the months gone, plus the plan for the rest),
+   financial year by default, a later one, or every year from this one on together (finished
+   years are left out): **expected cost** (actual spend for the months gone, plus the plan for the rest),
    secured funding, actual spent, the **unsecured gap** (expected cost not yet covered by secured
    funding) and the **gap after pipeline** (what is still uncovered once applications are counted
    at their probability). When income covers the cost, the card shows the **surplus** instead.
@@ -110,20 +112,23 @@ into each sheet by hand.
 
 Pick a **project**. The tab shows every funding source with a milestone on it, each under its
 own heading with a 📄 link to its sheet and its own subtotals; General also gathers the
-`(contribution)` rows from the projects that pay overhead into it. The toolbar narrows what is
+`(contribution)` rows from the projects that pay overhead into it. The ribbon narrows what is
 shown, in both views:
 
-- **Quarters**, from and to. The default runs from this financial year's first quarter to the
-  last quarter any source in the project budgets.
-- **Show** secured or proposed money; **filter** funding sources and milestones; **Hide finished
-  milestones** drops the ones with nothing in the quarters shown and over before them.
+- **View**: Actual and forecast, with its Cost / Income / Net measure, or Timeline, with its
+  optional columns.
+- **Filter**: the quarters, from and to (the default runs from this financial year's first
+  quarter to the last quarter any source in the project budgets), funding sources and
+  milestones.
+- **Show**: secured or proposed money, and finished milestones; untick those to drop the ones
+  with nothing in the quarters shown and over before them.
 
 Quarters follow our **financial year (April to March)**: Q1 is Apr to Jun, Q2 Jul to Sep, Q3 Oct
 to Dec, Q4 Jan to Mar, labelled like `25/26 Q1`.
 
 **Actual and forecast** has milestones down the side and quarters across the top. A first
 **"Before"** column lumps every quarter earlier than the first shown, so the totals on the right
-are always the whole funding source. The **Cost / Income / Net** toggle switches what the grid
+are always the whole funding source. The **Cost / Income / Net** box switches what the grid
 shows; Net is income minus cost, so whether each milestone pays for itself. Each cell shows:
 
 - the **budget** for that quarter, from the `Budget` tab, small underneath;
