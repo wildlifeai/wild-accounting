@@ -18,11 +18,10 @@ ask the GM.
 column B, comma separated, or `*` for everything. A project lead sees only their projects'
 figures and health findings, plus the warnings that mean every number on screen is stale.
 
-The figure top-right ("synced 30 Sep 2026, 9:14 am", New Zealand time) says when the data was
-last pulled, next to today's date. It
-refreshes itself roughly every 6 hours; click **Refresh now** to pull the latest immediately. A
-refresh takes about a minute, and a progress bar shows which phase it is in
-(`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
+The line under **Refresh now** ("synced 30 Sep 2026, 9:14 am", New Zealand time) says when the
+data was last pulled. It refreshes itself roughly every 6 hours; click the button to pull the
+latest immediately. A refresh takes about a minute, and a progress bar shows which phase it is
+in (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
 
 ## Four tabs
 
@@ -37,10 +36,14 @@ refresh takes about a minute, and a progress bar shows which phase it is in
   clean. Each finding says what is wrong, where, the amount at stake and what to do, with a
   link to the sheet. [Health checks](HEALTH_CHECKS.md) explains every one.
 
+The **?** on each tab opens a short reminder of what is on screen; this guide has the rest. The
+title above the Quarterly tracking and Project planner grids names what the controls chose, so
+a screenshot of a grid says what it is.
+
 ## What you're looking at (Overview)
 
-**Show** (secured, proposed) and **filter** (projects, funding sources), under the heading, apply
-to everything on the tab: the cards and the runway. The year selector applies to the cards only,
+**Show** (secured, proposed) and **filter** (projects, funding sources), on the toolbar, apply to
+everything on the tab: the cards and the runway. The year selector applies to the cards only,
 because runway always runs from today.
 
 1. **Summary cards**: totals for the period picked in the selector, the current
@@ -49,15 +52,16 @@ because runway always runs from today.
    secured funding, actual spent, the **unsecured gap** (expected cost not yet covered by secured
    funding) and the **gap after pipeline** (what is still uncovered once applications are counted
    at their probability). When income covers the cost, the card shows the **surplus** instead.
-2. **Runway**: *Net position today* is income received minus spend to date. The tiles give the
-   months until cumulative spend overtakes cumulative income: on secured money only, on the
-   probability-weighted pipeline, and if every application lands, each naming the month it goes
-   short. "Beyond *month*" means no shortfall before the last budgeted month, which is not the
-   same as safe: the budgets may simply stop there. The chart is the same walk month by month,
-   Xero actuals to last month and the plan from this month on; the vertical rule is today,
-   shaded months are budget, and a hollow dot is where a line goes below zero. This is
-   **funded** runway, not cash: the cockpit reads no bank balance. Because it is the whole
-   organisation's position, only people with access to every project see it.
+2. **Runway**: income minus spend, walked month by month, Xero actuals to last month and the
+   plan from this month on. The chart starts three months before the current financial year.
+   The vertical rule is today, labelled with the *net position*, income received minus spend to
+   date; shaded months are budget, and a hollow dot is where a line goes below zero. The three
+   lines are secured money only, the probability-weighted pipeline, and every application
+   landing. Each line's label at the right edge gives the months until cumulative spend
+   overtakes cumulative income and the month it goes short. "Beyond *month*" means no shortfall
+   before the last budgeted month, which is not the same as safe: the budgets may simply stop
+   there. This is **funded** runway, not cash: the cockpit reads no bank balance. Because it is
+   the whole organisation's position, only people with access to every project see it.
 
    **Group by** changes the chart only. **Status** draws the three lines above. **Project**,
    **Funding source** or **Milestone** draws one line per group, counting applications at their
