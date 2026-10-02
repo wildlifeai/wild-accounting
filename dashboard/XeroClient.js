@@ -6,8 +6,10 @@
  *
  * A "normalised line" is the atomic unit the rest of the app reasons about:
  *   { date: Date, account: String, project: String, fundingSource: String,
- *     item: String, amount: Number, kind: 'expense' | 'income' }
- * `amount` is always positive; direction is carried by `kind`.
+ *     item: String, amount: Number, kind: 'expense' | 'income',
+ *     docType: String, reference: String, contact: String, description: String }
+ * `amount` is always positive; direction is carried by `kind`. The last four say which
+ * Xero transaction the line came from, so a Health finding can name it.
  */
 
 /** Build (or fetch) the OAuth2 service for Xero. */
@@ -154,7 +156,7 @@ function fetchXeroActuals(sinceDate, opts) {
     sinceDate, 'UTC', "yyyy-MM-dd'T'HH:mm:ss") : null;
   let lines = [];
 
-  _lastUnposted = { count: 0, total: 0 };
+  _lastUnposted = { count: 0, total: 0, docs: [] };
   lines.push.apply(lines, fetchBankTransactionLines_(modifiedHeader));
   lines.push.apply(lines, fetchInvoiceLines_(modifiedHeader));
   if (earned) {
@@ -248,9 +250,9 @@ const POSTED_STATUS = {
 // a queue. Tallying the two together would bury the actionable number under history.
 const CANCELLED_STATUS = { VOIDED: true, DELETED: true };
 
-let _lastUnposted = { count: 0, total: 0 };
+let _lastUnposted = { count: 0, total: 0, docs: [] };
 
-/** What the last fetch skipped as unapproved, for the Health panel. */
+/** What the last fetch skipped as unapproved, and which documents, for the Health panel. */
 function lastUnpostedSummary() { return _lastUnposted; }
 
 /** True when a Xero document's status means it has reached the general ledger. */
@@ -291,9 +293,11 @@ function paginate_(path, collectionKey, mapper, modifiedAfter) {
     rows.forEach(r => {
       if (!isPosted_(collectionKey, r.Status)) {
         if (!isCancelled_(r.Status)) {
-          _lastUnposted.count++;
           // SubTotal, because the app's line amounts are LineAmount and so tax-exclusive.
-          _lastUnposted.total += Math.abs(Number(r.SubTotal == null ? r.Total : r.SubTotal) || 0);
+          const amount = Math.abs(Number(r.SubTotal == null ? r.Total : r.SubTotal) || 0);
+          _lastUnposted.count++;
+          _lastUnposted.total += amount;
+          _lastUnposted.docs.push(unpostedDoc_(collectionKey, r, amount));
         }
         return;
       }
@@ -321,7 +325,8 @@ function fetchBankTransactionLines_(modifiedAfter) {
   return paginate_('/BankTransactions', 'BankTransactions', (tx, out) => {
     const date = parseXeroDate_(tx.DateString ? null : tx.Date) || new Date(tx.DateString);
     const kind = tx.Type === 'RECEIVE' ? 'income' : 'expense';
-    (tx.LineItems || []).forEach(li => out.push(normaliseLine_(li, date, kind)));
+    const doc = xeroDoc_('BankTransactions', tx);
+    (tx.LineItems || []).forEach(li => out.push(normaliseLine_(li, date, kind, doc)));
   }, modifiedAfter);
 }
 
@@ -329,16 +334,43 @@ function fetchInvoiceLines_(modifiedAfter) {
   return paginate_('/Invoices', 'Invoices', (inv, out) => {
     const date = new Date(inv.DateString || parseXeroDate_(inv.Date));
     const kind = inv.Type === 'ACCREC' ? 'income' : 'expense';
-    (inv.LineItems || []).forEach(li => out.push(normaliseLine_(li, date, kind)));
+    const doc = xeroDoc_('Invoices', inv);
+    (inv.LineItems || []).forEach(li => out.push(normaliseLine_(li, date, kind, doc)));
   }, modifiedAfter);
 }
 
+/**
+ * Which Xero document a line sits on, named as Xero's own screens name it, so a Health
+ * finding can say which transaction to open rather than only count them.
+ */
+function xeroDoc_(collectionKey, r) {
+  const type = String(r.Type || '');
+  return {
+    docType: collectionKey === 'Invoices' ? (type === 'ACCREC' ? 'Invoice' : 'Bill')
+      : (type.indexOf('RECEIVE') === 0 ? 'Receive money' : 'Spend money'),
+    reference: String(r.InvoiceNumber || r.Reference || ''),
+    contact: String((r.Contact && r.Contact.Name) || '')
+  };
+}
+
+/** A document skipped as unapproved, in the line shape, for F6 to list. */
+function unpostedDoc_(collectionKey, r, amount) {
+  const status = String(r.Status || '').toUpperCase();
+  return Object.assign(xeroDoc_(collectionKey, r), {
+    date: r.DateString ? new Date(r.DateString) : parseXeroDate_(r.Date),
+    description: status === 'DRAFT' ? 'draft'
+      : (status === 'SUBMITTED' ? 'awaiting approval' : status.toLowerCase()),
+    amount: amount
+  });
+}
+
 /** Normalise a Xero line item into the app's actual-line shape. */
-function normaliseLine_(li, date, kind) {
+function normaliseLine_(li, date, kind, doc) {
   // Prefer the product/service code; if absent, recover a {SOURCE}_{NNN} code
   // from the line description (some lines, e.g. bank fees, carry the code only
   // in the description). This keeps such amounts attached to their milestone.
   const code = li.Item ? li.Item.Code : codeFromDescription_(li.Description);
+  doc = doc || {};
   return {
     date: date,
     account: accountLabelFromCode_(li.AccountCode),
@@ -347,7 +379,11 @@ function normaliseLine_(li, date, kind) {
     item: code,
     itemName: li.Item ? (li.Item.Name || '') : '',
     amount: Number(li.LineAmount) || 0,
-    kind: kind
+    kind: kind,
+    docType: doc.docType || '',
+    reference: doc.reference || '',
+    contact: doc.contact || '',
+    description: String(li.Description || '')
   };
 }
 
@@ -416,7 +452,7 @@ function byAccountClass_(line, cls) {
  * reversal net to zero; never Math.abs() it. Journal lines carry tracking but no item
  * code, so a milestone can only come from a code leading the description.
  */
-function journalLineToActual_(li, date, cls, accountLabel) {
+function journalLineToActual_(li, date, cls, accountLabel, narration) {
   if (!PNL_CLASSES[cls]) return null;
   const amount = Number(li.LineAmount) || 0;
   return {
@@ -428,7 +464,11 @@ function journalLineToActual_(li, date, cls, accountLabel) {
     itemName: '',
     amount: cls === 'REVENUE' ? -amount : amount,
     kind: cls === 'REVENUE' ? 'income' : 'expense',
-    journal: true
+    journal: true,
+    docType: 'Manual journal',
+    reference: String(narration || ''),
+    contact: '',
+    description: String(li.Description || '')
   };
 }
 
@@ -449,7 +489,8 @@ function fetchManualJournalLines_(sinceDate) {
       if (sinceDate && date < sinceDate) return;
       (j.JournalLines || []).forEach(li => {
         const label = accountLabelFromCode_(li.AccountCode);
-        const line = journalLineToActual_(li, date, accountClassFromLabel_(label), label);
+        const line = journalLineToActual_(li, date, accountClassFromLabel_(label), label,
+          j.Narration);
         if (line) out.push(line);
       });
     });

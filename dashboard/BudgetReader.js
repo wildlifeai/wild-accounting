@@ -76,7 +76,7 @@ function readArchivedSourceNames() {
   const root = DriveApp.getFolderById(CONFIG.BUDGETS_ROOT_FOLDER_ID);
   const names = {};
   const note = n => {
-    const bare = startsWithArchive_(n) ? n.slice(CONFIG.ARCHIVE_PREFIX.length) : n;
+    const bare = archivedSourceName_(n);
     if (bare) names[bare] = true;
   };
 
@@ -96,6 +96,22 @@ function readArchivedSourceNames() {
       eachSheetName_(projectFolder, sub, n => { if (startsWithArchive_(n)) note(n); }));
   }
   return names;
+}
+
+/**
+ * The funding-source name an archived sheet stands for, or '' when it is not one.
+ *
+ * Every sheet in `archived/` used to count, so an old budget there called "General" made
+ * the cockpit drop everything Xero tagged General, and any legacy file's name became a tag
+ * to ignore. Only a name shaped like a funding source (PROJECT_YY_SOURCE, upper case) now
+ * counts, after its archive prefix is removed: Z_ARCH_, or the older Z_ARCHIVED_.
+ */
+function archivedSourceName_(fileName) {
+  let n = String(fileName == null ? '' : fileName).trim();
+  ['Z_ARCHIVED_', CONFIG.ARCHIVE_PREFIX].forEach(p => {
+    if (n.indexOf(p) === 0) n = n.slice(p.length);
+  });
+  return /^[A-Z][A-Z0-9]*_\d{2}_[A-Z0-9_]+$/.test(n) ? n : '';
 }
 
 function eachSheetName_(projectFolder, subName, fn) {
@@ -428,7 +444,8 @@ function resolveForecastLabel_(cellA, labelMap) {
  * Read the "Forecast" tab from a funding source spreadsheet.
  * Returns { data: { cost, income, comments }, sheetUrl, issues }.
  * The Forecast tab has Revenue and Expenses sections, a row label in column A and
- * quarter forecasts in subsequent columns. Stops at "Funding Source Details".
+ * quarter forecasts in subsequent columns. Stops at "Funding Source Details" or at the
+ * "Nothing below this row is read" note.
  *
  * `budgetLines` are the already-parsed Budget tab lines. Row labels are resolved
  * against them at read time, so every key this returns is a real item code and
@@ -465,8 +482,9 @@ function parseForecastTab_(ss, budgetLines) {
   for (var i = 0; i < data.length; i++) {
     var cellA = clean_(String(data[i][0] || ''));
 
-    // Stop at "Funding Source Details"
-    if (cellA === 'Funding Source Details') break;
+    // Stop at "Funding Source Details", or at the template's note saying nothing below is
+    // read: a tab that kept the note but lost the heading had its note read as a milestone.
+    if (cellA === 'Funding Source Details' || /^Nothing below this row is read/i.test(cellA)) break;
 
     // Detect section headers
     if (cellA === 'Revenue' || cellA === 'Expenses') {

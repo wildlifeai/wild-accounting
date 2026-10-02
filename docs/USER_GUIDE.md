@@ -179,7 +179,9 @@ names any the journals defer that are not marked.
 
 The Health tab reports what is missing: spend with no Projects tag (D1), no Funding source tag
 (D2), no item code (D3), a Funding source with no budget sheet (D4), and spend still arriving
-after a grant has ended (D6), which is usually a stale repeating template.
+after a grant has ended (D6), which is usually a stale repeating template. **Show the lines**
+under each lists the transactions to fix in Xero. All but D4 look at this financial year only,
+since earlier years' books are closed.
 
 ## Archiving a funding source
 
@@ -188,9 +190,9 @@ it to the project's `archived/` folder. It leaves the dashboard at the next refr
 its spend, so organisation totals never show spend with no budget beside it. Keep its item codes
 unchanged in Xero, so historical actuals still reconcile.
 
-**Only archived funding-source sheets belong in `archived/`.** The cockpit treats the name of
-every sheet in that folder as an archived funding source and drops Xero money tagged with it, so
-an old file called `General` there once hid everything tagged `General`. Other old files go to
+**Keep only archived funding-source sheets in `archived/`.** The cockpit drops Xero money tagged
+with the name of a sheet there that is shaped like a funding source (`WW_25_TOI`, with or without
+`Z_ARCH_`), and ignores anything else, so other old files do no harm, but they belong in
 `Z_ARCH_old_budgets`.
 
 ## If a project looks off

@@ -17,7 +17,9 @@ the refresh that is not running.
 
 The **Health** tab lists them most severe first, then by the amount at stake, so a large
 misattribution outranks a missing description. Each shows what is wrong, where, the amount, what
-to do and a link to the sheet. The tab's badge is red when there are errors, amber when there are
+to do and a link to the sheet. A finding about Xero transactions (D1, D2, D3, D4, D6 and F6) also
+lists them under **Show the lines**, largest first: date, document and reference, contact,
+description, account, funding source and amount, up to 50, with a count of any left off. The tab's badge is red when there are errors, amber when there are
 only warnings, and absent when nothing is wrong; info findings are listed underneath and never
 badged. A project lead sees the findings for their own projects, plus F1, F2, F3 and F7.
 
@@ -35,7 +37,11 @@ badged. A project lead sees the findings for their own projects, plus F1, F2, F3
   owner: 'someone@wildlife.ai',         // from the sheet's metadata block
   amount: 2000,                        // value at risk, when quantifiable
   action: 'Fix the End date on that line. 30/Jun/01 parses as year 2001.',
-  link: 'https://docs.google.com/spreadsheets/d/…'
+  link: 'https://docs.google.com/spreadsheets/d/…',
+  lines: [{ date: '2026-04-22', document: 'Spend money FEE', contact: 'The Bank',
+            description: 'Monthly fee', account: 'Bank Fees (404)',
+            fundingSource: 'GEN_27_CORE', amount: 5 }],
+  moreLines: 0                         // lines and moreLines on Xero-transaction findings only
 }
 ```
 
@@ -102,13 +108,20 @@ row has any entry, its blank cells count as 0 for every quarter the tab has a co
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
-| D1 | error | Actual lines with no `Projects` tag | **Dropped from every total.** Report count and value; link the transactions. |
+| D1 | error | Actual lines with no `Projects` tag | **Dropped from every total.** Report count and value. |
 | D2 | warning | Actual lines with no `Funding source` tag | Land in `(unassigned)`. |
 | D3 | warning | Actual lines with no item code | Outside the tracking grid. Manual-journal lines are not counted: Xero journals cannot carry a Product/Service. |
-| D4 | error | Actuals coded to a `Funding source` with no budget sheet | Either the sheet is missing or the tag is a typo. |
+| D4 | error | Actuals coded to a `Funding source` with no budget sheet | Either the sheet is missing, the tag is a typo, or the source was archived and its project's `archived` folder has been renamed or moved. Renaming the Xero tag with `Z_ARCH_` archives it whatever the folders say. |
 | D5 | warning | A secured source was expected to spend something by the end of the last finished quarter, and nothing is coded to it | Usually a missing or misspelt Xero tag. "Expected" is the tracking grid's rule: the `Forecast` row where it has any entry, its blanks counting as 0, otherwise the `Budget` baseline. If the work has slipped, put the new timing on the `Forecast` tab. Finished quarters only, so it stays quiet while the first quarter of spend is under way; D4 catches a misspelt tag sooner. |
-| D6 | error | Actuals against a funding source whose `Funding end` has passed, or whose sheet is archived | Almost always a stale recurring journal or template. |
+| D6 | error | Actuals against a funding source whose `Funding end` has passed | Almost always a stale recurring journal or template. |
 | D8 | warning | Xero moves a source's income by manual journal (the accountant's deferral and release), but its sheet is not marked `Income recognition: as spent` | If the grant is released as it is spent, mark it; otherwise its income follows the releases, which lag by up to a quarter. |
+
+D1 to D4 and D6 leave out spend on an archived funding source or project: no total or grid
+includes it, so coding it better would change nothing.
+
+D1, D2, D3, D6 and F6 look only at transactions dated in the current financial year: they ask for
+a change in Xero, and earlier years' books are closed. D4 looks at every year, because its spend
+is in the totals whatever its date and its fix is usually in Drive.
 
 ### E. Reconciliation
 
