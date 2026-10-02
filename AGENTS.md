@@ -47,8 +47,8 @@ Both live in `tools/`, not `dashboard/`, because `.claspignore` is a whitelist: 
 
 `dashboard/Tests.js` holds `runTests()`: checks over the forecast maths, budget and forecast
 parsing, the health catalogue, serve-time staleness, which Xero statuses count as actuals, the
-budget aggregation and contribution derivation, funded runway, scoped access and the funding
-pipeline. It runs from the IDE with no Drive or Xero access, and `tools/run_tests.js` runs the
+budget aggregation and contribution derivation, the Project tracking payload, funded runway,
+scoped access and the funding pipeline. It runs from the IDE with no Drive or Xero access, and `tools/run_tests.js` runs the
 same file under Node. `runTests()` is the canonical copy.
 
 `check_docs.js` is the one that stops documentation rotting: it verifies health-check ids **and

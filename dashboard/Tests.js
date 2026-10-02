@@ -1055,13 +1055,19 @@ function runTests() {
     Math.abs(cg.projects['General'].securedIncome - 6600) < 1e-6 &&
     Math.abs(cg.projects['Spyfish Aotearoa'].securedIncome - 9400) < 1e-6);
 
-  // The timeline: General's contribution is income, one row per contributing source.
-  var tl = buildTimeline_(cBudgets, [], {}, fyBounds_(d(2026, 9, 26)), d(2026, 9, 26));
+  // The timeline: General's contribution is one row per contributing source, running the
+  // months the policy's share of its income falls in, with that source's status.
+  var tl = buildTimeline_(cBudgets);
   var tlRow = tl.filter(function (r) {
     return r.milestone === contributionMilestone_('XXX_27_P'); })[0];
-  check('timeline: a contribution is income to General, not cost',
-    tlRow && tlRow.project === 'General' && tlRow.segments[0].cost === 0 &&
-    tlRow.segments[0].income === 4000 && tlRow.totalBudget === 0);
+  var m1 = cBudgets[0].lines[0];
+  check('timeline: a contribution row runs the months of the lines it comes from',
+    tlRow && tlRow.project === 'General' && tlRow.segments.length === 1 &&
+    tlRow.segments[0].source === 'XXX_27_P' && tlRow.segments[0].status === 'secured' &&
+    tlRow.segments[0].start === DateMath.monthKey(m1.start) &&
+    tlRow.segments[0].end === DateMath.monthKey(m1.end));
+  check('timeline: a segment carries only its source, status, start and end',
+    Object.keys(tlRow.segments[0]).sort().join(',') === 'end,source,start,status');
   check('timeline: only a percent policy gets a contribution row',
     tl.filter(function (r) {
       return r.milestone === contributionMilestone_('XXX_27_N'); }).length === 0);

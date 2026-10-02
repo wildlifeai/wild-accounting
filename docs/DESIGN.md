@@ -155,6 +155,13 @@ Ranked by how badly they hurt the persona who depends on them:
   income, not each milestone's, as the accountant's releases are. Counting income when earned had
   moved unspent grant money out of today, and the plan has to put it back ahead of today, which
   budget dates already past could not. The tracking grid, D5 and E2 still judge against the budget.
+- **2026-10-02: one Project tracking tab, by quarter.** Quarterly tracking and the monthly Project
+  planner answered one question at two grains, so they became one tab: a project's funding
+  sources, each under its own heading, as an actual-and-forecast grid whose Before column keeps
+  the totals whole, or as a timeline of bars by quarter. The month grain went with the planner.
+  Each tab's controls are a ribbon of dropdown boxes with a title under it naming what was
+  chosen. The Overview's combined-years option totals the years it names; finished years are
+  left out, where All time counted them.
 
 ## History
 

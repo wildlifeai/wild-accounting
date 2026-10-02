@@ -153,7 +153,7 @@ Product management    | 01/Jul/26 | 30/Jun/27 | 12000 | 20000 | 8000  | Product 
 | `Income` | yes | GST-exclusive. A line where `Cost` and `Income` are both `0` is **silently skipped**. |
 | `Contribution` | optional | `Income − Cost`, the sheet's own arithmetic, checked by B5. What General receives is decided by the `Contribution policy`, not by this column. **Derived when the column is absent.** |
 | `Milestone` | **yes** | The grouping key for the Overview breakdown, the tracking-grid row label and a filter dimension. Blank collapses the source into one `(unassigned)` group. |
-| `Xero Inventory Item` | yes | The `{SOURCE}_{NNN}` product/service code, for example `WW_25_TOI_002`. This is the milestone dimension; without it a line falls out of the quarterly tracking grid. |
+| `Xero Inventory Item` | yes | The `{SOURCE}_{NNN}` product/service code, for example `WW_25_TOI_002`. This is the milestone dimension; without it a line falls out of the Project tracking grid. |
 | `Project` | yes (column) | Per-line override, so one funding source can book some lines to General and the rest to its own project. Blank means "use the `Project` metadata value". The column must exist even if every cell is blank. |
 | `Comments` | no | Not parsed. |
 

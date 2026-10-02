@@ -229,7 +229,7 @@ Rules that follow from this:
 * A funding source can span projects: the per-line `Project` column overrides the parent folder.
 * Xero transactions must carry **both** tracking categories plus the item code. A line with no
   `Projects` value is dropped from project and organisation totals (D1); a line with no `Funding
-  source` falls out of the quarterly grid (D2).
+  source` falls out of Project tracking (D2).
 * Project abbreviations are `SPY`, `GEN`, `WAI`, `WW`. Do not change them: see §1,
   Verify-Before-Applying.
 
@@ -278,7 +278,8 @@ Never add a code path that drops data without a finding.
 
 # 4. Xero Integration Rules
 
-`dashboard/XeroClient.js` fetches actuals from **bank transactions and invoices** only.
+`dashboard/XeroClient.js` fetches actuals from **bank transactions and invoices**, and from
+**posted manual journals** with `CONFIG.ACTUALS_EARNED` on (see the notes under Payroll).
 
 * **Only approved documents count.** Status is filtered in `paginate_`, in one place, with an
   allowlist (`POSTED_STATUS`): invoices `AUTHORISED` or `PAID`, bank transactions `AUTHORISED`.

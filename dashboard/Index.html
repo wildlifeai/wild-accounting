@@ -50,7 +50,7 @@
           <div class="ribbon-group">
             <div class="ribbon-items">
               <span id="fy-slot"></span>
-              <details class="bd-dd left-aligned">
+              <details class="bd-dd">
                 <summary id="filter-projects-sum">Projects</summary>
                 <div class="bd-dd-panel">
                   <div class="bd-dd-actions"><a data-target="filter-projects" data-act="all">all</a>
@@ -58,7 +58,7 @@
                   <div class="bd-dd-list" id="filter-projects"></div>
                 </div>
               </details>
-              <details class="bd-dd left-aligned">
+              <details class="bd-dd">
                 <summary id="filter-sources-sum">Funding sources</summary>
                 <div class="bd-dd-panel">
                   <div class="bd-dd-actions"><a data-target="filter-sources" data-act="all">all</a>
@@ -82,7 +82,7 @@
           </div>
           <div class="ribbon-group">
             <div class="ribbon-items">
-              <details class="bd-dd left-aligned">
+              <details class="bd-dd">
                 <summary id="filter-status-sum">Secured and Proposed</summary>
                 <div class="bd-dd-panel">
                   <div class="bd-dd-list" id="filter-status">
@@ -119,8 +119,7 @@
 
       <div class="overview-section">
         <section class="cards" id="totals"></section>
-        <!-- Project-scoped users are not sent the runway, so the chart hides on its own.
-             The line-end labels on the chart carry what the tiles used to say. -->
+        <!-- Project-scoped users are not sent the runway, so the chart hides on its own. -->
         <div id="runway-section" class="hidden">
           <div class="rw-wrap" id="runway-chart"></div>
           <div id="runway-table"></div>
@@ -163,7 +162,7 @@
               <option value="income">Income</option>
               <option value="net">Net</option>
             </select>
-            <details class="bd-dd left-aligned hidden" id="tr-columns">
+            <details class="bd-dd hidden" id="tr-columns">
               <summary id="tr-cols-sum">Columns</summary>
               <div class="bd-dd-panel">
                 <div class="bd-dd-list" id="tr-cols">
@@ -182,7 +181,7 @@
             <select id="tr-from" class="dd-select" aria-label="First quarter shown"></select>
             <span class="bd-label">to</span>
             <select id="tr-to" class="dd-select" aria-label="Last quarter shown"></select>
-            <details class="bd-dd left-aligned">
+            <details class="bd-dd">
               <summary id="tr-sources-sum">Funding sources</summary>
               <div class="bd-dd-panel">
                 <div class="bd-dd-actions"><a data-target="tr-sources" data-act="all">all</a>
@@ -190,7 +189,7 @@
                 <div class="bd-dd-list" id="tr-sources"></div>
               </div>
             </details>
-            <details class="bd-dd left-aligned">
+            <details class="bd-dd">
               <summary id="tr-milestones-sum">Milestones</summary>
               <div class="bd-dd-panel">
                 <div class="bd-dd-actions"><a data-target="tr-milestones" data-act="all">all</a>
@@ -203,7 +202,7 @@
         </div>
         <div class="ribbon-group">
           <div class="ribbon-items">
-            <details class="bd-dd left-aligned">
+            <details class="bd-dd">
               <summary id="tr-show-sum">Secured and Proposed</summary>
               <div class="bd-dd-panel">
                 <div class="bd-dd-list" id="tr-show">
@@ -238,8 +237,9 @@
               <b>Before</b> lumps every quarter earlier than the first shown, so the totals on
               the right are always the whole source. <b>Timeline</b>: a bar across the quarters
               each milestone runs, green when its money is secured, amber when proposed; hover a
-              quarter for its budget and actual. To change a forecast, open the sheet from its
-              📄 link, edit the Forecast tab, then click <b>Refresh now</b>.
+              quarter for its budget and actual. Click a funding source to fold its milestones
+              away. To change a forecast, open the sheet from its 📄 link, edit the Forecast
+              tab, then click <b>Refresh now</b>.
             </div>
           </span>
         </div>
@@ -249,8 +249,8 @@
     </div>
   </div>
 
-  <!-- The runway walk the server runs, sent as its own source, so the chart and its tiles
-       cannot drift from the tested code. See runwayWalk_ in Aggregator.js. -->
+  <!-- The runway walk the server runs, sent as its own source, so the chart cannot drift
+       from the tested code. See runwayWalk_ in Aggregator.js. -->
   <script><?!= runwayWalk_.toString() ?></script>
   <?!= include('JavaScript'); ?>
 </body>
