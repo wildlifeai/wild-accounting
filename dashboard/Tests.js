@@ -315,20 +315,47 @@ function runTests() {
 
   check('D3 counts spend with no item code',
     idsFor([sheet_()], [spend_(900, '2026-07-01', { item: '' })]).indexOf('D3') !== -1);
-  // The detail names the lines, largest first, so they can be found in Xero.
+  // The finding lists the lines, largest first, so they can be found in Xero.
   var d3Lines = [];
-  for (var d3i = 1; d3i <= D3_LINES_SHOWN + 2; d3i++) {
+  for (var d3i = 1; d3i <= HEALTH_LINES_SHOWN + 2; d3i++) {
     d3Lines.push(spend_(d3i * 10, '2026-07-01', { item: '' }));
   }
-  var d3 = buildHealth([sheet_()], d3Lines, { now: NOW, xeroConnected: true })
-    .filter(function (f) { return f.id === 'D3'; })[0];
-  check('D3 names the largest lines, and says when there are more',
-    /The largest: 2026-07-01 /.test(d3.detail) &&
-    d3.detail.indexOf(', ' + (D3_LINES_SHOWN + 2) * 10) !== -1 &&
-    d3.detail.split(';').length === D3_LINES_SHOWN);
+  d3Lines.push(spend_(-5000, '2026-07-01', { item: '', contact: 'Acme Ltd',
+    description: 'Refund of deposit', docType: 'Bill', reference: 'INV-7' }));
+  var hOf = function (findings, id) {
+    return findings.filter(function (f) { return f.id === id; })[0];
+  };
+  var d3 = hOf(buildHealth([sheet_()], d3Lines, { now: NOW, xeroConnected: true }), 'D3');
+  check('D3 lists its lines, largest first by size, and counts the rest',
+    d3.lines.length === HEALTH_LINES_SHOWN && d3.moreLines === 3 &&
+    d3.lines[0].amount === -5000 && d3.lines[1].amount === (HEALTH_LINES_SHOWN + 2) * 10);
+  check('D3 names the transaction: date, document, contact, description',
+    d3.lines[0].date === '2026-07-01' && d3.lines[0].document === 'Bill INV-7' &&
+    d3.lines[0].contact === 'Acme Ltd' && d3.lines[0].description === 'Refund of deposit' &&
+    d3.lines[0].fundingSource === 'XXX_27_GOOD');
+  // Archived spend is out of every total and grid, so coding it better changes nothing.
+  check('D3 leaves out archived spend, by source or by project',
+    idsFor([sheet_()], [
+      spend_(900, '2026-07-01', { item: '', fundingSource: CONFIG.ARCHIVE_PREFIX + 'General' }),
+      spend_(900, '2026-07-01', { item: '', project: CONFIG.ARCHIVE_PREFIX + 'Old' })
+    ]).indexOf('D3') === -1);
+  check('D1 leaves out archived spend too',
+    idsFor([sheet_()], [spend_(900, '2026-07-01',
+      { project: '', fundingSource: CONFIG.ARCHIVE_PREFIX + 'General' })]).indexOf('D1') === -1);
+  var d1 = hOf(buildHealth([sheet_()], [spend_(900, '2026-07-01', { project: '' })],
+    { now: NOW, xeroConnected: true }), 'D1');
+  check('D1 lists its lines', d1 && d1.lines.length === 1 && d1.lines[0].amount === 900);
+  check('a finding about no Xero line carries no line list',
+    !('lines' in hOf(buildHealth([sheet_()], [], { now: NOW, xeroConnected: true }), 'D5')));
   check('D4 catches actuals tagged to a source with no sheet',
     idsFor([sheet_()], [spend_(900, '2026-07-01', { fundingSource: 'XXX_27_TYPO' })])
       .indexOf('D4') !== -1);
+  var d4 = hOf(buildHealth([sheet_()], [
+    spend_(900, '2026-07-01', { fundingSource: 'XXX_27_TYPO' }),
+    spend_(100, '2026-08-01', { fundingSource: 'XXX_27_TYPO' })
+  ], { now: NOW, xeroConnected: true }), 'D4');
+  check('D4 lists the lines behind its total',
+    d4.amount === 1000 && d4.lines.length === 2 && d4.lines[1].date === '2026-08-01');
   check('D5 catches a started grant with nothing coded to it',
     idsFor([sheet_()], []).indexOf('D5') !== -1);
 
@@ -374,6 +401,10 @@ function runTests() {
   // The stale repeating-journal detector: nothing in Xero reports one.
   check('D6 catches spend dated after the grant ended',
     idsFor([sheet_()], [spend_(500, '2027-06-01')]).indexOf('D6') !== -1);
+  var d6 = hOf(buildHealth([sheet_()], [spend_(500, '2027-06-01'), spend_(300, '2026-07-01')],
+    { now: NOW, xeroConnected: true }), 'D6');
+  check('D6 lists only the lines dated after the end',
+    d6.lines.length === 1 && d6.lines[0].date === '2027-06-01');
 
   check('E1 catches overspend',
     idsFor([sheet_()], [spend_(12000, '2026-07-01')]).indexOf('E1') !== -1);
@@ -813,6 +844,21 @@ function runTests() {
     secretsMissing: [] });
   check('F6 reports drafts when some exist',
     hUnp.filter(function (f) { return f.id === 'F6'; }).length === 1);
+  var draftBill = unpostedDoc_('Invoices', { Type: 'ACCPAY', Status: 'DRAFT',
+    InvoiceNumber: 'B-12', Contact: { Name: 'Acme Ltd' }, DateString: '2026-06-01T00:00:00' }, 1000);
+  var waitingSpend = unpostedDoc_('BankTransactions', { Type: 'SPEND', Status: 'SUBMITTED',
+    Reference: 'Card', Contact: { Name: 'Shop' }, DateString: '2026-06-02T00:00:00' }, 234);
+  check('unposted documents are named as Xero names them',
+    draftBill.docType === 'Bill' && draftBill.reference === 'B-12' &&
+    draftBill.description === 'draft' && waitingSpend.docType === 'Spend money' &&
+    waitingSpend.description === 'awaiting approval');
+  var f6 = hOf(buildHealth([], [], { now: d(2026, 6, 15), xeroConnected: true,
+    exclusion: { count: 0, total: 0 },
+    unposted: { count: 2, total: 1234, docs: [waitingSpend, draftBill] },
+    secretsMissing: [] }), 'F6');
+  check('F6 lists the documents, largest first',
+    f6.lines.length === 2 && f6.lines[0].document === 'Bill B-12' &&
+    f6.lines[0].contact === 'Acme Ltd' && f6.lines[1].date === '2026-06-02');
   var hClean = buildHealth([], [], { now: d(2026, 6, 15), xeroConnected: true,
     exclusion: { count: 0, total: 0 }, unposted: { count: 0, total: 0 },
     secretsMissing: [] });
@@ -1336,6 +1382,23 @@ function runTests() {
       .amount === -2000);
   check('journal: a balance-sheet line is not an actual',
     journalLineToActual_(jl, d(2025, 9, 30), 'LIABILITY', 'Deferred revenue (850)') === null);
+  var jNamed = journalLineToActual_(jl, d(2025, 9, 30), 'REVENUE', 'Grants (102)', 'Q1 release');
+  check('journal: the line says which journal it came from',
+    jNamed.docType === 'Manual journal' && jNamed.reference === 'Q1 release' &&
+    jNamed.description === 'Release deferred revenue to 30 Sept');
+
+  // A Health finding names the transaction, so every line carries its document.
+  var bankLine = normaliseLine_({ Description: 'Monthly fee', LineAmount: 5, Tracking: [] },
+    d(2026, 4, 22), 'expense', xeroDoc_('BankTransactions',
+      { Type: 'SPEND', Reference: 'FEE', Contact: { Name: 'The Bank' } }));
+  check('line: a bank line carries its document, contact and description',
+    bankLine.docType === 'Spend money' && bankLine.reference === 'FEE' &&
+    bankLine.contact === 'The Bank' && bankLine.description === 'Monthly fee');
+  var billDoc = xeroDoc_('Invoices', { Type: 'ACCPAY', InvoiceNumber: '', Reference: 'R-9' });
+  check('line: a bill with no number falls back to its reference',
+    billDoc.docType === 'Bill' && billDoc.reference === 'R-9' && billDoc.contact === '' &&
+    xeroDoc_('Invoices', { Type: 'ACCREC', InvoiceNumber: 'INV-1' }).docType === 'Invoice' &&
+    xeroDoc_('BankTransactions', { Type: 'RECEIVE-PREPAYMENT' }).docType === 'Receive money');
 
   // C8, D8 and D3 on the earned basis.
   function eHealth(sheets, lines) { return buildHealth(sheets, lines, {}); }
