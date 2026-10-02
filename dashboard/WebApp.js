@@ -173,7 +173,7 @@ function apiXeroStatus() {
     authUrl: service.hasAccess() ? null : service.getAuthorizationUrl() };
 }
 
-/** Client API: list of project names for the planner dropdown. */
+/** Client API: the project names for the Project tracking dropdown. */
 function apiListProjects() {
   const snap = getFilteredSnapshot_();
   const names = {};
@@ -181,92 +181,14 @@ function apiListProjects() {
   return Object.keys(names).sort();
 }
 
-/** Client API: timeline data for the planner, filtered to one project. */
-function apiGetTimeline(projectName) {
-  const snap = getFilteredSnapshot_();
-  return (snap.timeline || []).filter(t => t.project === projectName);
-}
-
 /**
- * Client API: the entities selectable in the tracking dropdown.
- * The General project (aggregated across funding sources) is listed first,
- * followed by each funding source. Each entry: { id, label, type }.
+ * Client API: one project's funding sources and their milestones, quarter by quarter,
+ * for both views of the Project tracking tab. See composeProjectTracking.
  */
-function apiListSources() {
-  const snap = getFilteredSnapshot_();
-  const entries = [];
-  const hasGeneral = (snap.tracking || []).some(t =>
-    (t.milestones || []).some(m => m.project === CONFIG.GENERAL_PROJECT));
-  if (hasGeneral) {
-    entries.push({ id: 'project:' + CONFIG.GENERAL_PROJECT,
-      label: CONFIG.GENERAL_PROJECT + ' (project)', type: 'project' });
-  }
-  (snap.tracking || []).forEach(t => entries.push({
-    id: t.source, label: t.source + ' (' + t.status + ' · ' + t.project + ')',
-    type: 'source' }));
-  return entries;
-}
-
-/**
- * Client API: the quarterly tracking grid for one entity id (a funding source
- * name, or 'project:<Name>'), with the live forecast layered on. Or an array of ids.
- */
-function apiGetTracking(ids, measure) {
+function apiGetProjectTracking(project) {
   const snap = getFilteredSnapshot_();
   const currentQi = quarterSortNum(snap.currentQuarter || currentQuarterLabel());
-  return composeTracking(resolveEntity_(snap, ids), currentQi, measure);
-}
-
-/** Build the entity (source or aggregated project) the tracking grid renders. */
-function resolveEntity_(snap, ids) {
-  if (!Array.isArray(ids)) ids = [ids];
-  const tracking = snap.tracking || [];
-  
-  if (ids.length === 1 && ids[0].indexOf('project:') === 0) {
-    const projectName = ids[0].substring('project:'.length);
-    const milestones = [];
-    const sheetUrls = [];
-    tracking.forEach(t => {
-      (t.milestones || []).forEach(m => {
-        if (m.project === projectName) milestones.push(m);
-      });
-      if (t.sheetUrl) sheetUrls.push({ source: t.source, url: t.sheetUrl });
-    });
-
-    // General's contribution from each source, by that source's Contribution policy:
-    // the policy's share of its income on milestones not already General's. Income only.
-    // This used to copy whole sources across, cost and all, so on the Cost measure every
-    // contributing project's spend appeared a second time under General.
-    if (projectName === CONFIG.GENERAL_PROJECT) {
-      milestones.push.apply(milestones, contributionMilestones_(tracking));
-    }
-
-    if (!milestones.length) throw new Error('No milestones for project: ' + projectName);
-    return { id: ids[0], label: projectName + ' (project)', type: 'project',
-      project: projectName, milestones: milestones, sheetUrls: sheetUrls };
-  }
-  
-  if (ids.length === 1) {
-    const src = tracking.filter(t => t.source === ids[0])[0];
-    if (!src) throw new Error('Unknown funding source: ' + ids[0]);
-    return { id: ids[0], label: ids[0], type: 'source', source: ids[0], status: src.status,
-      project: src.project, milestones: src.milestones,
-      sheetUrls: src.sheetUrl ? [{ source: src.source, url: src.sheetUrl }] : [] };
-  }
-  
-  // Multiple sources selected
-  const milestones = [];
-  const sheetUrls = [];
-  ids.forEach(id => {
-    const src = tracking.filter(t => t.source === id)[0];
-    if (src && src.milestones) {
-      milestones.push(...src.milestones);
-      if (src.sheetUrl) sheetUrls.push({ source: src.source, url: src.sheetUrl });
-    }
-  });
-  
-  return { id: ids.join(','), label: 'Multiple sources selected', type: 'composite',
-    project: 'Multiple', milestones: milestones, sheetUrls: sheetUrls };
+  return composeProjectTracking(snap.tracking, snap.timeline, project, currentQi);
 }
 
 /** Add values from source map into target map (mutates target). */
@@ -278,7 +200,7 @@ function addMaps_(target, source) {
 }
 
 /**
- * General's contribution rows for the tracking view: per source, its policy's share of the
+ * General's contribution rows for Project tracking: per source, its policy's share of the
  * income on milestones not already General's. Income layers only, because a contribution
  * is income to General, not spend. Pure over the tracking entries, so it can be tested.
  */

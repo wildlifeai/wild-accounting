@@ -23,22 +23,21 @@ data was last pulled. It refreshes itself roughly every 6 hours; click the butto
 latest immediately. A refresh takes about a minute, and a progress bar shows which phase it is
 in (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
 
-## Four tabs
+## Three tabs
 
 - **Overview**: the organisation-wide picture, with a runway chart you can regroup and filter
   (below).
-- **Quarterly tracking**: one funding source, or the whole General project, milestone by
-  milestone and quarter by quarter. See [Tracking and forecasting](#tracking-and-forecasting-quarterly).
-- **Project planner**: milestones on a timeline, coloured by funding status, with optional
-  Cost, Income and Profit and loss columns.
+- **Project tracking**: one project at a time, its funding sources and their milestones quarter
+  by quarter, as an actual-and-forecast grid or as a timeline. See
+  [Tracking and forecasting](#tracking-and-forecasting-quarterly).
 - **Health**: sheet, Xero-coding and system problems found on the last refresh. The tab carries
   a badge: red when a number on screen is wrong right now, amber when one may be, nothing when
   clean. Each finding says what is wrong, where, the amount at stake and what to do, with a
   link to the sheet. [Health checks](HEALTH_CHECKS.md) explains every one.
 
 The **?** on each tab opens a short reminder of what is on screen; this guide has the rest. The
-title above the Quarterly tracking and Project planner grids names what the controls chose, so
-a screenshot of a grid says what it is.
+title above the Project tracking grid names what the controls chose, so a screenshot of it says
+what it is.
 
 ## What you're looking at (Overview)
 
@@ -105,31 +104,40 @@ click **Refresh now**.
 
 ## Tracking and forecasting (quarterly)
 
-The **Quarterly tracking** tab replaces the old "Budget, Actual, Forecast Tracking" tab that
-used to live in each sheet. You no longer keep one per funding source, and you no longer copy
-Xero into each sheet by hand.
+The **Project tracking** tab replaces the old "Budget, Actual, Forecast Tracking" tab that used
+to live in each sheet. You no longer keep one per funding source, and you no longer copy Xero
+into each sheet by hand.
 
-Pick something to track from the dropdown:
+Pick a **project**. The tab shows every funding source with a milestone on it, each under its
+own heading with a 📄 link to its sheet and its own subtotals; General also gathers the
+`(contribution)` rows from the projects that pay overhead into it. The toolbar narrows what is
+shown, in both views:
 
-- **General (project)**: the whole General project, gathering its milestones from every funding
-  source, plus the `(contribution)` rows from projects that pay overhead into it, over the
-  elapsed quarters of this financial year and six quarters ahead.
-- each **funding source**: an **"Up to last FY"** column lumping everything before this
-  financial year, then this year's quarters, then next year's if the funding runs that long.
+- **Quarters**, from and to. The default runs from this financial year's first quarter to the
+  last quarter any source in the project budgets.
+- **Show** secured or proposed money; **filter** funding sources and milestones; **Hide finished
+  milestones** drops the ones with nothing in the quarters shown and over before them.
 
 Quarters follow our **financial year (April to March)**: Q1 is Apr to Jun, Q2 Jul to Sep, Q3 Oct
-to Dec, Q4 Jan to Mar, labelled like `25/26 Q1`. The **Cost / Income / Net** toggle switches what
-the grid shows; Net is income minus cost, so whether each milestone pays for itself.
+to Dec, Q4 Jan to Mar, labelled like `25/26 Q1`.
 
-The grid has **milestones down the side and quarters across the top**, and each cell shows:
+**Actual and forecast** has milestones down the side and quarters across the top. A first
+**"Before"** column lumps every quarter earlier than the first shown, so the totals on the right
+are always the whole funding source. The **Cost / Income / Net** toggle switches what the grid
+shows; Net is income minus cost, so whether each milestone pays for itself. Each cell shows:
 
 - the **budget** for that quarter, from the `Budget` tab, small underneath;
 - for quarters already finished, what was actually spent, from Xero;
 - for quarters to come, the **forecast** from the funding source's `Forecast` tab, or the budget
   where no forecast was written ("budget, no override").
 
+**Timeline** draws a bar across the quarters each milestone runs, green when the money paying
+for it is secured and amber when proposed. Hover a quarter for its budget, and its actual once
+the quarter has begun. Optional **Cost**, **Income** and **Profit and loss** columns total the
+quarters shown, per milestone and per source.
+
 **To change a forecast, edit the funding source's own `Forecast` tab**, not the dashboard; the
-grid is read-only and picks the change up at the next refresh. On the Overview, the planner and
+grid is read-only and picks the change up at the next refresh. On the Overview, the timeline and
 the runway the plan works like this:
 
 - **Months already gone are what Xero shows.** A forecast only shapes the months to come.

@@ -169,61 +169,81 @@ function runTests() {
     Object.keys(buildForecastLabelMap_([{ description: 'Thing', milestone: 'M', item: '' }]))
       .length === 0);
 
-  // Forecast merge with FY columns: aggregate 'Up to last FY' + this FY quarters.
-  // Forecast overrides live on the milestone itself, read from each funding
-  // source's own Forecast tab by BudgetReader.parseForecastTab_.
-  var entity = {
-    id: 'WW_25_TOI', label: 'WW_25_TOI', type: 'source', source: 'WW_25_TOI',
-    status: 'secured', project: 'Wildlife Watcher',
-    milestones: [{ item: 'WW_25_TOI_002', milestone: 'General management', source: 'WW_25_TOI',
-      baseline: { '25/26 Q3': 4992, '25/26 Q4': 7615,
-        '26/27 Q1': 7703, '26/27 Q2': 2792, '26/27 Q3': 1000 },
-      actual: { '25/26 Q3': 2000, '25/26 Q4': 2500 },
-      costForecast: { '26/27 Q2': 5000 },   // override on one future quarter only
-      forecastComment: 'staffing ramp' }]
-  };
-  var grid = composeTracking(entity, quarterSortNum('26/27 Q1'), 'cost');
-  var m = grid.milestones[0];
+  // Project tracking: one project's sources, each milestone's cells by quarter. Forecast
+  // overrides live on the milestone itself, read from each funding source's own Forecast
+  // tab by BudgetReader.parseForecastTab_.
+  var trk = [
+    { source: 'WW_25_TOI', status: 'secured', project: 'Wildlife Watcher', sheetUrl: 'u1',
+      milestones: [
+        { item: 'WW_25_TOI_002', milestone: 'General management', source: 'WW_25_TOI',
+          project: 'Wildlife Watcher',
+          baseline: { '25/26 Q3': 4992, '25/26 Q4': 7615,
+            '26/27 Q1': 7703, '26/27 Q2': 2792, '26/27 Q3': 1000 },
+          actual: { '25/26 Q3': 2000, '25/26 Q4': 2500 },
+          costForecast: { '26/27 Q2': 5000 },   // override on one future quarter only
+          incomeBaseline: { '26/27 Q1': 100 }, incomeActual: {}, incomeForecast: {},
+          forecastComment: 'staffing ramp' },
+        { item: 'WW_25_TOI_009', milestone: 'Admin', source: 'WW_25_TOI', project: 'General',
+          baseline: { '26/27 Q2': 300 }, actual: {}, costForecast: {},
+          incomeBaseline: {}, incomeActual: {}, incomeForecast: {}, forecastComment: '' },
+        { item: '(unassigned)', milestone: 'Unassigned (no product/service)', source: 'WW_25_TOI',
+          project: 'Wildlife Watcher', actualOnly: true,
+          baseline: {}, actual: { '26/27 Q1': 40 }, costForecast: {},
+          incomeBaseline: {}, incomeActual: {}, incomeForecast: {}, forecastComment: '' }] },
+    { source: 'SPY_26_X', status: 'proposed', project: 'Spyfish Aotearoa', sheetUrl: null,
+      milestones: [{ item: 'SPY_26_X_001', milestone: 'Dive', source: 'SPY_26_X',
+        project: 'Spyfish Aotearoa', baseline: { '27/28 Q1': 10 }, actual: {},
+        costForecast: {}, incomeBaseline: {}, incomeActual: {}, incomeForecast: {},
+        forecastComment: '' }] }
+  ];
+  var tlines = [
+    { project: 'Wildlife Watcher', milestone: 'General management', segments: [
+      { source: 'WW_25_TOI', start: '2025-11', end: '2026-03' },
+      { source: 'WW_25_TOI', start: '2026-04', end: '2026-12' }] }
+  ];
+  var pt = composeProjectTracking(trk, tlines, 'Wildlife Watcher', quarterSortNum('26/27 Q1'));
+  var ptSrc = pt.sources[0];
+  var m = ptSrc.milestones[0];
+  function cellFor(label) { return (m.byQ[label] || {}).cost; }
 
-  // Look columns up by label - index arithmetic is brittle as columns evolve.
-  function cellFor(label) {
-    for (var i = 0; i < grid.columns.length; i++) {
-      if (grid.columns[i].label === label) return m.cells[i];
-    }
-    return null;
-  }
-
-  check('first column is aggregate', grid.columns[0].type === 'aggregate');
-  check('aggregate sums prior FY actual', m.cells[0].effective === 4500);
-  check('future quarter uses its override', cellFor('26/27 Q2').effective === 5000
-    && cellFor('26/27 Q2').hasForecast === true);
+  check('project tracking: only sources with a milestone on the project',
+    pt.sources.length === 1 && ptSrc.source === 'WW_25_TOI' && ptSrc.status === 'secured' &&
+    ptSrc.sheetUrl === 'u1');
+  check('project tracking: a milestone tagged to another project is left out',
+    ptSrc.milestones.map(function (x) { return x.milestone; }).join('|') ===
+      'General management|Unassigned (no product/service)');
+  check('project tracking: the General-tagged milestone appears under General',
+    composeProjectTracking(trk, tlines, 'General', quarterSortNum('26/27 Q1'))
+      .sources[0].milestones[0].milestone === 'Admin');
+  check('past quarter: effective is the actual', cellFor('25/26 Q3').effective === 2000 &&
+    cellFor('25/26 Q3').budget === 4992);
+  check('future quarter uses its override', cellFor('26/27 Q2').effective === 5000 &&
+    cellFor('26/27 Q2').forecast === 5000);
   // Regression guard: an unmaintained Forecast tab must fall back to the budget
   // baseline, never to 0. Reading 0 makes a source look certain to underspend.
   check('future quarter with no override falls back to baseline',
-    cellFor('26/27 Q3').effective === 1000 && cellFor('26/27 Q3').hasForecast === false);
+    cellFor('26/27 Q3').effective === 1000 && cellFor('26/27 Q3').forecast === null);
   check('current quarter uses actual, not baseline', cellFor('26/27 Q1').effective === 0);
-  check('expected = 4500 + 0 + 5000 + 1000 + 0', m.expectedTotal === 10500);
-
-  // "Forecast entered" counts only quarters with an override; Expected still falls back to
-  // the baseline. Two different questions: what we have said we will spend, and what we
-  // expect to spend. The client sums the first, so this mirrors its rule to guard it.
-  var entered = 0, withBaseline = 0;
-  m.cells.forEach(function (c, i) {
-    var col = grid.columns[i];
-    if (col.past || col.type !== 'quarter') return;
-    withBaseline += c.forecast;
-    if (c.hasForecast) entered += c.forecast;
-  });
-  check('forecast entered counts only the override', entered === 5000, String(entered));
-  // Current + future, baseline where there is no override: 7703 + 5000 + 1000 + 0. Note the
-  // current quarter is in here, which is why this column and Expected never agree: Expected
-  // uses the current quarter's actual instead.
-  check('the old baseline-inclusive figure was nearly 3x larger',
-    withBaseline === 13703, String(withBaseline));
-  check('expected still carries the baseline for un-forecast quarters',
-    m.expectedTotal === 10500);
-  check('baseline total = 24102', m.baselineTotal === 24102);
+  check('income is its own layer', m.byQ['26/27 Q1'].income.budget === 100 &&
+    m.byQ['26/27 Q1'].income.effective === 0);
   check('comment carried through', m.comment === 'staffing ramp');
+  check('the bar spans the segments, first to last quarter',
+    m.from === '25/26 Q3' && m.to === '26/27 Q3');
+  check('with no segment the bar spans the budgeted quarters',
+    ptSrc.milestones[0].from === '25/26 Q3' &&
+    composeProjectTracking(trk, [], 'Wildlife Watcher', quarterSortNum('26/27 Q1'))
+      .sources[0].milestones[0].to === '26/27 Q3');
+  check('an actual-only row has no bar',
+    ptSrc.milestones[1].actualOnly === true && ptSrc.milestones[1].from === null);
+  check('quarters run without a gap from the first to the last, and name the current one',
+    pt.quarters.map(function (q) { return q.label; }).join('|') ===
+      '25/26 Q3|25/26 Q4|26/27 Q1|26/27 Q2|26/27 Q3|26/27 Q4' &&
+    pt.quarters[2].current === true && pt.quarters[1].past === true &&
+    pt.quarters[3].past === false && pt.currentQuarter === '26/27 Q1');
+  check('the current financial year is always there',
+    composeProjectTracking(trk, tlines, 'Spyfish Aotearoa', quarterSortNum('26/27 Q1'))
+      .quarters.map(function (q) { return q.label; }).join('|') ===
+      '26/27 Q1|26/27 Q2|26/27 Q3|26/27 Q4|27/28 Q1');
 
   // Per-quarter buckets, which let the Overview total any financial year rather than
   // only the current one. A line spanning Jan to Dec 2026 crosses FY25/26 Q4 into
@@ -1035,14 +1055,14 @@ function runTests() {
     Math.abs(cg.projects['General'].securedIncome - 6600) < 1e-6 &&
     Math.abs(cg.projects['Spyfish Aotearoa'].securedIncome - 9400) < 1e-6);
 
-  // The planner: General's contribution is income, one row per contributing source.
+  // The timeline: General's contribution is income, one row per contributing source.
   var tl = buildTimeline_(cBudgets, [], {}, fyBounds_(d(2026, 9, 26)), d(2026, 9, 26));
   var tlRow = tl.filter(function (r) {
     return r.milestone === contributionMilestone_('XXX_27_P'); })[0];
-  check('planner: a contribution is income to General, not cost',
+  check('timeline: a contribution is income to General, not cost',
     tlRow && tlRow.project === 'General' && tlRow.segments[0].cost === 0 &&
     tlRow.segments[0].income === 4000 && tlRow.totalBudget === 0);
-  check('planner: only a percent policy gets a contribution row',
+  check('timeline: only a percent policy gets a contribution row',
     tl.filter(function (r) {
       return r.milestone === contributionMilestone_('XXX_27_N'); }).length === 0);
 
