@@ -111,8 +111,9 @@ to live in each sheet. You no longer keep one per funding source, and you no lon
 into each sheet by hand.
 
 Pick a **project**. The tab shows every funding source with a milestone on it, each under its
-own heading with a 📄 link to its sheet and its own subtotals; General also gathers the
-`(contribution)` rows from the projects that pay overhead into it. The ribbon narrows what is
+own heading with a 📄 link to its sheet and its own subtotals; click the heading to fold its
+milestones away and back. General also gathers the `(contribution)` rows from the projects that
+pay overhead into it. The ribbon narrows what is
 shown, in both views:
 
 - **View**: Actual and forecast, with its Cost / Income / Net measure, or Timeline, with its

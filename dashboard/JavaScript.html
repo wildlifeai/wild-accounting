@@ -1086,11 +1086,28 @@
     else renderTrTimeline(groups, inRange);
   }
 
+  // A funding source's heading cell: the fold mark, the sheet link, the name, the status.
+  // Clicking the row folds its milestones away and keeps its subtotals; the fold survives
+  // every re-render and a change of view.
+  var trFolded = {};
   function srcLabel(s) {
-    return (s.sheetUrl ? '<a class="src-link" href="' + esc(s.sheetUrl) + '" target="_blank" ' +
+    return '<span class="src-toggle">' + (trFolded[s.source] ? '▸' : '▾') + '</span>' +
+      (s.sheetUrl ? '<a class="src-link" href="' + esc(s.sheetUrl) + '" target="_blank" ' +
       'title="Open the ' + esc(s.source) + ' spreadsheet">📄</a> ' : '') + esc(s.source) +
       (s.status ? '<span class="src-status">' + esc(statusLabel(s.status)) + '</span>' : '');
   }
+  function srcRow(s, cells) {
+    return '<tr class="src-row" data-src="' + esc(s.source) + '"><td class="mile gantt-label">' +
+      srcLabel(s) + '</td>' + cells + '</tr>';
+  }
+  document.getElementById('tr-grid').addEventListener('click', function (e) {
+    if (e.target.closest('a')) return;
+    var row = e.target.closest('tr.src-row');
+    if (!row) return;
+    var src = row.getAttribute('data-src');
+    trFolded[src] = !trFolded[src];
+    renderTracking();
+  });
 
   // ---- The actual-and-forecast grid. Columns: "Before" lumping every quarter earlier
   // than the first shown, then the quarters shown. The totals on the right are the whole
@@ -1179,7 +1196,7 @@
       (actualCount ? '<th colspan="' + actualCount + '" class="zone-actual">ACTUAL <span class="zone-src">from Xero</span></th>' : '') +
       (forecastCount ? '<th colspan="' + forecastCount + '" class="zone-forecast">FORECAST <span class="zone-src">from gsheet</span></th>' : '') +
       '<th colspan="5" class="zone-totals">TOTALS</th></tr>' +
-      '<tr><th class="mile">Milestone</th>' +
+      '<tr><th class="mile">Funding / Milestone</th>' +
       cols.map(function (col) { return '<th class="' + cellCls(col) + '">' + esc(col.label) + '</th>'; }).join('') +
       '<th class="tot">' + lab.base + '</th><th class="tot">' + lab.actual + '</th>' +
       '<th class="tot" title="Only quarters with an entry on the Forecast tab. ' +
@@ -1192,16 +1209,16 @@
       var rows = g.milestones.map(rowOf);
       var sum = sumRows(rows);
       all.push(sum);
-      return '<tr class="src-row"><td class="mile">' + srcLabel(g.source) + '</td>' +
+      return srcRow(g.source,
         sum.cells.map(function (c, i) { return cellTd(c, cols[i], true); }).join('') +
-        totalTds(sum) + '<td class="cmt-c"></td></tr>' +
-        rows.map(function (r, k) {
+        totalTds(sum) + '<td class="cmt-c"></td>') +
+        (trFolded[g.source.source] ? '' : rows.map(function (r, k) {
           var m = g.milestones[k];
           return '<tr><td class="mile">' + esc(m.milestone) + '</td>' +
             r.cells.map(function (c, i) { return cellTd(c, cols[i], false); }).join('') +
             totalTds(r) + '<td class="cmt-c">' +
             (m.comment ? '<span class="cmt-text">' + esc(m.comment) + '</span>' : '') + '</td></tr>';
-        }).join('');
+        }).join(''));
     }).join('') + '</tbody>';
 
     var grand = sumRows(all);
@@ -1234,7 +1251,7 @@
         return '<td class="' + cls + '">' + money0(v) + '</td>';
       }).join('');
     }
-    var head = '<thead><tr><th>Milestone</th>' +
+    var head = '<thead><tr><th>Funding / Milestone</th>' +
       cols.map(function (c) { return '<th class="num gantt-fig">' + COL_LABEL[c] + '</th>'; }).join('') +
       inRange.map(function (q) {
         return '<th class="' + (q.current ? 'today-col' : '') + '">' + esc(q.label) + '</th>';
@@ -1268,8 +1285,9 @@
       });
       if (!rows) return '';
       totals.cost += gc; totals.income += gi;
-      return '<tr class="src-row"><td class="gantt-label">' + srcLabel(g.source) + '</td>' +
-        figTds(gc, gi) + '<td class="gantt-cell" colspan="' + inRange.length + '"></td></tr>' + rows;
+      return srcRow(g.source, figTds(gc, gi) +
+        '<td class="gantt-cell" colspan="' + inRange.length + '"></td>') +
+        (trFolded[g.source.source] ? '' : rows);
     }).join('');
 
     var foot = cols.length
