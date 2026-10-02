@@ -16,8 +16,9 @@
  * Pure over its inputs - no Drive or Xero calls - so it can be exercised offline.
  */
 
-// How many of the lines D3 counts its detail names, largest first.
-const D3_LINES_SHOWN = 10;
+// How many Xero lines a finding lists, largest first. The finding says how many more there
+// are, so a long tail is counted, not hidden.
+const HEALTH_LINES_SHOWN = 50;
 
 const HEALTH_CATALOGUE = {
   A1: { severity: 'error', category: 'Sheet structure',
@@ -414,22 +415,13 @@ function buildHealth(budgets, actualLines, ctx) {
 
     // D3: spend with no item code falls out of the quarterly grid entirely. Journal lines
     // are left out: Xero journals cannot carry a Product/Service, so the advice would be
-    // impossible to follow.
-    // The detail names the largest lines, so the bookkeeper can find them in Xero without
-    // searching every transaction for a blank Product/Service.
+    // impossible to follow. So is archived spend, which no total or grid counts anyway.
     const noItem = (actualLines || []).filter(l =>
-      l.kind === 'expense' && !l.journal && !itemCode_(l.item));
+      l.kind === 'expense' && !l.journal && !archivedLine_(l) && !itemCode_(l.item));
     if (noItem.length) {
-      const shown = noItem.slice().sort((a, b) =>
-        Math.abs(Number(b.amount) || 0) - Math.abs(Number(a.amount) || 0)).slice(0, D3_LINES_SHOWN);
-      const describe = l => (l.date ? isoDate_(new Date(l.date)) : 'undated') + ' ' +
-        (clean_(l.fundingSource || '') || 'no funding source') + ', ' +
-        (l.account || 'no account') + ', ' + Math.round(Number(l.amount) || 0);
-      add('D3', { amount: Math.round(noItem.reduce((t, l) => t + (Number(l.amount) || 0), 0)),
+      add('D3', withLines_({ amount: Math.round(sumAmount_(noItem)),
         detail: noItem.length + ' expense line(s) carry no Product/Service, so they sit ' +
-          'outside the quarterly tracking grid. ' +
-          (noItem.length > shown.length ? 'The largest: ' : 'They are: ') +
-          shown.map(describe).join('; ') });
+          'outside the quarterly tracking grid' }, noItem));
     }
 
     // D4 / D6: actuals pointing at a source that has no sheet, or at one that has ended.
@@ -438,27 +430,28 @@ function buildHealth(budgets, actualLines, ctx) {
     (actualLines || []).forEach(l => {
       if (l.kind !== 'expense') return;
       const fs = clean_(l.fundingSource || '');
-      if (!fs || isArchivedSource_(fs)) return;
+      if (!fs || archivedLine_(l)) return;
       if (!byName[fs]) {
-        orphan[fs] = (orphan[fs] || 0) + (Number(l.amount) || 0);
+        (orphan[fs] = orphan[fs] || []).push(l);
         return;
       }
       const end = parseSheetDate_((byName[fs].metadata || {})['funding end']);
       if (end && l.date && new Date(l.date) > end) {
-        afterEnd[fs] = (afterEnd[fs] || 0) + (Number(l.amount) || 0);
+        (afterEnd[fs] = afterEnd[fs] || []).push(l);
       }
     });
     Object.keys(orphan).forEach(fs => {
-      add('D4', { fundingSource: fs, amount: Math.round(orphan[fs]),
-        detail: 'Xero has spend tagged "' + fs + '" but no budget sheet of that name' });
+      add('D4', withLines_({ fundingSource: fs, amount: Math.round(sumAmount_(orphan[fs])),
+        detail: 'Xero has spend tagged "' + fs + '" but no budget sheet of that name' },
+        orphan[fs]));
     });
     Object.keys(afterEnd).forEach(fs => {
       const b = byName[fs];
-      add('D6', { fundingSource: fs, project: b.projectFolder,
+      add('D6', withLines_({ fundingSource: fs, project: b.projectFolder,
         owner: (b.metadata || {})['owner'] || '', link: b.sheetUrl || '',
-        amount: Math.round(afterEnd[fs]),
+        amount: Math.round(sumAmount_(afterEnd[fs])),
         detail: 'spend dated after Funding end ' +
-          isoDate_(parseSheetDate_((b.metadata || {})['funding end'])) });
+          isoDate_(parseSheetDate_((b.metadata || {})['funding end'])) }, afterEnd[fs]));
     });
 
     // D8: Xero moves this source's income by manual journal, the accountant's deferral and
@@ -587,22 +580,23 @@ function buildHealth(budgets, actualLines, ctx) {
     });
   })();
 
-  // --- D1 / D2: Xero coding. An untagged line is silently dropped from totals. ---
-  var noProject = 0, noProjectTotal = 0, noSource = 0, noSourceTotal = 0;
+  // --- D1 / D2: Xero coding. An untagged line is silently dropped from totals. Archived
+  // spend is left out, as in D3: no total counts it, tagged or not. ---
+  const noProject = [], noSource = [];
   (actualLines || []).forEach(l => {
-    if (l.kind !== 'expense') return;
-    if (!l.project) { noProject++; noProjectTotal += Number(l.amount) || 0; }
-    else if (!l.fundingSource) { noSource++; noSourceTotal += Number(l.amount) || 0; }
+    if (l.kind !== 'expense' || archivedLine_(l)) return;
+    if (!l.project) noProject.push(l);
+    else if (!l.fundingSource) noSource.push(l);
   });
-  if (noProject) {
-    add('D1', { detail: noProject + ' expense line(s) carry no Projects tracking value, ' +
-      'so they are excluded from every project and organisation total',
-      amount: Math.round(noProjectTotal) });
+  if (noProject.length) {
+    add('D1', withLines_({ detail: noProject.length + ' expense line(s) carry no Projects ' +
+      'tracking value, so they are excluded from every project and organisation total',
+      amount: Math.round(sumAmount_(noProject)) }, noProject));
   }
-  if (noSource) {
-    add('D2', { detail: noSource + ' expense line(s) carry no Funding source value, ' +
-      'so they fall outside the quarterly tracking grid',
-      amount: Math.round(noSourceTotal) });
+  if (noSource.length) {
+    add('D2', withLines_({ detail: noSource.length + ' expense line(s) carry no Funding ' +
+      'source value, so they fall outside the quarterly tracking grid',
+      amount: Math.round(sumAmount_(noSource)) }, noSource));
   }
 
   // --- F: system ---
@@ -619,8 +613,8 @@ function buildHealth(budgets, actualLines, ctx) {
     ' on balance-sheet accounts (' + excl.total + ')' });
   const unp = ctx.unposted || { count: 0, total: 0 };
   if (unp.count) {
-    add('F6', { detail: unp.count + ' document(s) in draft or awaiting approval, ' +
-      'totalling ' + Math.round(unp.total), amount: Math.round(unp.total) });
+    add('F6', withLines_({ detail: unp.count + ' document(s) in draft or awaiting approval, ' +
+      'totalling ' + Math.round(unp.total), amount: Math.round(unp.total) }, unp.docs || []));
   }
 
   out.sort(healthOrder_);
@@ -651,7 +645,7 @@ function finding_(id, fields) {
   const spec = HEALTH_CATALOGUE[id];
   if (!spec) return null; // never let an unknown id break a refresh or a page load
   fields = fields || {};
-  return {
+  const f = {
     id: id, severity: spec.severity, category: spec.category, title: spec.title,
     action: spec.action,
     detail: fields.detail || '',
@@ -662,6 +656,51 @@ function finding_(id, fields) {
     amount: fields.amount || 0,
     link: fields.link || ''
   };
+  // Only findings about Xero lines carry these, so the rest of the snapshot stays small.
+  if (fields.lines) {
+    f.lines = fields.lines;
+    f.moreLines = fields.moreLines || 0;
+  }
+  return f;
+}
+
+/**
+ * Attach the Xero lines behind a finding, largest first, so it names which transactions
+ * to fix instead of only counting them. Each says enough to find it in Xero (date,
+ * document, contact, description) and where it landed (account, funding source).
+ */
+function withLines_(fields, lines) {
+  const sorted = (lines || []).slice().sort((a, b) =>
+    Math.abs(Number(b.amount) || 0) - Math.abs(Number(a.amount) || 0));
+  fields.lines = sorted.slice(0, HEALTH_LINES_SHOWN).map(healthLine_);
+  fields.moreLines = Math.max(0, sorted.length - HEALTH_LINES_SHOWN);
+  return fields;
+}
+
+function healthLine_(l) {
+  const d = l.date ? new Date(l.date) : null;
+  return {
+    date: d && !isNaN(d) ? isoDate_(d) : '',
+    document: [l.docType, l.reference].filter(Boolean).join(' '),
+    contact: l.contact || '',
+    description: l.description || '',
+    account: l.account || '',
+    fundingSource: clean_(l.fundingSource || ''),
+    amount: Math.round((Number(l.amount) || 0) * 100) / 100
+  };
+}
+
+function sumAmount_(lines) {
+  return (lines || []).reduce((t, l) => t + (Number(l.amount) || 0), 0);
+}
+
+/**
+ * A line on an archived funding source or project, which buildSnapshot leaves out of every
+ * total and grid. Asking for it to be coded better would be work with no effect.
+ */
+function archivedLine_(l) {
+  return isArchivedSource_(clean_(l.fundingSource || '')) ||
+    startsWith_(String(l.project || ''), CONFIG.ARCHIVE_PREFIX);
 }
 
 /** Most severe first, then value at risk. One comparator so build and serve agree. */

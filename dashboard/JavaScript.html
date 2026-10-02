@@ -102,6 +102,7 @@
         (where.length ? '<span class="health-where">' + esc(where.join(' · ')) + '</span>' : '') +
         (f.amount ? '<span class="health-amt">' + fmtMoney(f.amount) + '</span>' : '') +
         (f.detail ? '<div class="health-detail">' + esc(f.detail) + '</div>' : '') +
+        healthLines(f) +
         (f.action ? '<div class="health-action">' + esc(f.action) + '</div>' : '') +
         (f.link ? '<div><a class="health-link" target="_blank" rel="noopener" href="' +
           esc(f.link) + '">open sheet</a></div>' : '') +
@@ -110,10 +111,35 @@
 
     health.forEach(function (f) {
       if (f.severity === 'info' && f.detail) {
-        html += '<div class="health-info">' + esc(f.detail) + '</div>';
+        html += '<div class="health-info">' + esc(f.detail) + healthLines(f) + '</div>';
       }
     });
     el.innerHTML = html;
+  }
+
+  // The Xero lines behind a finding, largest first, so each can be found and fixed in
+  // Xero. Cents shown: a small fee is found by its exact amount.
+  function healthLines(f) {
+    if (!f.lines || !f.lines.length) return '';
+    var n = f.lines.length + (f.moreLines || 0);
+    var cents = function (v) {
+      return '$' + (Number(v) || 0).toLocaleString('en-NZ',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+    var rows = f.lines.map(function (l) {
+      return '<tr><td>' + esc(l.date) + '</td><td>' + esc(l.document) + '</td><td>' +
+        esc(l.contact) + '</td><td>' + esc(l.description) + '</td><td>' + esc(l.account) +
+        '</td><td>' + esc(l.fundingSource) + '</td><td class="num">' + cents(l.amount) +
+        '</td></tr>';
+    }).join('');
+    return '<details class="health-lines"><summary>' +
+      (n === 1 ? 'Show the line' : 'Show the ' + n + ' lines') + '</summary>' +
+      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Document</th>' +
+      '<th>Contact</th><th>Description</th><th>Account</th><th>Funding source</th>' +
+      '<th class="num">Amount</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      (f.moreLines ? '<div class="health-more">and ' + f.moreLines +
+        ' smaller line(s) not listed</div>' : '') +
+      '</details>';
   }
 
   function selectedStatuses() {

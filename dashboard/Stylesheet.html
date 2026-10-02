@@ -139,6 +139,14 @@
   .health-link { color: var(--green); text-decoration: none; }
   .health-link:hover { text-decoration: underline; }
   .health-info { color: var(--hint); margin-top: 8px; }
+  /* The Xero lines behind a finding. Scrolls rather than clips, as the runway table does. */
+  .health-lines { margin-top: 4px; font-size: 12px; }
+  .health-lines summary { cursor: pointer; color: var(--muted); }
+  .health-lines .table-wrap { margin-top: 6px; overflow-x: auto; }
+  .health-lines td, .health-lines th { padding: 5px 10px; font-size: 12px; vertical-align: top; }
+  .health-lines td:first-child, .health-lines td.num { white-space: nowrap; }
+  .health-lines td.num { font-variant-numeric: tabular-nums; }
+  .health-more { color: var(--hint); margin-top: 4px; }
 
   .coverage { font-size: 13px; color: var(--muted); margin: 0 0 16px; display: flex;
     flex-wrap: wrap; gap: 8px 18px; }
