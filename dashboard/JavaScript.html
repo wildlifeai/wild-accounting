@@ -390,8 +390,8 @@
     }
   });
 
-  // The "?" beside a heading or at the end of a toolbar: the explanation that used to sit
-  // on the page, shown on tap. One open at a time, and it stays on screen: a note near the
+  // The "?" at the right of a title: the explanation that used to sit on the page, shown
+  // on tap. One open at a time, and it stays on screen: a note near the
   // right edge opens leftwards.
   Array.prototype.slice.call(document.querySelectorAll('.help-btn')).forEach(function (b) {
     b.addEventListener('click', function () {
@@ -411,10 +411,9 @@
       .forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
   }
 
-  function card(label, value, cls, note) {
+  function card(label, value, cls) {
     return '<div class="card"><div class="label">' + label + '</div>' +
-      '<div class="value ' + (cls || '') + '">' + value + '</div>' +
-      (note ? '<div class="note">' + note + '</div>' : '') + '</div>';
+      '<div class="value ' + (cls || '') + '">' + value + '</div></div>';
   }
 
   // ---- Runway ---------------------------------------------------------------
@@ -859,7 +858,7 @@
   // ---- Project tracking ----------------------------------------------------
   // One project at a time, fetched once (apiGetProjectTracking) and laid out here in
   // either view: the actual-and-forecast grid or the timeline. Every control on the
-  // toolbar is arithmetic over that payload, so only the project and Refresh now go back
+  // ribbon is arithmetic over that payload, so only the project and Refresh now go back
   // to the server.
 
   var trLoaded = false, trData = null, trView = 'grid', trMeasure = 'cost';
