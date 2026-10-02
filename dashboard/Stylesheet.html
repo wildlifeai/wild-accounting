@@ -40,7 +40,10 @@
   .banner { background: #FCEBEB; color: var(--danger-text); border-radius: 8px;
     padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
   .banner a { color: var(--danger-text); font-weight: 500; margin-left: 8px; }
-  .hidden { display: none; }
+  /* Wins over the display a class sets later in this sheet, such as .refresh-progress and
+     .badge: without !important those stayed on screen, the progress bar as an empty line
+     under the header. */
+  .hidden { display: none !important; }
 
   /* The "?" beside a heading or at the end of a toolbar, and the note it opens. */
   .help { position: relative; display: inline-block; vertical-align: middle; }
@@ -288,8 +291,6 @@
   .gantt td.gantt-label { text-align: left; padding: 10px 12px; min-width: 170px; max-width: 220px;
     position: sticky; left: 0; background: var(--bg); z-index: 2; font-weight: 500;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .gantt td.gantt-label .gantt-sub { display: block; font-weight: 400; font-size: 11px;
-    color: var(--muted); margin-top: 2px; }
 
   .gantt td.gantt-cell { padding: 8px 0; border-left: 1px solid var(--line);
     position: relative; height: 44px; vertical-align: middle; }

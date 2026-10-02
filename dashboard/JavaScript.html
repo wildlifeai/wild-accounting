@@ -334,7 +334,7 @@
   Array.prototype.slice.call(document.querySelectorAll('.rw-group'))
     .forEach(function (c) { c.addEventListener('change', renderRunway); });
 
-  Array.prototype.slice.call(document.querySelectorAll('.pl-dim, .pl-status, .pl-col'))
+  Array.prototype.slice.call(document.querySelectorAll('.pl-status, .pl-col'))
     .forEach(function (c) { c.addEventListener('change', function () { renderPlanner(); }); });
 
   Array.prototype.slice.call(document.querySelectorAll('.bd-dd-actions a')).forEach(function (a) {
@@ -828,7 +828,7 @@
       })
       .withFailureHandler(function (e) {
         stopProgress();
-        document.getElementById('sync-label').textContent = 'error: ' + e.message;
+        document.getElementById('sync-label').textContent = 'error: ' + errText(e);
         btn.disabled = false; btn.textContent = 'Refresh now';
       });
     force ? call.apiRefresh() : call.apiGetSnapshot();
@@ -936,7 +936,7 @@
   }
 
   function trackError(e) {
-    document.getElementById('track-status').textContent = 'error: ' + e.message;
+    document.getElementById('track-status').textContent = 'error: ' + errText(e);
   }
 
   function renderTracking(t) {
@@ -1105,6 +1105,10 @@
 
   var plannerLoaded = false;
 
+  // google.script.run hands the failure handler whatever went wrong, which is not always
+  // an Error with a message; "error: undefined" said nothing about it.
+  function errText(e) { return e && e.message ? e.message : String(e); }
+
   function loadPlannerProjects() {
     var sel = document.getElementById('planner-project');
     document.getElementById('planner-status').textContent = 'loading projects…';
@@ -1119,7 +1123,10 @@
       sel.addEventListener('change', function () { loadPlannerTimeline(sel.value); });
       loadPlannerTimeline(projects[0]);
     }).withFailureHandler(function (e) {
-      document.getElementById('planner-status').textContent = 'error: ' + e.message;
+      // A failed first load is retried on the next click of the tab, not left for good.
+      plannerLoaded = false;
+      document.getElementById('planner-status').textContent = 'error: ' + errText(e) +
+        '. Click the tab again to retry.';
     }).apiListProjects();
   }
 
@@ -1150,7 +1157,7 @@
         renderPlanner(milestones);
       })
       .withFailureHandler(function (e) {
-        document.getElementById('planner-status').textContent = 'error: ' + e.message;
+        document.getElementById('planner-status').textContent = 'error: ' + errText(e);
       }).apiGetTimeline(projectName);
   }
 
@@ -1208,7 +1215,6 @@
     }
 
     var statuses = plSelected('pl-status');
-    var dims = plSelected('pl-dim');
     var cols = plSelected('pl-col');
     var sources = selectedValues('pl-sources');
 
@@ -1218,9 +1224,8 @@
     var todayKey = new Date().getFullYear() + '-' +
       ('0' + (new Date().getMonth() + 1)).slice(-2);
 
-    // One row per milestone, or per milestone and group when grouping is on. A milestone
-    // funded by two sources becomes two rows under "group by: Funding source", which is
-    // the point: you can see which grant pays for which stretch of the work.
+    // One row per milestone. Each bar is named for the source paying for that stretch,
+    // so which grant pays for what is read off the row itself.
     var rows = [];
     milestones.forEach(function (m) {
       var segs = (m.segments || []).filter(function (seg) {
@@ -1228,21 +1233,7 @@
         if (sources.length && sources.indexOf(seg.source) === -1) return false;
         return true;
       });
-      if (!segs.length) return;
-      if (!dims.length) {
-        rows.push({ milestone: m.milestone, group: '', segments: segs });
-        return;
-      }
-      var groups = {};
-      segs.forEach(function (seg) {
-        var key = dims.map(function (d) {
-          return d === 'fundingSource' ? seg.source : statusLabel(seg.status);
-        }).join(' › ');
-        (groups[key] = groups[key] || []).push(seg);
-      });
-      Object.keys(groups).sort().forEach(function (k) {
-        rows.push({ milestone: m.milestone, group: k, segments: groups[k] });
-      });
+      if (segs.length) rows.push({ milestone: m.milestone, segments: segs });
     });
 
     // The title names the project, what is shown and the horizon, so the grid reads on
@@ -1284,8 +1275,7 @@
       totals.cost += cost;
       totals.income += income;
 
-      var labelTd = '<td class="gantt-label">' + esc(row.milestone) +
-        (row.group ? '<span class="gantt-sub">' + esc(row.group) + '</span>' : '') + '</td>';
+      var labelTd = '<td class="gantt-label">' + esc(row.milestone) + '</td>';
 
       var figTds = cols.map(function (c) {
         var v = c === 'cost' ? cost : (c === 'income' ? income : income - cost);
