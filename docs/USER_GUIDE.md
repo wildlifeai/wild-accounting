@@ -33,7 +33,8 @@ in (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
 - **Health**: sheet, Xero-coding and system problems found on the last refresh. The tab carries
   a badge: red when a number on screen is wrong right now, amber when one may be, nothing when
   clean. Each finding says what is wrong, where, the amount at stake and what to do, with a
-  link to the sheet. [Health checks](HEALTH_CHECKS.md) explains every one.
+  link to the sheet. [Health checks](HEALTH_CHECKS.md) explains every one. Under the findings,
+  [Quarter close](#quarter-close) gives the accountant what to post for a finished quarter.
 
 Each tab's controls sit in a ribbon of dropdown boxes, grouped and named underneath. The title
 under the ribbon names what was chosen, so a screenshot says what it is, and the **?** at its
@@ -186,6 +187,23 @@ The totals on the right are **Budget**, **Actual to date**, **Expected** (actual
 plus the forecast for the rest) and **Variance** (Expected minus Budget: red is heading over,
 green under). Review this once a quarter with the project leads: what actually landed, then
 adjust the `Forecast` tabs.
+
+## Quarter close
+
+At the bottom of the **Health** tab, pick a finished quarter. Refresh after the quarter's
+bills, receipts and pay runs are in Xero, so both tables read the closed quarter.
+
+- **Grant income to release or defer**, for every grant marked `Income recognition: as spent`,
+  by project: what it spent in the quarter, the income its spend earned to the quarter's end,
+  and the income Xero's P&L shows for it to the same date. **To post** is the difference:
+  *release* moves that much from income received in advance into income, *defer* the reverse.
+  It is cumulative, so a release missed in an earlier quarter shows until it is posted; once
+  the journal is in and the cockpit refreshed, the row reads *nothing*.
+- **Spend expected but not in Xero**: milestones on secured sheets that spent at least $100
+  less in the quarter than the grid expected (the `Forecast` row, or the budget where there is
+  none), with the `Forecast` comment. Accrue the ones where the work was done and the bill has
+  not arrived; for work that slipped, move the amount to a later quarter on the `Forecast` tab.
+  The comment is where a project lead tells the accountant which it is.
 
 ## Coding transactions in Xero
 

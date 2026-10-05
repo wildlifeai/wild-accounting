@@ -172,6 +172,12 @@ Ranked by how badly they hurt the persona who depends on them:
   is typed at each quarter close on the Cockpit Settings `Reserves` tab, and every line moves
   by one amount to sit at it at that month end. Only the whole organisation's view uses it;
   reserves belong to no project, and adding them to one would overstate it.
+- **2026-10-05: the quarter close on the Health tab.** The accountant worked out each grant's
+  release from Xero's P&L by hand, and the project leads' comments were the only list of costs
+  to accrue. The cockpit already earns as-spent income from spend, so the release still to post
+  is that income to the quarter's end minus Xero's, cumulative so a missed one resurfaces; and a
+  closed quarter that spent less than the grid expected is either unbilled work or slippage, so
+  it is listed with the comment that says which. Under the findings rather than a fourth tab.
 
 ## History
 

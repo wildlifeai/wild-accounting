@@ -814,6 +814,55 @@ function runTests() {
     reservesMonth_(new Date(2026, 9, 31), new Date(2026, 9, 31)) === '2026-09');
   check('reserves: an empty tab is no reserves', latestReserves_([], resNow) === null);
 
+  // ---- quarter close --------------------------------------------------------
+  // A grant invoiced to income, then part deferred by journal: earned to the quarter's end
+  // minus what Xero shows to the same end is the journal still to post.
+  var qcLine = function (y, m, kind, amount, source, extra) {
+    return Object.assign({ date: d(y, m, 10), kind: kind, amount: amount,
+      fundingSource: source, project: 'P', item: '' }, extra || {});
+  };
+  var qc = buildQuarterClose_([
+    { name: 'XXX_27_T', metadata: { 'income recognition': 'as spent' }, lines: [] },
+    { name: 'XXX_27_I', metadata: {}, lines: [] }
+  ], [
+    qcLine(2026, 4, 'income', 5000, 'XXX_27_T'),
+    qcLine(2026, 6, 'income', -3600, 'XXX_27_T', { journal: true }),
+    qcLine(2026, 5, 'income', 800, 'XXX_27_I')
+  ], [
+    qcLine(2026, 5, 'expense', 1000, 'XXX_27_T'),
+    qcLine(2026, 5, 'income', 1000, 'XXX_27_T', { earned: true }),
+    qcLine(2026, 8, 'expense', 500, 'XXX_27_T'),
+    qcLine(2026, 8, 'income', 500, 'XXX_27_T', { earned: true }),
+    qcLine(2026, 5, 'expense', 300, 'XXX_27_I')
+  ], [
+    { source: 'XXX_27_T', status: 'secured', sheetUrl: 'u', milestones: [
+      { item: 'XXX_27_T_001', milestone: 'Staff', project: 'P',
+        baseline: { '26/27 Q1': 1000, '26/27 Q2': 1000, '26/27 Q3': 1000 },
+        costForecast: { '26/27 Q2': 900 },
+        actual: { '26/27 Q1': 950, '26/27 Q2': 500 }, forecastComment: 'invoice late' }] },
+    { source: 'XXX_27_P', status: 'proposed', milestones: [
+      { item: 'XXX_27_P_001', milestone: 'Dive', project: 'P',
+        baseline: { '26/27 Q2': 5000 }, actual: {} }] }
+  ], quarterSortNum('26/27 Q3'));
+  var qcT = qc.releases[0];
+  check('quarter close: only grants marked as spent are released',
+    qc.releases.length === 1 && qcT.source === 'XXX_27_T');
+  check('quarter close: spend, earned and Xero income by quarter',
+    JSON.stringify(qcT.byQ['26/27 Q1']) === '{"spend":1000,"earned":1000,"xero":1400}' &&
+    JSON.stringify(qcT.byQ['26/27 Q2']) === '{"spend":500,"earned":500,"xero":0}');
+  var qcPost = function (q) {
+    return Object.keys(qcT.byQ).filter(function (k) { return qiOfLabel_(k) <= qiOfLabel_(q); })
+      .reduce(function (t, k) { return t + qcT.byQ[k].earned - qcT.byQ[k].xero; }, 0);
+  };
+  check('quarter close: to Q1 defers the unspent part, to Q2 releases what Q2 spent',
+    qcPost('26/27 Q1') === -400 && qcPost('26/27 Q2') === 100);
+  check('quarter close: a shortfall on a secured milestone is an accrual candidate',
+    qc.accruals.length === 1 && qc.accruals[0].quarter === '26/27 Q2' &&
+    qc.accruals[0].expected === 900 && qc.accruals[0].actual === 500 &&
+    qc.accruals[0].comment === 'invoice late');
+  check('quarter close: finished quarters only, latest first',
+    qc.quarters.join('|') === '26/27 Q2|26/27 Q1');
+
   // The page receives runwayWalk_ as its own source (Index.html), so it must stand alone:
   // a call to any server helper would work here and throw in the browser.
   check('runway: the walk calls nothing outside itself',

@@ -181,6 +181,11 @@ const CONFIG = {
   // was turned on with it on 2026-10-02.
   PLAN_REMAINING: true,
 
+  // ---- Quarter close ------------------------------------------------------
+  // The Health tab's accrual candidates leave out shortfalls smaller than this, in dollars:
+  // a pay run a few dollars off its forecast is not an accrual. See buildQuarterClose_.
+  ACCRUAL_MIN_SHORTFALL: 100,
+
   // ---- Caching ------------------------------------------------------------
   // The snapshot is stored as a JSON file in Drive (no size ceiling, unlike
   // Script Properties). The file id is kept in a Script Property.

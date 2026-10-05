@@ -123,6 +123,12 @@ function filterSnapshotForProjects_(snap, allowedProjects) {
     filteredSnap.timeline = filteredSnap.timeline.filter(t => allowedProjects.includes(t.project));
   }
 
+  if (filteredSnap.quarterClose) {
+    const qc = filteredSnap.quarterClose;
+    qc.releases = (qc.releases || []).filter(r => allowedProjects.includes(r.project));
+    qc.accruals = (qc.accruals || []).filter(a => allowedProjects.includes(a.project));
+  }
+
   // Health findings name their funding source, its owner's email, the dollars at risk and
   // a link straight to the sheet. Unfiltered, the panel showed a project lead every budget
   // in the organisation. This was invisible while dataFlags was never populated; once
