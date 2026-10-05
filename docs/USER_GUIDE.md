@@ -167,7 +167,10 @@ forecast differs from the budget.
 
 **Nothing from Xero is dropped.** Money coded to a product/service that is not a budget milestone
 appears as its own **"(unbudgeted)"** row, and anything with no product/service at all lands in
-an **"Unassigned"** row, so the totals always reconcile to Xero.
+an **"Unassigned"** row, so the totals always reconcile to Xero. The one exception: a source's
+grid starts at the earlier of its `Funding start` and its first budget line, so spend dated
+before then, such as a renamed Xero option's history, is left out of the grid. The Overview and
+the runway still count it.
 
 The totals on the right are **Budget**, **Actual to date**, **Expected** (actual for past quarters
 plus the forecast for the rest) and **Variance** (Expected minus Budget: red is heading over,
