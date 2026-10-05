@@ -245,6 +245,33 @@ function runTests() {
       .quarters.map(function (q) { return q.label; }).join('|') ===
       '26/27 Q1|26/27 Q2|26/27 Q3|26/27 Q4|27/28 Q1');
 
+  // A source's tracking starts where the source does. The General option was renamed
+  // GEN_27_CORE part way through a year, bringing years of history with it.
+  var clipSrc = { name: 'GEN_27_X', status: 'secured', projectFolder: 'General',
+    metadata: { 'funding start': '01/Apr/26' },
+    lines: [{ item: 'GEN_27_X_001 - Ops', milestone: 'Ops', project: 'General',
+      start: d(2026, 10, 1), end: d(2027, 3, 31), cost: 600, income: 0 }] };
+  var clipActuals = [
+    { date: d(2026, 3, 31), amount: 50, kind: 'expense', project: 'General',
+      fundingSource: 'GEN_27_X', item: 'GEN_27_X_001' },
+    { date: d(2026, 4, 1), amount: 20, kind: 'expense', project: 'General',
+      fundingSource: 'GEN_27_X', item: 'GEN_27_X_001' },
+    { date: d(2026, 2, 10), amount: 7, kind: 'income', project: 'General',
+      fundingSource: 'GEN_27_X', item: '' }
+  ];
+  var clipped = buildTracking_([clipSrc], clipActuals)[0];
+  check('tracking: actuals before the funding start are left out',
+    JSON.stringify(clipped.milestones[0].actual) === '{"26/27 Q1":20}' &&
+    clipped.milestones.length === 1);
+  clipSrc.metadata = {};
+  check('tracking: with no funding start, the first budget line is the start',
+    Object.keys(buildTracking_([clipSrc], clipActuals)[0].milestones[0].actual).length === 0);
+  clipSrc.metadata = { 'funding start': '01/Dec/26' };
+  check('tracking: a line budgeted before the funding start keeps its spend',
+    Object.keys(buildTracking_([clipSrc], clipActuals.concat([{ date: d(2026, 10, 5),
+      amount: 9, kind: 'expense', project: 'General', fundingSource: 'GEN_27_X',
+      item: 'GEN_27_X_001' }]))[0].milestones[0].actual).join() === '26/27 Q3');
+
   // Per-quarter buckets, which let the Overview total any financial year rather than
   // only the current one. A line spanning Jan to Dec 2026 crosses FY25/26 Q4 into
   // FY26/27 Q1-Q3, so the split must be day-weighted and the partition exhaustive.
