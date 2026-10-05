@@ -328,9 +328,90 @@ function buildSnapshot() {
     tracking: tracking,
     timeline: timeline,
     runway: runway,
+    // For the accountant's close, on the Health tab: grant income to release or defer, and
+    // spend expected but not in Xero.
+    quarterClose: buildQuarterClose_(judged, earnedBasis ? fetched : [], actualLines, tracking,
+      quarterSortNum(currentQuarterLabel(now))),
     health: health,
     dataFlags: dataFlags.concat(healthToFlags(health))
   };
+}
+
+/**
+ * What the accountant needs at a quarter close, for every finished quarter.
+ *
+ * `releases`: each grant marked "as spent", by project and quarter, with its spend, the
+ * income it earned by the cockpit's rule (earnedActuals_, so `actualLines` must be on the
+ * earned basis) and the income Xero's P&L shows for it (`xeroLines`, the lines as fetched).
+ * Earned to a quarter's end minus Xero's to the same end is the journal still to post:
+ * positive releases income received in advance, negative defers it. Cumulative, not one
+ * quarter's difference, so a release missed or posted short shows again until it is right.
+ *
+ * `accruals`: milestones on secured sheets whose spend in a finished quarter fell short of
+ * what the grid expected for it (forecastOrBaseline_) by CONFIG.ACCRUAL_MIN_SHORTFALL or
+ * more, with the Forecast comment. Either work done and not yet billed, to accrue, or work
+ * that slipped, to move on the Forecast tab: the comment is what tells them apart.
+ */
+function buildQuarterClose_(budgets, xeroLines, actualLines, tracking, currentQi) {
+  const asSpent = {};
+  (budgets || []).forEach(b => { if (incomeRecognition_(b) === 'as spent') asSpent[b.name] = true; });
+  const quarterOf = l => quarterOfMonthKey_(DateMath.monthKey(new Date(l.date)));
+  const finished = q => qiOfLabel_(q) < currentQi;
+
+  const rel = {};
+  function cell(l) {
+    const project = l.project || '(no project)';
+    const k = clean_(l.fundingSource) + '||' + project;
+    const r = rel[k] || (rel[k] = { source: clean_(l.fundingSource), project: project, byQ: {} });
+    const q = quarterOf(l);
+    return r.byQ[q] || (r.byQ[q] = { spend: 0, earned: 0, xero: 0 });
+  }
+  (actualLines || []).forEach(l => {
+    if (!asSpent[clean_(l.fundingSource || '')]) return;
+    if (l.kind === 'expense') cell(l).spend += Number(l.amount) || 0;
+    else if (l.earned) cell(l).earned += Number(l.amount) || 0;
+  });
+  (xeroLines || []).forEach(l => {
+    if (!asSpent[clean_(l.fundingSource || '')] || l.kind === 'expense') return;
+    cell(l).xero += Number(l.amount) || 0;
+  });
+  const releases = Object.keys(rel).sort().map(k => {
+    const r = rel[k];
+    Object.keys(r.byQ).forEach(q => {
+      const c = r.byQ[q];
+      r.byQ[q] = { spend: Math.round(c.spend), earned: Math.round(c.earned),
+        xero: Math.round(c.xero) };
+    });
+    return r;
+  });
+
+  const accruals = [];
+  (tracking || []).forEach(t => {
+    if (t.status !== 'secured') return;
+    (t.milestones || []).forEach(m => {
+      if (m.actualOnly) return;
+      const qs = {};
+      [m.baseline, m.costForecast].forEach(map => Object.keys(map || {}).forEach(q => (qs[q] = true)));
+      Object.keys(qs).filter(finished).forEach(q => {
+        const expected = Math.round(forecastOrBaseline_(m.costForecast, m.baseline, q));
+        const actual = Math.round((m.actual || {})[q] || 0);
+        if (expected - actual < CONFIG.ACCRUAL_MIN_SHORTFALL) return;
+        accruals.push({ quarter: q, source: t.source, project: m.project,
+          milestone: m.milestone, expected: expected, actual: actual,
+          comment: m.forecastComment || '', sheetUrl: t.sheetUrl || null });
+      });
+    });
+  });
+  accruals.sort((a, b) => (b.expected - b.actual) - (a.expected - a.actual));
+
+  // Finished quarters with anything to show, latest first: the page opens on the latest.
+  const seen = {};
+  releases.forEach(r => Object.keys(r.byQ).forEach(q => (seen[q] = true)));
+  accruals.forEach(a => (seen[a.quarter] = true));
+  const quarters = Object.keys(seen).filter(finished)
+    .sort((a, b) => qiOfLabel_(b) - qiOfLabel_(a));
+
+  return { quarters: quarters, releases: releases, accruals: accruals };
 }
 
 /**

@@ -182,6 +182,12 @@
   .health-lines td:first-child, .health-lines td.num { white-space: nowrap; }
   .health-lines td.num { font-variant-numeric: tabular-nums; }
   .health-more { color: var(--hint); margin-top: 4px; }
+  /* Quarter close: the picker, then a heading and a table each for releases and accruals. */
+  .qc-pick { margin-bottom: 4px; }
+  .qc-h { font-size: 13px; font-weight: 600; color: var(--text); margin: 16px 0 8px; }
+  #quarter-close .table-wrap { overflow-x: auto; }
+  #quarter-close td { vertical-align: top; }
+  #quarter-close td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
   .coverage { font-size: 13px; color: var(--muted); margin: 0 0 16px; display: flex;
     flex-wrap: wrap; gap: 8px 18px; }

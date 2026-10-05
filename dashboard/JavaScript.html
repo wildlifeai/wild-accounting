@@ -59,6 +59,76 @@
     renderRunway();
 
     renderHealth(s.health || []);
+    renderQuarterClose(s.quarterClose);
+  }
+
+  // ---- Quarter close ----------------------------------------------------------
+  // The accountant's close, from buildQuarterClose_. Grant releases are cumulative to the
+  // quarter's end, so whatever was missed or posted short before still shows. The picker
+  // keeps its quarter across refreshes.
+  var qcQuarter = null;
+  function renderQuarterClose(qc) {
+    var el = document.getElementById('quarter-close');
+    if (!el) return;
+    if (!qc || !(qc.quarters || []).length) {
+      el.innerHTML = '<div class="health-info">No finished quarter to close yet.</div>';
+      return;
+    }
+    if (qc.quarters.indexOf(qcQuarter) === -1) qcQuarter = qc.quarters[0];
+    var q = qcQuarter, qi = qiOf(q);
+
+    var picker = '<select id="qc-quarter" class="dd-select" aria-label="Quarter to close">' +
+      qc.quarters.map(function (x) {
+        return '<option' + (x === q ? ' selected' : '') + '>' + esc(x) + '</option>';
+      }).join('') + '</select>';
+
+    var rel = (qc.releases || []).map(function (r) {
+      var spend = 0, earned = 0, xero = 0;
+      Object.keys(r.byQ).forEach(function (k) {
+        if (qiOf(k) > qi) return;
+        earned += r.byQ[k].earned; xero += r.byQ[k].xero;
+        if (k === q) spend = r.byQ[k].spend;
+      });
+      return { source: r.source, project: r.project, spend: spend, earned: earned,
+        xero: xero, post: earned - xero };
+    }).filter(function (r) { return r.spend || Math.abs(r.post) >= 1; });
+    var relHtml = rel.length
+      ? '<div class="table-wrap"><table><thead><tr><th>Funding source</th><th>Project</th>' +
+        '<th class="num">Spent in the quarter</th><th class="num">Earned to quarter end</th>' +
+        '<th class="num">In Xero to quarter end</th><th class="num">To post</th></tr></thead><tbody>' +
+        rel.map(function (r) {
+          var post = Math.abs(r.post) < 1 ? 'nothing'
+            : (r.post > 0 ? 'release ' : 'defer ') + fmtMoney(Math.abs(r.post));
+          return '<tr><td>' + esc(r.source) + '</td><td>' + esc(r.project) + '</td>' +
+            '<td class="num">' + fmtMoney(r.spend) + '</td><td class="num">' + fmtMoney(r.earned) +
+            '</td><td class="num">' + fmtMoney(r.xero) + '</td><td class="num">' + post +
+            '</td></tr>';
+        }).join('') + '</tbody></table></div>'
+      : '<div class="health-info">No grant marked "as spent" had income or spend to this quarter.</div>';
+
+    var acc = (qc.accruals || []).filter(function (a) { return a.quarter === q; });
+    var accHtml = acc.length
+      ? '<div class="table-wrap"><table><thead><tr><th>Funding source</th><th>Milestone</th>' +
+        '<th>Project</th><th class="num">Expected</th><th class="num">In Xero</th>' +
+        '<th class="num">Short</th><th>Forecast comment</th></tr></thead><tbody>' +
+        acc.map(function (a) {
+          var src = a.sheetUrl ? '<a class="health-link" target="_blank" rel="noopener" href="' +
+            esc(a.sheetUrl) + '">' + esc(a.source) + '</a>' : esc(a.source);
+          return '<tr><td>' + src + '</td><td>' + esc(a.milestone) + '</td><td>' +
+            esc(a.project) + '</td><td class="num">' + fmtMoney(a.expected) + '</td>' +
+            '<td class="num">' + fmtMoney(a.actual) + '</td><td class="num">' +
+            fmtMoney(a.expected - a.actual) + '</td><td>' + esc(a.comment) + '</td></tr>';
+        }).join('') + '</tbody></table></div>'
+      : '<div class="health-info">Every milestone spent what was expected in this quarter.</div>';
+
+    el.innerHTML = '<div class="qc-pick">' + picker + '</div>' +
+      '<h3 class="qc-h">Grant income to release or defer</h3>' + relHtml +
+      '<h3 class="qc-h">Spend expected but not in Xero: accrue it, or move it on the Forecast tab</h3>' +
+      accHtml;
+    document.getElementById('qc-quarter').addEventListener('change', function (ev) {
+      qcQuarter = ev.target.value;
+      renderQuarterClose(qc);
+    });
   }
 
   // Health findings: what is wrong, where, and what to do about it. Sorted by
