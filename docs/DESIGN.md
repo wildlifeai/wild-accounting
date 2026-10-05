@@ -166,6 +166,12 @@ Ranked by how badly they hurt the persona who depends on them:
   archived General option to GEN_27_CORE so one code covers the whole financial year, which
   brought every earlier year of General spend onto the new code. The grid leaves out actuals
   dated before a source's start; the Overview and runway keep them, since they are still spend.
+- **2026-10-05: reserves start the runway.** Funded runway alone could not say whether there
+  is room to carry unfunded roles: it starts at zero on the first budgeted month, so it reads
+  "short" while the bank holds money. Xero's scopes reach no bank balance, so the free money
+  is typed at each quarter close on the Cockpit Settings `Reserves` tab, and every line moves
+  by one amount to sit at it at that month end. Only the whole organisation's view uses it;
+  reserves belong to no project, and adding them to one would overstate it.
 
 ## History
 

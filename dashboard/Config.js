@@ -153,6 +153,15 @@ const CONFIG = {
     HEADER: ['Email', 'Allowed Projects (comma separated, or * for all)']
   },
 
+  // ---- Reserves ------------------------------------------------------------
+  // Also a tab in the Cockpit Settings spreadsheet: one row per quarter-end close, the
+  // money free to spend on that date. The latest row starts the runway (latestReserves_).
+  RESERVES: {
+    TAB: 'Reserves',
+    HEADER: ['As at', 'Reserves',
+      'How it was worked out (bank balance minus grant money received but not yet spent)']
+  },
+
   // ---- Financial year -----------------------------------------------------
   // Quarters in the tracking screen follow this financial year. 4 = April start
   // (Apr-Mar), so Q1 = Apr-Jun, Q2 = Jul-Sep, Q3 = Oct-Dec, Q4 = Jan-Mar.

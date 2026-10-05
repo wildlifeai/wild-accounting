@@ -785,6 +785,35 @@ function runTests() {
   check('runway: no crossover reports null, not zero',
     rwNoProb.monthsOfRunway.proposed === null);
 
+  // Reserves start the lines from money in hand: at the end of the figure's month every line
+  // is the figure, and from there it is reserves plus funding against the plan.
+  var rwRes = buildRunway_(rwBudgets, [
+    { date: new Date(2026, 4, 10), amount: 3000, kind: 'expense',
+      project: 'P', fundingSource: 'A', item: '' }
+  ], rwNow, {}, {}, { amount: 20000, asAt: '2026-05-31', month: '2026-05' });
+  var rwResMay = rwRes.months.filter(function (r) { return r.month === '2026-05'; })[0];
+  check('reserves: every line is the figure at the end of its month',
+    rwResMay.secured - rwResMay.spend === 20000 && rwResMay.proposed - rwResMay.spend === 20000);
+  check('reserves: today starts from them', rwRes.openingNet === 20000);
+  check('reserves: they push the crossover out',
+    rw.crossover.secured === '2026-08' && rwRes.crossover.secured === null);
+  check('reserves: travel with the snapshot', rwRes.reserves.amount === 20000);
+
+  var resNow = new Date(2026, 9, 5);
+  var res = latestReserves_([
+    ['30/Jun/26', 80000, 'Q1 close'],
+    ['30/Sep/26', '$95,000', 'Q2 close'],
+    ['31/Dec/26', 70000, 'typed ahead'],
+    ['15/Aug/26', '', 'no amount']
+  ], resNow);
+  check('reserves: the latest row, not one dated ahead or with no amount',
+    res.amount === 95000 && res.asAt === '2026-09-30' && res.month === '2026-09');
+  check('reserves: a date inside a month is the end of the month before',
+    reservesMonth_(new Date(2026, 9, 2), resNow) === '2026-09');
+  check('reserves: never this month, which is planned rather than read from Xero',
+    reservesMonth_(new Date(2026, 9, 31), new Date(2026, 9, 31)) === '2026-09');
+  check('reserves: an empty tab is no reserves', latestReserves_([], resNow) === null);
+
   // The page receives runwayWalk_ as its own source (Index.html), so it must stand alone:
   // a call to any server helper would work here and throw in the browser.
   check('runway: the walk calls nothing outside itself',
