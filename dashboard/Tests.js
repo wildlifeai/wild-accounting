@@ -863,6 +863,42 @@ function runTests() {
   check('quarter close: finished quarters only, latest first',
     qc.quarters.join('|') === '26/27 Q2|26/27 Q1');
 
+  // ---- reserves from Xero's Balance Sheet ------------------------------------
+  // Account rows sit inside nested sections; the first value column is the date asked for.
+  var bsRow = function (name, id, now, before) {
+    return { RowType: 'Row', Cells: [
+      { Value: name, Attributes: [{ Id: 'account', Value: id }] },
+      { Value: now }, { Value: before }] };
+  };
+  var bs = parseBalanceSheet_({ Rows: [
+    { RowType: 'Header', Cells: [{ Value: '' }, { Value: '30 Sep 2026' }, { Value: '30 Sep 2025' }] },
+    { RowType: 'Section', Title: 'Assets', Rows: [
+      { RowType: 'Section', Title: 'Bank', Rows: [
+        bsRow('WILDLIFE.AI TRUST', 'id-600', '80000.50', '1.00'),
+        bsRow('ANZ Term Deposit', 'id-605', '30000.00', '1.00'),
+        { RowType: 'SummaryRow', Cells: [{ Value: 'Total Bank' }, { Value: '110000.50' }] }] }] },
+    { RowType: 'Section', Title: 'Liabilities', Rows: [
+      bsRow('Unused Donations and Grants with Conditions', 'id-8xx', '50000', '0')] }
+  ] }, { 'id-600': '600', 'id-605': '605' });
+  check('balance sheet: bank rows by code, from the first value column, totals skipped',
+    bs.byCode['600'] === 80000.5 && bs.byCode['605'] === 30000 && !bs.byName['Total Bank']);
+  var resX = reservesFromBalanceSheet_(bs, 38000);
+  check('reserves from Xero: bank and term deposit, less in advance, plus unposted releases',
+    resX.amount === 98001 && resX.note.indexOf(RESERVES_AUTO_NOTE) === 0);
+  check('reserves from Xero: an in-advance account not on the sheet counts as nothing, and says so',
+    reservesFromBalanceSheet_({ byCode: { '600': 100 }, byName: {} }, 0).note
+      .indexOf('not on the balance sheet') !== -1);
+  check('reserves from Xero: releases still to post, cumulative to the quarter',
+    unpostedReleases_(qc, '26/27 Q1') === -400 && unpostedReleases_(qc, '26/27 Q2') === 100);
+  var f4 = function (issue) {
+    return buildHealth([], [], { now: d(2026, 10, 5), xeroConnected: true,
+      exclusion: { count: 0, total: 0 }, unposted: { count: 0, total: 0 },
+      secretsMissing: [], reservesIssue: issue })
+      .filter(function (f) { return f.id === 'F4'; }).length;
+  };
+  check('F4 when Xero refused the Balance Sheet, quiet otherwise',
+    f4('scope') === 1 && f4(null) === 0);
+
   // The page receives runwayWalk_ as its own source (Index.html), so it must stand alone:
   // a call to any server helper would work here and throw in the browser.
   check('runway: the walk calls nothing outside itself',

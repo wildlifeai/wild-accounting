@@ -130,8 +130,12 @@ const CONFIG = {
     CONNECTIONS_URL: 'https://api.xero.com/connections',
     // Minimal read-only scopes. accounting.transactions.read covers bank
     // transactions + invoices; accounting.settings.read covers the chart of
-    // accounts and tracking categories; offline_access enables token refresh.
-    SCOPE: 'offline_access accounting.transactions.read accounting.settings.read',
+    // accounts and tracking categories; accounting.reports.read the Balance Sheet the
+    // reserves come from (readReserves_); offline_access enables token refresh. Xero
+    // retires the broad transactions and reports scopes for apps like this one in
+    // September 2027, so they move to the granular ones before then.
+    SCOPE: 'offline_access accounting.transactions.read accounting.settings.read ' +
+      'accounting.reports.read',
     PROJECT_TRACKING_CATEGORY: 'Projects',
     FUNDING_TRACKING_CATEGORY: 'Funding source'
   },
@@ -156,10 +160,15 @@ const CONFIG = {
   // ---- Reserves ------------------------------------------------------------
   // Also a tab in the Cockpit Settings spreadsheet: one row per quarter-end close, the
   // money free to spend on that date. The latest row starts the runway (latestReserves_).
+  // Each refresh writes the last quarter-end's row from Xero's Balance Sheet: these bank
+  // accounts, by code, less the liability holding grants received but not yet released
+  // (matched by name: it has no code here yet), plus the releases still to post.
   RESERVES: {
     TAB: 'Reserves',
     HEADER: ['As at', 'Reserves',
-      'How it was worked out (bank balance minus grant money received but not yet spent)']
+      'How it was worked out (bank balance minus grant money received but not yet spent)'],
+    BANK_CODES: ['600', '605'],   // WILDLIFE.AI TRUST, ANZ Term Deposit
+    IN_ADVANCE_ACCOUNT: 'Unused Donations and Grants with Conditions'
   },
 
   // ---- Financial year -----------------------------------------------------

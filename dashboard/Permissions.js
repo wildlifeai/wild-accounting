@@ -84,12 +84,13 @@ function getUserPermissions(email) {
 // ---- Reserves ----
 
 /**
- * The latest reserves figure on the Reserves tab, or null. Read at refresh, and the tab is
- * created with its header the first time, so there is somewhere to type the figure. A
- * sheet that cannot be read leaves the runway as funded money only rather than failing
- * the refresh: the rest of the snapshot does not depend on it.
+ * The latest reserves figure on the Reserves tab, or null, after writing the last
+ * quarter-end's row from Xero (syncReservesFromXero_). Read at refresh; the tab is created
+ * with its header the first time. A sheet that cannot be read leaves the runway as funded
+ * money only rather than failing the refresh: the rest of the snapshot does not depend on it.
  */
-function readReserves_(now) {
+function readReserves_(now, quarterClose) {
+  _lastReservesIssue = null;
   try {
     var ss = openOrCreateSettingsSpreadsheet_();
     var sheet = ss.getSheetByName(CONFIG.RESERVES.TAB);
@@ -97,13 +98,84 @@ function readReserves_(now) {
       sheet = ss.insertSheet(CONFIG.RESERVES.TAB);
       sheet.appendRow(CONFIG.RESERVES.HEADER);
       sheet.setFrozenRows(1);
-      return null;
     }
+    syncReservesFromXero_(sheet, now, quarterClose);
     return latestReserves_(sheet.getDataRange().getValues().slice(1), now);
   } catch (e) {
     Logger.log('Reserves not read, so the runway shows funded money only: ' + e.message);
     return null;
   }
+}
+
+// Why the last refresh could not read reserves from Xero, for F4: 'scope' or null.
+var _lastReservesIssue = null;
+function lastReservesIssue() { return _lastReservesIssue; }
+
+// Column C of a row the refresh wrote starts with this, which is how a typed row is told
+// apart from it and left alone.
+var RESERVES_AUTO_NOTE = 'From Xero: ';
+
+/**
+ * Write the last quarter-end's reserves from Xero's Balance Sheet into the tab, replacing
+ * the row an earlier refresh wrote for that date. A row someone typed for that date wins,
+ * so a correction is never overwritten. Without the reports scope Xero refuses the report:
+ * F4 says so and the typed rows still work.
+ */
+function syncReservesFromXero_(sheet, now, quarterClose) {
+  if (!isXeroConnected()) return;
+  var qi = qiOfDate_(now) - 1;
+  var end = quarterBounds_(qi).end;
+  var rows = sheet.getDataRange().getValues();
+  var at = -1;
+  for (var i = 1; i < rows.length; i++) {
+    var d = parseSheetDate_(rows[i][0]);
+    if (!d || d.getTime() !== end.getTime()) continue;
+    if (String(rows[i][2] || '').indexOf(RESERVES_AUTO_NOTE) !== 0) return;
+    at = i;
+  }
+  var bs;
+  try {
+    bs = fetchBalanceSheet_(isoDate_(end));
+  } catch (e) {
+    if (/Xero API 40[13]/.test(e.message)) _lastReservesIssue = 'scope';
+    Logger.log('Reserves not read from Xero: ' + e.message);
+    return;
+  }
+  var r = reservesFromBalanceSheet_(bs, unpostedReleases_(quarterClose, labelOfQi_(qi)));
+  var row = [end, r.amount, r.note];
+  if (at === -1) sheet.appendRow(row);
+  else sheet.getRange(at + 1, 1, 1, 3).setValues([row]);
+}
+
+/**
+ * Free money from Balance Sheet balances: the bank accounts, less grants received in
+ * advance, plus releases still to post. Until a quarter's release journal is in, the
+ * liability still holds money that was spent, so the unposted releases go back on. The note
+ * shows each part, so the figure can be checked against Xero.
+ */
+function reservesFromBalanceSheet_(bs, unposted) {
+  var bank = 0;
+  CONFIG.RESERVES.BANK_CODES.forEach(function (c) { bank += (bs.byCode || {})[c] || 0; });
+  var name = CONFIG.RESERVES.IN_ADVANCE_ACCOUNT;
+  var inAdvance = (bs.byName || {})[name];
+  var amount = Math.round(bank - (inAdvance || 0) + (unposted || 0));
+  var note = RESERVES_AUTO_NOTE + 'accounts ' + CONFIG.RESERVES.BANK_CODES.join(' + ') + ' ' +
+    Math.round(bank) + ', less ' + name + ' ' +
+    (inAdvance === undefined ? '0 (not on the balance sheet)' : Math.round(inAdvance)) +
+    ', plus releases not yet posted ' + Math.round(unposted || 0) +
+    '. Type your own row for this date to override.';
+  return { amount: amount, note: note };
+}
+
+/** What Quarter close says is still to post, all grants, cumulative to quarter `q`. */
+function unpostedReleases_(quarterClose, q) {
+  var qi = qiOfLabel_(q), total = 0;
+  ((quarterClose && quarterClose.releases) || []).forEach(function (r) {
+    Object.keys(r.byQ || {}).forEach(function (k) {
+      if (qiOfLabel_(k) <= qi) total += (r.byQ[k].earned || 0) - (r.byQ[k].xero || 0);
+    });
+  });
+  return Math.round(total);
 }
 
 /**

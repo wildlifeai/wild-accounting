@@ -65,14 +65,18 @@ at its right explains the cards and the chart. Under the line come the cards, th
    there. Because it is the whole organisation's position, only people with access to every
    project see it.
 
-   **Reserves** make it the actual runway. Xero cannot give the cockpit a bank balance, so at
-   each quarter-end close add a row to the `Reserves` tab of the **Cockpit Settings** sheet:
-   the date (a month end), the money free to spend that day, and how you worked it out. Free
-   money is the bank balance minus grant money received but not yet spent, which the chart
-   already counts as income as it is spent. The next refresh uses the latest row: with every
-   project and source shown and grouped by status, all three lines start from it, so
-   **Secured only** is reserves plus secured funding against the plan, and the label at today
-   reads "with reserves". Any narrower view, filtered or grouped, is funded money only, because
+   **Reserves** make it the actual runway: the money free to spend, which is the bank balance
+   minus grant money received but not yet spent (the chart already counts that as income as it
+   is spent). They live on the `Reserves` tab of the **Cockpit Settings** sheet, one row per
+   quarter end, and each refresh writes the last quarter end's row from Xero's Balance Sheet:
+   the bank and term deposit accounts, less *Unused Donations and Grants with Conditions*, plus
+   the releases [Quarter close](#quarter-close) says are still to post, since until they are
+   the liability still holds money already spent. Its column C shows each part, to check
+   against Xero. To correct a figure, type your own row for the same date: the refresh never
+   overwrites a row it did not write. The latest row is used: with every project and source
+   shown and grouped by status, all three lines start from it, so **Secured only** is reserves
+   plus secured funding against the plan, and the label at today reads "position ..., from
+   reserves at" its date. Any narrower view, filtered or grouped, is funded money only, because
    reserves belong to no one project. With no row, every view is funded money only.
 
    **Group by** changes the chart only. **Status** draws the three lines above. **Project**,

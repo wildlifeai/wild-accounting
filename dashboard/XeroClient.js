@@ -399,15 +399,51 @@ function codeFromDescription_(desc) {
  */
 let _accountLabelCache = null;
 let _accountClassCache = null;
+let _accountCodeById = null;   // Xero AccountID -> code, for report rows
 function loadAccounts_() {
   if (_accountLabelCache) return;
   _accountLabelCache = {};
   _accountClassCache = {};
+  _accountCodeById = {};
   const data = xeroGet_('/Accounts');
   (data.Accounts || []).forEach(a => {
     _accountLabelCache[a.Code] = a.Name + ' (' + a.Code + ')';
     _accountClassCache[a.Code] = a.Class || '';
+    _accountCodeById[a.AccountID] = a.Code;
   });
+}
+
+/**
+ * Account balances on Xero's Balance Sheet at `date` ('yyyy-MM-dd'), for the reserves
+ * (syncReservesFromXero_). Needs accounting.reports.read: a token granted before that scope
+ * was added gets 401 or 403, which the caller reports as F4.
+ */
+function fetchBalanceSheet_(date) {
+  loadAccounts_();
+  const data = xeroGet_('/Reports/BalanceSheet', { date: date });
+  return parseBalanceSheet_((data.Reports || [])[0] || {}, _accountCodeById);
+}
+
+/**
+ * A Balance Sheet report's account rows as { byCode, byName } of amounts, read from the
+ * first value column, which is the date asked for (later columns compare earlier dates).
+ * Sections nest, so it walks them; section totals are SummaryRows and are skipped.
+ */
+function parseBalanceSheet_(report, codeById) {
+  const out = { byCode: {}, byName: {} };
+  (function walk(rows) {
+    (rows || []).forEach(r => {
+      if (r.Rows) walk(r.Rows);
+      if (r.RowType !== 'Row' || !r.Cells || r.Cells.length < 2) return;
+      const name = String(r.Cells[0].Value || '').trim();
+      const amount = parseFloat(String(r.Cells[1].Value || '').replace(/,/g, '')) || 0;
+      out.byName[name] = (out.byName[name] || 0) + amount;
+      const id = ((r.Cells[0].Attributes || []).filter(a => a.Id === 'account')[0] || {}).Value;
+      const code = id && (codeById || {})[id];
+      if (code) out.byCode[code] = (out.byCode[code] || 0) + amount;
+    });
+  })(report.Rows);
+  return out;
 }
 function accountLabelFromCode_(code) {
   if (code == null || code === '') return '';
