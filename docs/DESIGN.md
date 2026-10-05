@@ -162,6 +162,10 @@ Ranked by how badly they hurt the persona who depends on them:
   Each tab's controls are a ribbon of dropdown boxes with a title under it naming what was
   chosen. The Overview's combined-years option totals the years it names; finished years are
   left out, where All time counted them.
+- **2026-10-05: a source's grid starts where the source does.** The bookkeeper renamed the
+  archived General option to GEN_27_CORE so one code covers the whole financial year, which
+  brought every earlier year of General spend onto the new code. The grid leaves out actuals
+  dated before a source's start; the Overview and runway keep them, since they are still spend.
 
 ## History
 

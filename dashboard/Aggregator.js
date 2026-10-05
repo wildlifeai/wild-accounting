@@ -894,6 +894,12 @@ function runwayWalk_(parts, nowKey, months) {
  * quarterly tracking screen; the live forecast layer is merged in WebApp/UI.
  */
 function buildTracking_(budgets, actualLines) {
+  // A source's grid starts where the source does. A Xero option can be renamed onto a new
+  // source part way through a year (General became GEN_27_CORE), and the history it brings
+  // would otherwise fill the Before column and the totals. Runway and the Overview keep it.
+  const startOf = {};
+  budgets.forEach(b => (startOf[b.name] = sourceStart_(b)));
+
   // Index Xero actuals by source||itemCode -> { quarter: amount }, split by
   // expense (cost) vs income. Also remember a display name per item code.
   const costActuals = {};
@@ -901,6 +907,8 @@ function buildTracking_(budgets, actualLines) {
   const actualNames = {}; // source||code -> Xero item name
   actualLines.forEach(l => {
     if (!l.fundingSource || isArchivedSource_(l.fundingSource)) return;
+    const start = startOf[l.fundingSource];
+    if (start && new Date(l.date) < start) return;
     const q = quarterOfMonthKey_(DateMath.monthKey(new Date(l.date)));
     const code = itemCode_(l.item);
     const key = l.fundingSource + '||' + code;
@@ -1033,6 +1041,18 @@ function earliestBudgetStart_(budgets) {
     if (l.start && (!min || l.start < min)) min = l.start;
   }));
   return min || new Date(new Date().getFullYear() - 1, 0, 1);
+}
+
+/**
+ * Where one source begins: the earlier of its Funding start and its first budget line, so
+ * a line budgeted before the funding start still has its spend tracked. Null with neither.
+ */
+function sourceStart_(b) {
+  let min = parseSheetDate_(((b && b.metadata) || {})['funding start']);
+  ((b && b.lines) || []).forEach(l => {
+    if (l.start && (!min || l.start < min)) min = l.start;
+  });
+  return min;
 }
 
 function latestBudgetEnd_(budgets) {
