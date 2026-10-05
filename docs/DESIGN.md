@@ -101,9 +101,10 @@ Ranked by how badly they hurt the persona who depends on them:
   income by each project's share of its cost, while the Overview's cards and runway credit each
   line's own income. They agree for most sheets and can differ slightly for one whose lines are not
   priced in proportion to their cost. Only the line attribution is on screen.
-- **Cash runway is out of scope** (decided 2026-09-21). It needs `accounting.reports.read`, a Xero
-  re-consent and a balance-sheet read, and scopes cannot be removed from a live token without
-  re-consent, so adding one is not a casual change.
+- **Granular Xero scopes by September 2027.** Xero retires the broad `accounting.transactions`
+  and `accounting.reports.read` scopes then for apps created before 2 March 2026, which this one
+  is. Moving means naming the granular scopes for bank transactions, invoices, manual journals
+  and the balance sheet report, and one re-consent.
 
 ## Decisions
 
@@ -178,6 +179,12 @@ Ranked by how badly they hurt the persona who depends on them:
   is that income to the quarter's end minus Xero's, cumulative so a missed one resurfaces; and a
   closed quarter that spent less than the grid expected is either unbilled work or slippage, so
   it is listed with the comment that says which. Under the findings rather than a fourth tab.
+- **2026-10-05: reserves come from Xero's Balance Sheet.** Typing them each quarter relied on
+  the accountant reading the liability after posting the releases, or reserves came out low by
+  the releases. The cockpit asks for `accounting.reports.read` (a one-off re-consent; cash
+  runway had been left out on 2026-09-21 for that cost alone) and writes the last quarter end's
+  row: bank and term deposit, less grants received in advance, plus the releases Quarter close
+  has not seen posted. A row typed for the same date wins, so a correction is never overwritten.
 
 ## History
 

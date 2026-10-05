@@ -254,10 +254,16 @@ function buildSnapshot() {
   // Project tracking timeline: the months each milestone's funding runs, by source.
   const timeline = buildTimeline_(planned);
 
+  // For the accountant's close, on the Health tab: grant income to release or defer, and
+  // spend expected but not in Xero. Before the runway, because the reserves Xero gives need
+  // the releases still to post.
+  const quarterClose = buildQuarterClose_(judged, earnedBasis ? fetched : [], actualLines,
+    tracking, quarterSortNum(currentQuarterLabel(now)));
+
   // Runway: cumulative income against cumulative spend, month by month, starting from the
-  // reserves figure in Cockpit Settings when there is one.
+  // reserves on Cockpit Settings, whose last quarter-end row the refresh writes from Xero.
   const runway = buildRunway_(planned, actualLines, now, exclusivityReps, itemToMilestone,
-    readReserves_(now));
+    readReserves_(now, quarterClose));
 
   // Per-project rollups (feed the summary cards / org totals).
   const rows = Object.keys(projects).map(name => {
@@ -301,6 +307,8 @@ function buildSnapshot() {
     exclusion: lastExclusionSummary(),
     unposted: lastUnpostedSummary(),
     secretsMissing: secretsMissing,
+    // F4: the connection predates the reports scope, so reserves could not be read.
+    reservesIssue: lastReservesIssue(),
     // So G3 can name which source had its cost suppressed and which carries it instead.
     exclusivity: { reps: exclusivityReps, suppressed: costSuppressed }
   });
@@ -328,10 +336,7 @@ function buildSnapshot() {
     tracking: tracking,
     timeline: timeline,
     runway: runway,
-    // For the accountant's close, on the Health tab: grant income to release or defer, and
-    // spend expected but not in Xero.
-    quarterClose: buildQuarterClose_(judged, earnedBasis ? fetched : [], actualLines, tracking,
-      quarterSortNum(currentQuarterLabel(now))),
+    quarterClose: quarterClose,
     health: health,
     dataFlags: dataFlags.concat(healthToFlags(health))
   };

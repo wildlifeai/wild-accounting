@@ -287,9 +287,12 @@ Never add a code path that drops data without a finding.
   A collection with no policy passes through, so a new fetcher never silently returns nothing.
 * **Balance-sheet accounts are excluded** by account **code**, in `fetchXeroActuals`, so a Xero
   rename cannot un-exclude one (`EXCLUDED_ACCOUNTS`, reported by F5).
-* Scopes: `offline_access accounting.transactions.read accounting.settings.read`. Xero has
-  deprecated the broad scopes in favour of granular ones; scopes are additive and cannot be removed
-  from a live token without re-consent, so plan changes rather than making them casually.
+* Scopes: `offline_access accounting.transactions.read accounting.settings.read
+  accounting.reports.read`, the last for the Balance Sheet the reserves come from. Xero has
+  deprecated the broad scopes in favour of granular ones (this app keeps them to September 2027);
+  scopes are additive and cannot be removed from a live token without re-consent, so plan
+  changes rather than making them casually. A token granted before a scope was added is refused
+  that scope's endpoints, which F4 reports.
 
 ## Payroll
 
