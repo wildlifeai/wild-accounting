@@ -9,6 +9,13 @@
     var p = key.split('-');
     return MONTHS[parseInt(p[1], 10) - 1] + ' ' + p[0];
   }
+  // A calendar date sent as 'yyyy-MM-dd', e.g. '30 Sep 2026'. Read as text, so no time zone
+  // can move it a day.
+  function fmtIsoDate(iso) {
+    var p = String(iso || '').split('-');
+    if (p.length !== 3) return '';
+    return parseInt(p[2], 10) + ' ' + MONTHS[parseInt(p[1], 10) - 1] + ' ' + p[0];
+  }
   // Every date on the page is a calendar date in the script's zone. Read in the browser's
   // own zone, midnight 1 April in Auckland is 31 March, so the FY read "Mar 2026 - Feb 2027".
   var TZ = 'Pacific/Auckland';
@@ -417,8 +424,10 @@
   }
 
   // ---- Runway ---------------------------------------------------------------
-  // Funded runway: the month cumulative income stops covering cumulative spend. Not
-  // cash runway; there is no bank balance anywhere in this system. It follows the show
+  // Runway: the month cumulative income stops covering cumulative spend. With a reserves
+  // figure in Cockpit Settings, the whole organisation's lines start from the money in hand,
+  // so secured only is the actual runway; any narrower view is funded money only, since
+  // reserves belong to nobody's project. It follows the show
   // and filter controls at the top of the tab, but not the financial-year selector: it
   // always runs from today. The walk is runwayWalk_, sent by the server as its own source
   // (Index.html), so every line here is the arithmetic the server's tests check.
@@ -464,6 +473,10 @@
     return document.getElementById('rw-group').value || 'status';
   }
 
+  function allChecked(id) {
+    return !document.querySelector('#' + id + ' input:not(:checked)');
+  }
+
   /** The runway parts the show and filter controls select. */
   function selectedRunwayParts(rw) {
     var statuses = selectedStatuses();
@@ -486,9 +499,14 @@
     var chart = document.getElementById('runway-chart');
     var table = document.getElementById('runway-table');
     var statuses = selectedStatuses();
-    // A snapshot written before the parts existed still draws the organisation's lines.
-    var total = rw.parts ? runwayWalk_(selectedRunwayParts(rw), rw.nowKey) : rw;
     var mode = rw.parts ? runwayGroupBy() : 'status';
+    // Reserves are the organisation's money, so they start the lines only when the whole
+    // organisation is drawn: every project and every source, as the three status lines.
+    var reserves = rw.reserves && mode === 'status' && allChecked('filter-projects') &&
+      allChecked('filter-sources') ? rw.reserves : null;
+    // A snapshot written before the parts existed still draws the organisation's lines.
+    var total = rw.parts
+      ? runwayWalk_(selectedRunwayParts(rw), rw.nowKey, undefined, reserves) : rw;
     var rows = total.months || [];
 
     function empty(note) {
@@ -525,7 +543,7 @@
       series.forEach(function (s) { s.values = s.values.slice(cut); });
     }
 
-    renderRunwayChart(rows, series, chart, mode === 'status', total.openingNet || 0);
+    renderRunwayChart(rows, series, chart, mode === 'status', total.openingNet || 0, reserves);
     table.innerHTML = runwayTable(rows, series, mode === 'status');
     table.querySelector('details').addEventListener('toggle', function (ev) {
       runwayTableOpen = ev.target.open;
@@ -588,8 +606,9 @@
   }
 
   // `series` is most important first: { label, color, values (net per month), cross,
-  // horizon }. `net` is the net position today, income received minus spend to date.
-  function renderRunwayChart(rows, series, host, withSpend, net) {
+  // horizon }. `net` is the position today: income received minus spend to date, plus the
+  // reserves figure when `reserves` ({ amount, asAt }) started the lines.
+  function renderRunwayChart(rows, series, host, withSpend, net, reserves) {
     // Sized to the container once at render, so text is 1:1 rather than scaled with
     // the viewBox. If the Overview is hidden when a refresh lands, the fallback width
     // still scales cleanly because the SVG is also width:100%.
@@ -616,8 +635,9 @@
 
     // Wash and today rule first, so the lines sit on top of them. The rule carries the
     // net position today, which is where the budget months start from.
-    var netLabel = '<tspan class="rw-net' + (net < 0 ? ' danger' : '') + '"> · net position ' +
-      esc(netMoney(net)) + '</tspan>';
+    var netLabel = '<tspan class="rw-net' + (net < 0 ? ' danger' : '') + '"> · ' +
+      (reserves ? 'position ' : 'net position ') + esc(netMoney(net)) + '</tspan>' +
+      (reserves ? ', from reserves at ' + esc(fmtIsoDate(reserves.asAt)) : '');
     var firstFuture = -1;
     for (var i = 0; i < n; i++) { if (!rows[i].actual) { firstFuture = i; break; } }
     if (firstFuture > 0) {

@@ -250,8 +250,8 @@ changing code:
   and `*Account` where an older sheet still has one, though nothing uses it. Required: `Start`,
   `End`, `Cost`.
 * **Forecasts are per sheet**, on each funding source's own `Forecast` tab, read by
-  `parseForecastTab_`. The central sheet, Cockpit Settings, holds only the Permissions tab
-  (`Permissions.js`).
+  `parseForecastTab_`. The central sheet, Cockpit Settings, holds only the Permissions and
+  Reserves tabs (`Permissions.js`).
 * **A milestone row with no forecast falls back to the budget baseline**, never to zero.
   `forecastOrBaseline_` in `ForecastEngine.js` is the one statement of that rule, used by the
   tracking grid, D5 and E2. Reading zero made every source with an unmaintained `Forecast` tab look

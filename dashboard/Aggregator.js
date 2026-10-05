@@ -254,8 +254,10 @@ function buildSnapshot() {
   // Project tracking timeline: the months each milestone's funding runs, by source.
   const timeline = buildTimeline_(planned);
 
-  // Funded runway: cumulative income against cumulative spend, month by month.
-  const runway = buildRunway_(planned, actualLines, now, exclusivityReps, itemToMilestone);
+  // Runway: cumulative income against cumulative spend, month by month, starting from the
+  // reserves figure in Cockpit Settings when there is one.
+  const runway = buildRunway_(planned, actualLines, now, exclusivityReps, itemToMilestone,
+    readReserves_(now));
 
   // Per-project rollups (feed the summary cards / org totals).
   const rows = Object.keys(projects).map(name => {
@@ -686,16 +688,18 @@ function roundMapValues_(map) {
 }
 
 /**
- * The organisation's funded runway (runwayWalk_ over every part), plus the parts
- * themselves, so the Overview can redraw it for any filter or grouping without a round trip.
+ * The organisation's runway (runwayWalk_ over every part, from `reserves` when given), plus
+ * the parts and the reserves, so the Overview can redraw it for any filter or grouping
+ * without a round trip.
  */
-function buildRunway_(budgets, actualLines, now, exclusivityReps, itemToMilestone) {
+function buildRunway_(budgets, actualLines, now, exclusivityReps, itemToMilestone, reserves) {
   const nowKey = DateMath.monthKey(now);
   const parts = runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone);
-  const walk = runwayWalk_(parts, nowKey);
+  const walk = runwayWalk_(parts, nowKey, undefined, reserves);
   // The parts travel with the snapshot so the Overview can walk any selection of them.
   // Whole dollars, each map rounded so it still sums to its unrounded total.
   walk.nowKey = nowKey;
+  walk.reserves = reserves || null;
   walk.parts = parts.map(p => Object.assign({}, p, {
     cost: roundMapValues_(p.cost), income: roundMapValues_(p.income),
     actualCost: roundMapValues_(p.actualCost), actualIncome: roundMapValues_(p.actualIncome)
@@ -782,10 +786,14 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
  * so the chart runs exactly the code the tests run here. It may not call
  * anything outside itself.
  *
- * This is NOT cash runway. There is no bank balance anywhere in this system and the Xero
- * scopes cannot reach one, so it answers "when does the plan go underwater on money we have
- * actually won", not "when does the account empty". Anyone quoting it to a board must say
- * which one they mean.
+ * On its own this is funded runway, not cash: the Xero scopes cannot reach a bank balance,
+ * so it answers "when does the plan go underwater on money we have actually won". The
+ * money already in hand comes from `reserves` ({ amount, month }, latestReserves_): the
+ * free money at the end of `month` as the bookkeeper worked it out at a quarter close.
+ * Every line moves by one amount so that its position at the end of that month is the
+ * figure; from there on the secured line is reserves plus secured funding against the
+ * plan, the organisation's actual runway. Only the whole organisation has reserves, so
+ * the Overview passes them for that view alone.
  *
  * Months before the current one use Xero actuals; the current month and every month after
  * use the budget. The current month is deliberately budget rather than actual-so-far,
@@ -811,7 +819,7 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
  *
  * `months`, optional, fixes the axis, so several walks line up on one chart.
  */
-function runwayWalk_(parts, nowKey, months) {
+function runwayWalk_(parts, nowKey, months, reserves) {
   function add(m, k, v) { m[k] = (m[k] || 0) + (v || 0); }
   function monthsUntil(fromKey, toKey) {
     if (!toKey) return null;
@@ -848,7 +856,20 @@ function runwayWalk_(parts, nowKey, months) {
       monthsOfRunway: { secured: null, weighted: null, proposed: null } };
   }
 
-  let spend = 0, secured = 0, weighted = 0, proposed = 0;
+  // The past is actuals on every line alike, so one offset puts all three at the reserves
+  // figure at the end of its month.
+  let offset = 0;
+  if (reserves && typeof reserves.amount === 'number' && reserves.month) {
+    let base = 0;
+    months.forEach(k => {
+      if (k <= reserves.month && k < nowKey) {
+        base += (actualIncome[k] || 0) - (actualCost[k] || 0);
+      }
+    });
+    offset = reserves.amount - base;
+  }
+
+  let spend = 0, secured = offset, weighted = offset, proposed = offset;
   let openingNet = null;
   const rows = [];
   months.forEach(key => {

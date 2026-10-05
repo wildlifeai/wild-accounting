@@ -99,7 +99,7 @@ snapshot that the dashboard reads instantly. The data model it relies on is in `
 | `BudgetReader.js` | Walk Drive, parse each sheet's `Funding_info`, `Budget` and `Forecast` tabs |
 | `ForecastEngine.js` | Pure forecasting maths and quarter helpers, unit-testable |
 | `Aggregator.js` | Join budgets and actuals into the snapshot: breakdown rows, contribution, tracking, timeline, runway |
-| `Permissions.js` | The Permissions tab of the Cockpit Settings sheet: which projects each person may see |
+| `Permissions.js` | The Cockpit Settings sheet: its Permissions tab (which projects each person may see) and its Reserves tab (the money the runway starts from) |
 | `TrackingBuilder.js` | One project's sources and milestones by quarter, budget, actual and forecast, for both views of Project tracking |
 | `HealthCheck.js` | Turns silent wrongness into named findings. Pure, so it runs offline |
 | `Snapshot.js` | The cache in Drive, the refresh trigger, and refresh progress |

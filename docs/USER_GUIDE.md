@@ -61,8 +61,18 @@ at its right explains the cards and the chart. Under the line come the cards, th
    landing. Each line's label at the right edge gives the months until cumulative spend
    overtakes cumulative income and the month it goes short. "Beyond *month*" means no shortfall
    before the last budgeted month, which is not the same as safe: the budgets may simply stop
-   there. This is **funded** runway, not cash: the cockpit reads no bank balance. Because it is
-   the whole organisation's position, only people with access to every project see it.
+   there. Because it is the whole organisation's position, only people with access to every
+   project see it.
+
+   **Reserves** make it the actual runway. Xero cannot give the cockpit a bank balance, so at
+   each quarter-end close add a row to the `Reserves` tab of the **Cockpit Settings** sheet:
+   the date (a month end), the money free to spend that day, and how you worked it out. Free
+   money is the bank balance minus grant money received but not yet spent, which the chart
+   already counts as income as it is spent. The next refresh uses the latest row: with every
+   project and source shown and grouped by status, all three lines start from it, so
+   **Secured only** is reserves plus secured funding against the plan, and the label at today
+   reads "with reserves". Any narrower view, filtered or grouped, is funded money only, because
+   reserves belong to no one project. With no row, every view is funded money only.
 
    **Group by** changes the chart only. **Status** draws the three lines above. **Project**,
    **Funding source** or **Milestone** draws one line per group, counting applications at their
