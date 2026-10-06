@@ -185,6 +185,11 @@ Ranked by how badly they hurt the persona who depends on them:
   runway had been left out on 2026-09-21 for that cost alone) and writes the last quarter end's
   row: bank and term deposit, less grants received in advance, plus the releases Quarter close
   has not seen posted. A row typed for the same date wins, so a correction is never overwritten.
+- **2026-10-07: reserves net off unpaid bills and invoices.** Bills dated in a quarter but
+  unpaid at its end raised reserves by their full amount: the runway counts them as spent from
+  their date, the release they earn went back on, and the bank had not paid them yet. Accounts
+  Payable now comes off and Accounts Receivable goes on, both matched by name like the
+  in-advance liability.
 
 ## History
 
