@@ -1363,6 +1363,26 @@ function runTests() {
   check('G1 quiet when finished work lands inside the band',
     !g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000, d(2026, 6, 30)) }),
       [spend_(5500, '2026-06-01')]));
+  // No share for General: no overhead for spend to eat, so G1 leaves spend to E1 and E5.
+  var e5Lines = g1Line(6000, 6000).concat([{ description: 'GM', milestone: 'GM',
+    item: 'XXX_27_GOOD_002 - GM', project: 'General', start: d(2026, 4, 1),
+    end: d(2027, 3, 31), cost: 9000, income: 9000, contribution: 0 }]);
+  var e5Sheet = g1Sheet('percent_of_income:0', 6000, 6000, { lines: e5Lines });
+  var e5Spend = [spend_(7500, '2026-07-01'),
+    spend_(4000, '2026-07-01', { item: 'XXX_27_GOOD_002 - GM', project: 'General' })];
+  var e5All = buildHealth([e5Sheet], e5Spend, { now: NOW, xeroConnected: true });
+  var e5 = e5All.filter(function (f) { return f.id === 'E5'; })[0];
+  check('G1 does not judge spend on a source with no share for General',
+    !e5All.some(function (f) { return f.id === 'G1'; }));
+  check('E5: project lines over their budget, with the General lines beside them',
+    !!e5 && e5.amount === 1500 && e5.detail.indexOf('Spyfish Aotearoa lines: actual 7500 ' +
+      'against budget 6000, 25% over') !== -1 &&
+    e5.detail.indexOf('General lines: actual 4000 against budget 9000') !== -1);
+  check('E5 quiet within ten percent, and on a source with no General lines',
+    !buildHealth([e5Sheet], [spend_(6500, '2026-07-01')], { now: NOW, xeroConnected: true })
+      .some(function (f) { return f.id === 'E5'; }) &&
+    !buildHealth([g1Sheet('percent_of_income:0', 6000, 6000)], [spend_(7500, '2026-07-01')],
+      { now: NOW, xeroConnected: true }).some(function (f) { return f.id === 'E5'; }));
   // Spend on an item whose lines are all General's is General's work, not this source's.
   check('G1 leaves spend on General lines out of the actual',
     !g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000).concat([{

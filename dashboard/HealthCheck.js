@@ -141,11 +141,16 @@ const HEALTH_CATALOGUE = {
       'cost counts once. If it is genuinely different work that happens to share a ' +
       'description, reword one: an Exclusivity group would zero one side\'s cost and ' +
       'understate the budget.' },
+  E5: { severity: 'warning', category: 'Reconciliation',
+    title: 'Project lines spent more than their budget',
+    action: 'The grant as a whole may be within budget: the money has moved from its ' +
+      'General lines to its project lines. Explain it in the funder\'s report, or agree a ' +
+      'new split with the funder and then update the Budget tab.' },
   G1: { severity: 'warning', category: 'Funding',
     title: 'Overhead is off its Contribution policy',
-    action: 'Above the policy: two applications for the same work both landed, income is ' +
-      'on the wrong milestone, or work is underspent. Below it: costs are eating the ' +
-      'overhead. Fix the budget or the Forecast tab, or change the policy.' },
+    action: 'Above the policy: work is underspent, income is on the wrong milestone, or two ' +
+      'applications for the same work both landed. Below it: costs are taking the money ' +
+      'meant for General. Fix the Budget tab, or change the policy.' },
   G2: { severity: 'info', category: 'Funding',
     title: 'Proposed source with no Probability',
     action: 'Add Probability to Funding_info (0-100). Without it this ask is left out ' +
@@ -378,20 +383,25 @@ function buildHealth(budgets, actualLines, ctx) {
     // or the work is underspent. Below it, costs are eating the overhead. G1 used to call
     // any margin at all a surplus, so it fired on every contributing source for exactly its
     // policy's share and taught people to ignore it.
+    //
+    // Spend is judged only where the policy gives General a share. With none, there is no
+    // overhead for spend to eat: spend over budget is reported as spend over budget, by E1
+    // for the whole source and by E5 for its project lines, in those words.
+    const tol = CONFIG.CONTRIBUTION_TOLERANCE === undefined ? 0.1 :
+      CONFIG.CONTRIBUTION_TOLERANCE;
+    const isGeneralLine = l => (l.project || CONFIG.DEFAULT_PROJECT) === CONFIG.GENERAL_PROJECT;
     if (b.status === 'secured' || b.status === 'proposed') {
       const rate = contributionRate_(b);
-      const own = (b.lines || []).filter(l =>
-        (l.project || CONFIG.DEFAULT_PROJECT) !== CONFIG.GENERAL_PROJECT);
+      const own = (b.lines || []).filter(l => !isGeneralLine(l));
       const income = own.reduce((t, l) => t + (l.income || 0), 0);
       if (income > 0) {
-        const tol = CONFIG.CONTRIBUTION_TOLERANCE === undefined ? 0.1 :
-          CONFIG.CONTRIBUTION_TOLERANCE;
         const planned = own.reduce((t, l) => t + (l.cost || 0), 0);
         const actual = ownActualCost_(b, actualLines);
-        const done = !!now && own.every(l => l.end && new Date(l.end) < now);
+        const judgeSpend = rate > 0;
+        const done = judgeSpend && !!now && own.every(l => l.end && new Date(l.end) < now);
         const share = c => (income - c) / income;
         const off = c => Math.abs(share(c) - rate) > tol + 1e-9;
-        const eaten = actual > income * (1 - rate + tol) + 1e-6;
+        const eaten = judgeSpend && actual > income * (1 - rate + tol) + 1e-6;
         const actualOff = eaten || (done && off(actual));
         if (off(planned) || actualOff) {
           const worst = actualOff ? actual : planned;
@@ -404,6 +414,30 @@ function buildHealth(budgets, actualLines, ctx) {
               ', against a policy of ' + pct(rate) + ' (' + pct(rate - tol) + ' to ' +
               pct(rate + tol) + ' is fine)' }));
         }
+      }
+    }
+
+    // --- E5: a grant's project lines over their budget, paid for by its General lines ---
+    // A grant with General lines and project lines, and no share for General, can move
+    // money from one to the other: the project work costs more than its lines and General's
+    // milestones underspend to pay for it. The grant's total stays inside its budget, so E1
+    // is quiet; this says where the money went. Overspend only: underspend is E2's.
+    if (b.status === 'secured' && contributionRate_(b) === 0) {
+      const own = (b.lines || []).filter(l => !isGeneralLine(l));
+      const gen = (b.lines || []).filter(isGeneralLine);
+      const budget = own.reduce((t, l) => t + (l.cost || 0), 0);
+      const actual = own.length ? ownActualCost_(b, actualLines) : 0;
+      if (gen.length && budget > 0 && actual > budget * (1 + tol) + 1e-6) {
+        const total = (actualLines || []).reduce((t, l) => (l.kind === 'expense' &&
+          clean_(l.fundingSource || '') === b.name ? t + (Number(l.amount) || 0) : t), 0);
+        const names = {};
+        own.forEach(l => (names[l.project || CONFIG.DEFAULT_PROJECT] = true));
+        add('E5', withBase_(base, { amount: Math.round(actual - budget),
+          detail: Object.keys(names).join(' and ') + ' lines: actual ' + Math.round(actual) +
+            ' against budget ' + Math.round(budget) + ', ' +
+            Math.round((actual / budget - 1) * 100) + '% over (up to ' + Math.round(tol * 100) +
+            '% is fine); General lines: actual ' + Math.round(total - actual) +
+            ' against budget ' + Math.round(gen.reduce((t, l) => t + (l.cost || 0), 0)) }));
       }
     }
 
