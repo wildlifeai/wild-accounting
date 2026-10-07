@@ -103,6 +103,7 @@ row has any entry, its blank cells count as 0 for every quarter the tab has a co
 | C6 | error | `Contribution policy` missing or unparseable | General's income cannot be derived. The three values are `none`, `per_line` and `percent_of_income:<n>`, with `n` from 0 to 100. Case, surrounding spaces, hyphens for underscores and a space after the colon are all normalised before matching, so `None` and `Percent of income: 40` pass. The finding quotes the value back exactly as typed. `40%` is still rejected: it is a different statement, and guessing which was meant is not the checker's job. |
 | C7 | warning | `proposed` with no `Decision date` | Needed for pipeline forecasting and funder forms. |
 | C8 | warning | `Income recognition` is something other than `as spent`, `as invoiced` or blank | Fix the value. Until then its income counts when invoiced. |
+| C9 | warning | `Goes ahead` is something other than `only if funded`, `regardless` or blank | Fix the value. Until then its cost counts whatever lands. |
 
 ### D. Xero coding, aimed at the bookkeeper
 

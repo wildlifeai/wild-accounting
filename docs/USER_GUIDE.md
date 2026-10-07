@@ -75,12 +75,19 @@ at its right explains the cards and the chart. Under the line come the cards, th
    from its date, so what is still unpaid on it comes off or goes on here; and until the
    releases are posted, the liability still holds money already spent. Its column C shows each
    part, to check against Xero. To correct a figure, type your own row for the same date: the
-   refresh never
-   overwrites a row it did not write. The latest row is used: with every project and source
-   shown and grouped by status, all three lines start from it, so **Secured only** is reserves
-   plus secured funding against the plan, and the label at today reads "position ..., from
-   reserves at" its date. Any narrower view, filtered or grouped, is funded money only, because
-   reserves belong to no one project. With no row, every view is funded money only.
+   refresh never overwrites a row it did not write. The latest row is used: with every project
+   and source shown and grouped by status, all three lines start from it, so **Secured only**
+   is reserves plus secured funding against the plan, and the label at today reads "position
+   ..., from reserves at" its date. Any narrower view, filtered or grouped, is funded money
+   only, because reserves belong to no one project. With no row, every view is funded money
+   only.
+
+   **Work that goes ahead only if funded**, such as a new role or a next stage, is a proposed
+   sheet marked `Goes ahead: only if funded`. Its cost counts only where its funding does: not
+   on **Secured only** or in the unsecured gap, at its probability in expected cost, the gap
+   after pipeline and the weighted line, and in full on the line where every application
+   lands. Every other sheet's cost counts on every line, as work planned whatever lands, so
+   *cumulative spend* in the chart's table is that work alone.
 
    **Group by** changes the chart only. **Status** draws the three lines above. **Project**,
    **Funding source** or **Milestone** draws one line per group, counting applications at their

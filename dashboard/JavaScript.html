@@ -377,9 +377,13 @@
       return true;
     });
 
-    var totBudget = 0, totSecured = 0, totActual = 0, totWeighted = 0;
+    // Work that goes ahead only if funded is expected at its probability, as its income is,
+    // and is no part of the unsecured gap, which is committed cost against secured money.
+    var totBudget = 0, totCommitted = 0, totSecured = 0, totActual = 0, totWeighted = 0;
     rows.forEach(function (r) {
-      totBudget += sumFys(r.budgetByQ, fys);
+      var cost = sumFys(r.budgetByQ, fys);
+      totBudget += r.ifFunded ? sumFys(r.weightedCostByQ, fys) : cost;
+      if (!r.ifFunded) totCommitted += cost;
       totSecured += sumFys(r.securedByQ, fys);
       totActual += sumFys(r.actualByQ, fys);
       totWeighted += sumFys(r.weightedByQ, fys);
@@ -409,7 +413,7 @@
       card(fy + ' ' + costName, fmtMoney(totBudget)) +
       card(fy + ' secured funding', fmtMoney(totSecured)) +
       card(fy + ' actual', fmtMoney(totActual)) +
-      gapCard(fy + ' unsecured', totBudget - totSecured, 'danger') +
+      gapCard(fy + ' unsecured', totCommitted - totSecured, 'danger') +
       gapCard(fy + ' after pipeline', totBudget - totWeighted, 'amber');
   }
 

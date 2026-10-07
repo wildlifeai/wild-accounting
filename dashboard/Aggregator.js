@@ -81,6 +81,27 @@ function incomeRecognition_(src) {
 }
 
 /**
+ * A sheet's Goes ahead, normalised: 'regardless' (also the blank default), 'only if funded',
+ * or 'unknown' for anything else, which C9 reports rather than guessing.
+ */
+function goesAhead_(src) {
+  const raw = clean_(((src && src.metadata) || {})[CONFIG.META.goesAhead] || '')
+    .toLowerCase().replace(/[\s_]+/g, ' ').trim();
+  if (!raw || raw === 'regardless') return 'regardless';
+  return raw === 'only if funded' ? 'only if funded' : 'unknown';
+}
+
+/**
+ * True when a source's cost is spend only if it is funded: a proposed sheet marked "Goes
+ * ahead: only if funded". Its cost then counts where its income counts, at the same weight:
+ * not where only secured money counts, at its probability where expected money does, and in
+ * full where every application lands. A secured source is funded, so it never is.
+ */
+function costIfFunded_(src) {
+  return !!src && src.status === 'proposed' && goesAhead_(src) === 'only if funded';
+}
+
+/**
  * Income earned as it is spent, for sheets marked "Income recognition: as spent"
  * (CONFIG.ACTUALS_EARNED).
  *
@@ -444,6 +465,7 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
     if (!carriesCost) costSuppressed[src.name] = { group: group, countedIn: rep };
     const costFactor = carriesCost ? 1 : 0;
     const probability = sourceProbability_(src.status, src.metadata);
+    const ifFunded = costIfFunded_(src);
 
     // Per-line project attribution is handled in BudgetReader: a line uses its
     // `Project` value when set, otherwise the parent project folder. Falling back
@@ -516,6 +538,13 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
       // year rather than only the current one. The day-weighted month buckets already
       // exist; bucketToQuarters just folds them into FY quarters.
       addInto_(entry.budgetByQ, scaleMap_(bucketToQuarters(lineCostByMonth), costFactor));
+      // Work that goes ahead only if funded is expected at the ask's probability, as its
+      // income is; a missing probability counts as none, as it does for the income (G2).
+      if (ifFunded) {
+        entry.ifFunded = true;
+        addInto_(entry.weightedCostByQ, scaleMap_(bucketToQuarters(lineCostByMonth),
+          costFactor * (probability || 0)));
+      }
 
       // The policy's share of this line's income is General's, and shows under General as
       // this source's contribution; the project keeps the rest. lineContribution_ is what
@@ -557,7 +586,8 @@ function newProjectRollup_(name) {
 
 function newBudgetEntry_(status) {
   return { budget: 0, income: 0, status: status, budgetFY: 0, incomeFY: 0,
-    budgetByQ: {}, incomeByQ: {}, weightedByQ: {}, comment: '', start: null, end: null };
+    budgetByQ: {}, incomeByQ: {}, weightedByQ: {}, weightedCostByQ: {}, ifFunded: false,
+    comment: '', start: null, end: null };
 }
 
 /**
@@ -599,7 +629,11 @@ function buildBreakdownRows_(budgetByKey, actualByKey, actualByKeyFY, actualByKe
       budgetByQ: {}, incomeByQ: {}, weightedByQ: {}, comment: '',
       start: null, end: null };
     const status = (b.status || sourceStatus[source] || 'unknown');
-    return {
+    // Work that goes ahead only if funded: its cost is expected at its probability and
+    // committed not at all, so the Overview's gaps judge it as they judge its income.
+    const ifFunded = b.ifFunded
+      ? { ifFunded: true, weightedCostByQ: roundMapValues_(b.weightedCostByQ || {}) } : {};
+    return Object.assign({
       project: project,
       fundingSource: source,
       milestone: milestone,
@@ -621,7 +655,7 @@ function buildBreakdownRows_(budgetByKey, actualByKey, actualByKeyFY, actualByKe
       comment: b.comment || '',
       start: b.start || null,
       end: b.end || null
-    };
+    }, ifFunded);
   });
 }
 
@@ -820,10 +854,12 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
     // than being guessed at, exactly as in the org totals. G2 asks for the number.
     const probability = sourceProbability_(src.status, src.metadata);
     const rate = contributionRate_(src);
+    const ifFunded = costIfFunded_(src);
     bySource[src.name] = { status: src.status, probability: probability, rate: rate };
     (src.lines || []).forEach(l => {
       const p = part(l.project || CONFIG.DEFAULT_PROJECT, src.name,
         l.milestone || '(unassigned)', src.status, probability);
+      if (ifFunded) p.ifFunded = true;
       addInto_(p.cost, scaleMap_(distributeByMonth_([l], 'cost'), carriesCost ? 1 : 0));
       const income = distributeByMonth_([l], 'income');
       const share = lineContribution_(l, rate) ? rate : 0;
@@ -898,7 +934,11 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
  *   weighted  secured, plus each proposed source's income at its stated probability
  *   proposed  secured, plus every proposed source in full, the ceiling
  * All three share the same past, because a proposed grant has paid nothing yet, so they can
- * only diverge ahead of today. Spend is every part's cost whatever its status.
+ * only diverge ahead of today. Spend is every part's cost whatever its status, except work
+ * that goes ahead only if funded (a part marked ifFunded): its cost is not spend whatever
+ * lands, so it comes off the lines that count its funding, at the same weight as its
+ * income, and never off the secured line. `spend` is therefore the work done whatever
+ * lands, and each line is its funding net of the work that funding would pay for.
  *
  * A single burn-rate division was rejected deliberately: grant income arrives in tranches,
  * and dividing by an average burn rate reports a crossover no month actually experiences.
@@ -919,7 +959,12 @@ function runwayWalk_(parts, nowKey, months, reserves) {
   (parts || []).forEach(p => {
     const secured = p.status === 'secured';
     const weight = secured ? 1 : (typeof p.probability === 'number' ? p.probability : 0);
-    Object.keys(p.cost || {}).forEach(k => add(budgetCost, k, p.cost[k]));
+    const ifFunded = !secured && !!p.ifFunded;
+    Object.keys(p.cost || {}).forEach(k => {
+      if (!ifFunded) { add(budgetCost, k, p.cost[k]); return; }
+      add(incProposed, k, -p.cost[k]);
+      add(incWeighted, k, -p.cost[k] * weight);
+    });
     Object.keys(p.income || {}).forEach(k => {
       add(incProposed, k, p.income[k]);
       if (secured) add(incSecured, k, p.income[k]);

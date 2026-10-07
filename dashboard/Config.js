@@ -99,7 +99,11 @@ const CONFIG = {
     exclusivityGroup: 'exclusivity group',
     // "as spent": income is earned as the sheet spends (earnedActuals_), for grants paid
     // upfront and released by the accountant. Blank or "as invoiced": when invoiced.
-    incomeRecognition: 'income recognition'
+    incomeRecognition: 'income recognition',
+    // "only if funded": the work on a proposed sheet happens only if its money comes, so
+    // its cost counts where its income does (goesAhead_). Blank or "regardless": the work
+    // is planned whatever lands, and its cost counts on every line.
+    goesAhead: 'goes ahead'
   },
   DEFAULT_PROJECT: 'Unallocated',
   GENERAL_PROJECT: 'General',
