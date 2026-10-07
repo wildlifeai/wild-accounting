@@ -157,7 +157,14 @@
       <div class="ribbon">
         <div class="ribbon-group">
           <div class="ribbon-items">
-            <select id="tr-project" class="dd-select" aria-label="Project"></select>
+            <!-- Several can be ticked: their milestones share each funding source's heading
+                 and name their project. The folder link shows for one project only. -->
+            <details class="bd-dd">
+              <summary id="tr-projects-sum">Projects</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-list" id="tr-projects"></div>
+              </div>
+            </details>
             <a id="tr-folder" href="#" target="_blank" class="hidden tr-link">📁 Drive folder</a>
           </div>
           <div class="ribbon-label">Project</div>
@@ -250,7 +257,8 @@
               each milestone runs, green when its money is secured, amber when proposed; hover a
               quarter for its budget and actual. Click a funding source to fold its milestones
               away. To change a forecast, open the sheet from its 📄 link, edit the Forecast
-              tab, then click <b>Refresh now</b>.
+              tab, then click <b>Refresh now</b>. Tick more than one project to see them
+              together: each milestone then names its project.
             </div>
           </span>
         </div>

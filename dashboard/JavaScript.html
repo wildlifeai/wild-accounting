@@ -253,12 +253,13 @@
   // list's id rather than being hardcoded. Without this the tracking tab's filters would
   // silently re-render the Overview instead.
   function rerenderFor(id) {
-    if (id === 'tr-sources' || id === 'tr-milestones') renderTracking();
+    if (id === 'tr-projects') loadProjectTracking(selectedValues('tr-projects'));
+    else if (id === 'tr-sources' || id === 'tr-milestones') renderTracking();
     else { renderOverview(); renderRunway(); }
   }
 
   var FILTER_NAMES = { 'filter-projects': 'Projects', 'filter-sources': 'Funding sources',
-    'tr-sources': 'Funding sources', 'tr-milestones': 'Milestones' };
+    'tr-projects': 'Projects', 'tr-sources': 'Funding sources', 'tr-milestones': 'Milestones' };
 
   function updateFilterSummary(id) {
     var box = document.getElementById(id);
@@ -266,6 +267,12 @@
     var on = box.querySelectorAll('input:checked');
     var sum = document.getElementById(id + '-sum');
     var base = FILTER_NAMES[id];
+    // The tracking tab's projects are few and chosen one or two at a time, so the box
+    // names them rather than counting them.
+    if (id === 'tr-projects' && on.length && on.length < all.length) {
+      sum.textContent = selectedValues(id).join(' + ');
+      return;
+    }
     sum.textContent = (on.length === all.length)
       ? base + ' (all)' : base + ' (' + on.length + '/' + all.length + ')';
   }
@@ -989,15 +996,15 @@
   function trStatus(text) { document.getElementById('tr-status').textContent = text; }
 
   function loadTrackingProjects() {
-    var sel = document.getElementById('tr-project');
     trStatus('loading projects…');
     google.script.run.withSuccessHandler(function (projects) {
       if (!projects.length) { trStatus('No projects found.'); return; }
-      sel.innerHTML = projects.map(function (p) {
-        return '<option value="' + esc(p) + '">' + esc(p) + '</option>';
-      }).join('');
-      sel.addEventListener('change', function () { loadProjectTracking(sel.value); });
-      loadProjectTracking(projects[0]);
+      // The tab opens on the first project alone, as it did when only one could be picked.
+      fillFilter('tr-projects', projects);
+      Array.prototype.slice.call(document.querySelectorAll('#tr-projects input'))
+        .forEach(function (i, k) { i.checked = k === 0; });
+      updateFilterSummary('tr-projects');
+      loadProjectTracking([projects[0]]);
     }).withFailureHandler(function (e) {
       // A failed first load is retried on the next click of the tab, not left for good.
       trLoaded = false;
@@ -1005,19 +1012,41 @@
     }).apiListProjects();
   }
 
-  function loadProjectTracking(project) {
+  // A later answer can arrive before an earlier one when boxes are ticked quickly, so only
+  // the latest request's answer is drawn.
+  var trRequest = 0;
+  function loadProjectTracking(projects) {
     var link = document.getElementById('tr-folder');
-    link.classList.toggle('hidden', !PROJECT_LINKS[project]);
-    if (PROJECT_LINKS[project]) link.href = PROJECT_LINKS[project];
+    var one = projects.length === 1 ? PROJECT_LINKS[projects[0]] : null;
+    link.classList.toggle('hidden', !one);
+    if (one) link.href = one;
+    var req = ++trRequest;
+    if (!projects.length) {
+      trData = null;
+      document.getElementById('tr-title').textContent = '';
+      document.getElementById('tr-grid').innerHTML = '';
+      document.getElementById('tr-totals').innerHTML = '';
+      trStatus('Tick a project.');
+      return;
+    }
     trStatus('loading…');
     google.script.run.withSuccessHandler(function (t) {
+      if (req !== trRequest) return;
       trData = t;
       buildTrackingFilters(t);
       buildQuarterRange(t);
       renderTracking();
     }).withFailureHandler(function (e) {
+      if (req !== trRequest) return;
       trStatus('error: ' + errText(e));
-    }).apiGetProjectTracking(project);
+    }).apiGetProjectTracking(projects);
+  }
+
+  // With several projects shown, a milestone's row names its project: two projects can
+  // each have a milestone of the same name under one source.
+  function mileLabel(m) {
+    return esc(m.milestone) + (trData && trData.projects && trData.projects.length > 1 &&
+      m.project ? '<span class="mile-proj">' + esc(m.project) + '</span>' : '');
   }
 
   function buildTrackingFilters(t) {
@@ -1304,7 +1333,7 @@
         totalTds(sum) + '<td class="cmt-c"></td>') +
         (trFolded[g.source.source] ? '' : rows.map(function (r, k) {
           var m = g.milestones[k];
-          return '<tr><td class="mile">' + esc(m.milestone) + '</td>' +
+          return '<tr><td class="mile">' + mileLabel(m) + '</td>' +
             r.cells.map(function (c, i) { return cellTd(c, cols[i], false); }).join('') +
             totalTds(r) + '<td class="cmt-c">' +
             (m.comment ? '<span class="cmt-text">' + esc(m.comment) + '</span>' : '') + '</td></tr>';
@@ -1370,7 +1399,7 @@
             (qi === fromQi ? ' seg-first' : '') + (qi === toQi ? ' seg-last' : '') +
             '"><span class="seg-tip">' + esc(tip) + '</span></div></td>';
         }).join('');
-        rows += '<tr><td class="gantt-label">' + esc(m.milestone) + '</td>' +
+        rows += '<tr><td class="gantt-label">' + mileLabel(m) + '</td>' +
           figTds(cost, income) + cells + '</tr>';
       });
       if (!rows) return '';

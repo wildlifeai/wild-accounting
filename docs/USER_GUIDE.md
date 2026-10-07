@@ -27,7 +27,7 @@ in (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
 
 - **Overview**: the organisation-wide picture, with a runway chart you can regroup and filter
   (below).
-- **Project tracking**: one project at a time, its funding sources and their milestones quarter
+- **Project tracking**: one project or several, their funding sources and milestones quarter
   by quarter, as an actual-and-forecast grid or as a timeline. See
   [Tracking and forecasting](#tracking-and-forecasting-quarterly).
 - **Health**: sheet, Xero-coding and system problems found on the last refresh. The tab carries
@@ -128,11 +128,13 @@ The **Project tracking** tab replaces the old "Budget, Actual, Forecast Tracking
 to live in each sheet. You no longer keep one per funding source, and you no longer copy Xero
 into each sheet by hand.
 
-Pick a **project**. The tab shows every funding source with a milestone on it, each under its
-own heading with a 📄 link to its sheet and its own subtotals; click the heading to fold its
-milestones away and back. General also gathers the `(contribution)` rows from the projects that
-pay overhead into it. The ribbon narrows what is
-shown, in both views:
+Tick a **project**, or several. The tab shows every funding source with a milestone on them,
+each under its own heading with a 📄 link to its sheet and its own subtotals; click the heading
+to fold its milestones away and back. With several projects, a source's milestones from each
+sit under its one heading and each names its project. General also gathers the
+`(contribution)` rows from the projects that pay overhead into it, except from a project ticked
+beside it, whose own rows already hold that income. The ribbon narrows what is shown, in both
+views:
 
 - **View**: Actual and forecast, with its Cost / Income / Net measure, or Timeline, with its
   optional columns.
