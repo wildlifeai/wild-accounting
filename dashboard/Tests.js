@@ -244,6 +244,30 @@ function runTests() {
     composeProjectTracking(trk, tlines, 'Spyfish Aotearoa', quarterSortNum('26/27 Q1'))
       .quarters.map(function (q) { return q.label; }).join('|') ===
       '26/27 Q1|26/27 Q2|26/27 Q3|26/27 Q4|27/28 Q1');
+  // Several projects: one heading per source, each row naming its project.
+  var pt2 = composeProjectTracking(trk, tlines, ['Wildlife Watcher', 'General'],
+    quarterSortNum('26/27 Q1'));
+  check('several projects share each source heading, each row naming its project',
+    pt2.project === 'Wildlife Watcher + General' && pt2.sources.length === 1 &&
+    pt2.sources[0].milestones.map(function (x) { return x.milestone + '/' + x.project; })
+      .join('|') === 'General management/Wildlife Watcher|Admin/General|' +
+      'Unassigned (no product/service)/Wildlife Watcher');
+  check('several projects: each bar keeps its own project\'s segments',
+    pt2.sources[0].milestones[0].from === '25/26 Q3' &&
+    pt2.sources[0].milestones[1].from === '26/27 Q2');
+  // General's contribution from a project shown beside it is already in that project's
+  // rows, so it is not counted again; one from a project not shown still is.
+  var ctrk = [{ source: 'XXX_27_C', status: 'secured', contributionRate: 0.4, milestones: [
+    { item: 'XXX_27_C_001', milestone: 'Build', project: 'Wildlife Watcher',
+      baseline: { '26/27 Q2': 100 }, actual: {}, costForecast: {},
+      incomeBaseline: { '26/27 Q2': 1000 }, incomeActual: {}, incomeForecast: {} }] }];
+  var heads = function (projects) {
+    return composeProjectTracking(ctrk, [], projects, quarterSortNum('26/27 Q1')).sources
+      .map(function (s) { return s.source; }).join('|');
+  };
+  check('General alone gathers the contribution; with its project shown it is not doubled',
+    heads('General') === CONTRIBUTIONS_HEADING &&
+    heads(['General', 'Wildlife Watcher']) === 'XXX_27_C');
 
   // A source's tracking starts where the source does. The General option was renamed
   // GEN_27_CORE part way through a year, bringing years of history with it.
