@@ -157,8 +157,9 @@ Only needed to stand up a new copy of the cockpit.
   is `REFRESH_TRIGGER_HOURS`, after which re-run `installRefreshTrigger`.
 - **Known assumptions.** `XeroClient.js` reads bank transactions, invoices and posted manual
   journals, and each line's account class decides income or expense, as in Xero's P&L (see
-  `SKILL.md` §4). Line amounts are Xero's GST-exclusive
-  `LineAmount`, matching the GST-exclusive budgets.
+  `SKILL.md` §4). Line amounts are GST-exclusive, matching the GST-exclusive budgets and Xero's
+  reports: `LineAmount`, less its `TaxAmount` on a document entered tax-inclusive
+  (`netLineAmount_`).
 
 ## What belongs in this repository
 

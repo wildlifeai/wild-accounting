@@ -1623,6 +1623,23 @@ function runTests() {
   check('line: a bank line carries its document, contact and description',
     bankLine.docType === 'Spend money' && bankLine.reference === 'FEE' &&
     bankLine.contact === 'The Bank' && bankLine.description === 'Monthly fee');
+
+  // GST: Xero's reports are net of it. LineAmount includes it only on a document entered
+  // tax-inclusive, so only there does it come off.
+  var gstLine = function (amount, tax, types) {
+    return normaliseLine_({ LineAmount: amount, TaxAmount: tax, Tracking: [] },
+      d(2026, 10, 5), 'expense', {}, types).amount;
+  };
+  check('GST: a tax-inclusive line counts without its GST',
+    gstLine(115, 15, 'Inclusive') === 100);
+  check('GST: tax-exclusive and no-tax lines count as they are',
+    gstLine(100, 15, 'Exclusive') === 100 && gstLine(100, 0, 'NoTax') === 100 &&
+    gstLine(100, 0, undefined) === 100);
+  check('GST: a negative inclusive line stays negative, whichever sign its tax has',
+    gstLine(-115, -15, 'Inclusive') === -100 && gstLine(-115, 15, 'Inclusive') === -100);
+  check('GST: a tax-inclusive journal line counts without its GST',
+    journalLineToActual_({ LineAmount: -2300, TaxAmount: -300, Tracking: [] },
+      d(2025, 9, 30), 'REVENUE', 'Grants (102)', '', 'Inclusive').amount === 2000);
   var billDoc = xeroDoc_('Invoices', { Type: 'ACCPAY', InvoiceNumber: '', Reference: 'R-9' });
   check('line: a bill with no number falls back to its reference',
     billDoc.docType === 'Bill' && billDoc.reference === 'R-9' && billDoc.contact === '' &&
