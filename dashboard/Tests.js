@@ -876,15 +876,24 @@ function runTests() {
       { RowType: 'Section', Title: 'Bank', Rows: [
         bsRow('WILDLIFE.AI TRUST', 'id-600', '80000.50', '1.00'),
         bsRow('ANZ Term Deposit', 'id-605', '30000.00', '1.00'),
-        { RowType: 'SummaryRow', Cells: [{ Value: 'Total Bank' }, { Value: '110000.50' }] }] }] },
+        { RowType: 'SummaryRow', Cells: [{ Value: 'Total Bank' }, { Value: '110000.50' }] }] },
+      { RowType: 'Section', Title: 'Current Assets', Rows: [
+        bsRow('Accounts Receivable', 'id-610', '2000', '0')] }] },
     { RowType: 'Section', Title: 'Liabilities', Rows: [
+      bsRow('Accounts Payable', 'id-800', '12000', '0'),
       bsRow('Unused Donations and Grants with Conditions', 'id-8xx', '50000', '0')] }
   ] }, { 'id-600': '600', 'id-605': '605' });
   check('balance sheet: bank rows by code, from the first value column, totals skipped',
     bs.byCode['600'] === 80000.5 && bs.byCode['605'] === 30000 && !bs.byName['Total Bank']);
   var resX = reservesFromBalanceSheet_(bs, 38000);
-  check('reserves from Xero: bank and term deposit, less in advance, plus unposted releases',
-    resX.amount === 98001 && resX.note.indexOf(RESERVES_AUTO_NOTE) === 0);
+  // 80000.5 + 30000 + 2000 owed to us - 12000 to pay - 50000 in advance + 38000 unposted.
+  check('reserves from Xero: bank and invoices owed to us, less bills to pay and in advance, ' +
+    'plus unposted releases', resX.amount === 88001);
+  check('reserves from Xero: the note shows each part',
+    resX.note.indexOf(RESERVES_AUTO_NOTE) === 0 &&
+    resX.note.indexOf('Accounts Receivable 2000') !== -1 &&
+    resX.note.indexOf('Accounts Payable 12000') !== -1 &&
+    resX.note.indexOf('releases not yet posted 38000') !== -1);
   check('reserves from Xero: an in-advance account not on the sheet counts as nothing, and says so',
     reservesFromBalanceSheet_({ byCode: { '600': 100 }, byName: {} }, 0).note
       .indexOf('not on the balance sheet') !== -1);

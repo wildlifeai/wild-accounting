@@ -161,13 +161,17 @@ const CONFIG = {
   // Also a tab in the Cockpit Settings spreadsheet: one row per quarter-end close, the
   // money free to spend on that date. The latest row starts the runway (latestReserves_).
   // Each refresh writes the last quarter-end's row from Xero's Balance Sheet: these bank
-  // accounts, by code, less the liability holding grants received but not yet released
-  // (matched by name: it has no code here yet), plus the releases still to post.
+  // accounts, by code, plus invoices still owed to us, less bills still to pay and the
+  // liability holding grants received but not yet released (those three matched by name),
+  // plus the releases still to post.
   RESERVES: {
     TAB: 'Reserves',
     HEADER: ['As at', 'Reserves',
-      'How it was worked out (bank balance minus grant money received but not yet spent)'],
+      'How it was worked out (bank balance and invoices owed to us, minus bills to pay and ' +
+      'grant money received but not yet spent)'],
     BANK_CODES: ['600', '605'],   // WILDLIFE.AI TRUST, ANZ Term Deposit
+    RECEIVABLE_ACCOUNT: 'Accounts Receivable',
+    PAYABLE_ACCOUNT: 'Accounts Payable',
     IN_ADVANCE_ACCOUNT: 'Unused Donations and Grants with Conditions'
   },
 

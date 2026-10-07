@@ -148,21 +148,30 @@ function syncReservesFromXero_(sheet, now, quarterClose) {
 }
 
 /**
- * Free money from Balance Sheet balances: the bank accounts, less grants received in
- * advance, plus releases still to post. Until a quarter's release journal is in, the
- * liability still holds money that was spent, so the unposted releases go back on. The note
- * shows each part, so the figure can be checked against Xero.
+ * Free money from Balance Sheet balances: the bank accounts, plus invoices still owed to us,
+ * less bills still to pay and grants received in advance, plus releases still to post. The
+ * runway already counts a bill or invoice from its date, so what is unpaid on it at the
+ * quarter end comes off (or goes on) here; without that, an unpaid bill counted as cash
+ * still in the bank. Until a quarter's release journal is in, the liability still holds
+ * money that was spent, so the unposted releases go back on. The note shows each part, so
+ * the figure can be checked against Xero.
  */
 function reservesFromBalanceSheet_(bs, unposted) {
+  var R = CONFIG.RESERVES;
   var bank = 0;
-  CONFIG.RESERVES.BANK_CODES.forEach(function (c) { bank += (bs.byCode || {})[c] || 0; });
-  var name = CONFIG.RESERVES.IN_ADVANCE_ACCOUNT;
-  var inAdvance = (bs.byName || {})[name];
-  var amount = Math.round(bank - (inAdvance || 0) + (unposted || 0));
-  var note = RESERVES_AUTO_NOTE + 'accounts ' + CONFIG.RESERVES.BANK_CODES.join(' + ') + ' ' +
-    Math.round(bank) + ', less ' + name + ' ' +
-    (inAdvance === undefined ? '0 (not on the balance sheet)' : Math.round(inAdvance)) +
-    ', plus releases not yet posted ' + Math.round(unposted || 0) +
+  R.BANK_CODES.forEach(function (c) { bank += (bs.byCode || {})[c] || 0; });
+  var named = function (name) {
+    var v = (bs.byName || {})[name];
+    return { amount: v || 0,
+      text: name + ' ' + (v === undefined ? '0 (not on the balance sheet)' : Math.round(v)) };
+  };
+  var owedToUs = named(R.RECEIVABLE_ACCOUNT), toPay = named(R.PAYABLE_ACCOUNT),
+    inAdvance = named(R.IN_ADVANCE_ACCOUNT);
+  var amount = Math.round(bank + owedToUs.amount - toPay.amount - inAdvance.amount +
+    (unposted || 0));
+  var note = RESERVES_AUTO_NOTE + 'accounts ' + R.BANK_CODES.join(' + ') + ' ' +
+    Math.round(bank) + ', plus ' + owedToUs.text + ', less ' + toPay.text + ', less ' +
+    inAdvance.text + ', plus releases not yet posted ' + Math.round(unposted || 0) +
     '. Type your own row for this date to override.';
   return { amount: amount, note: note };
 }
