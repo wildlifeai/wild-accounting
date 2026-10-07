@@ -317,6 +317,9 @@ categories, and that none carried an item code. The rules the reader follows:
   existing ones would succeed and produce exactly nothing. `?page=1` is mandatory.
 * `LineAmount` on journal lines is **signed**. Never `Math.abs()` it: an accrual and its reversal
   must net to zero.
+* `LineAmount` **includes GST** on any document (invoice, bank transaction or manual journal)
+  whose `LineAmountTypes` is `Inclusive`. `netLineAmount_` takes the line's `TaxAmount` off
+  there, so the cockpit matches Xero's reports, which are net of GST.
 * Filter to `Status === 'POSTED'` in the mapper, not via `where`, which `paginate_` overwrites when
   `modifiedAfter` is set.
 * A grant paid upfront is invoiced to a revenue account, deferred by a quarter-end journal and
