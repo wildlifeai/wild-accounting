@@ -102,6 +102,9 @@ const HEALTH_CATALOGUE = {
   C8: { severity: 'warning', category: 'Metadata',
     title: 'Income recognition not understood',
     action: 'Use "as spent", "as invoiced", or leave it blank for as invoiced.' },
+  C9: { severity: 'warning', category: 'Metadata',
+    title: 'Goes ahead not understood',
+    action: 'Use "only if funded", "regardless", or leave it blank for regardless.' },
   D3: { severity: 'warning', category: 'Xero coding',
     title: 'Actual spend with no item code',
     action: 'Falls outside the quarterly tracking grid. Set the Product/Service in Xero.' },
@@ -353,6 +356,11 @@ function buildHealth(budgets, actualLines, ctx) {
     if (incomeRecognition_(b) === 'unknown') {
       add('C8', withBase_(base, { detail: '"' + clean_(meta[CONFIG.META.incomeRecognition]) +
         '" is not as spent or as invoiced, so its income counts when invoiced' }));
+    }
+
+    if (goesAhead_(b) === 'unknown') {
+      add('C9', withBase_(base, { detail: '"' + clean_(meta[CONFIG.META.goesAhead]) +
+        '" is not only if funded or regardless, so its cost counts whatever lands' }));
     }
 
     // --- G1: overhead off its Contribution policy ---

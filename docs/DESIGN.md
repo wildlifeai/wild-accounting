@@ -190,6 +190,12 @@ Ranked by how badly they hurt the persona who depends on them:
   their date, the release they earn went back on, and the bank had not paid them yet. Accounts
   Payable now comes off and Accounts Receivable goes on, both matched by name like the
   in-advance liability.
+- **2026-10-08: work that goes ahead only if funded.** Every sheet's cost counted on all three
+  runway lines, so a proposed new role pulled the secured line down as if hired regardless,
+  and the next stage's plan would have sunk it. A proposed sheet can now say `Goes ahead: only
+  if funded`, and its cost then rides with its income at the same weight, on the runway and in
+  the Overview's gaps. Opt-in per sheet rather than the rule for every proposal: most proposed
+  sheets, such as next year's core budget, are work that happens whatever lands.
 
 ## History
 

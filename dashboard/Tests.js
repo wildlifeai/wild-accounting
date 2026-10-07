@@ -801,6 +801,24 @@ function runTests() {
   ], rwNow, {});
   check('runway: archived project actuals are excluded', rwArch.openingNet === 0);
 
+  // Work that goes ahead only if funded: its cost rides with its income, at its weight, and
+  // never touches the secured line or the shared spend.
+  var rwIf = runwayWalk_([
+    { status: 'secured', cost: { '2026-11': 100 }, income: { '2026-11': 100 } },
+    { status: 'proposed', probability: 0.5, ifFunded: true,
+      cost: { '2026-11': 800 }, income: { '2026-11': 1000 } }], '2026-11');
+  var rwIfNov = rwIf.months[0];
+  check('only if funded: the cost leaves the secured line and the shared spend alone',
+    rwIfNov.spend === 100 && rwIfNov.secured - rwIfNov.spend === 0);
+  check('only if funded: the cost rides with the income, weighted and in full',
+    rwIfNov.weighted - rwIfNov.spend === 100 && rwIfNov.proposed - rwIfNov.spend === 200);
+  var rwAnyway = runwayWalk_([
+    { status: 'secured', cost: { '2026-11': 100 }, income: { '2026-11': 100 } },
+    { status: 'proposed', probability: 0.5,
+      cost: { '2026-11': 800 }, income: { '2026-11': 1000 } }], '2026-11').months[0];
+  check('regardless: a proposal\'s cost is spend on every line, as before',
+    rwAnyway.spend === 900 && rwAnyway.secured - rwAnyway.spend === -800);
+
   var rwYear = runwayWalk_([{ status: 'secured',
     cost: { '2026-11': 100, '2026-12': 100, '2027-01': 100, '2027-02': 100 },
     income: { '2026-11': 350 } }], '2026-11');
@@ -1191,6 +1209,23 @@ function runTests() {
   check('aggregate: the project rollup totals what the entries total',
     Math.abs(Object.keys(ag.projects).reduce(function (t, p) {
       return t + ag.projects[p].securedIncome; }, 0) - 12000) < 1);
+
+  // Goes ahead: only if funded. The cost is expected at the ask's probability, for the cards.
+  function goes(v) { return goesAhead_({ metadata: { 'goes ahead': v } }); }
+  check('goes ahead: "Only if funded" is read, blank and "regardless" are the default',
+    goes('Only if funded') === 'only if funded' && goes('') === 'regardless' &&
+    goes('Regardless') === 'regardless');
+  check('goes ahead: anything else is unknown, not guessed', goes('if funded') === 'unknown');
+  var ifBudgets = [agSrc('XXX_28_D', 'proposed', { probability: '25',
+    'goes ahead': 'only if funded' }, [agLine('Spyfish Aotearoa', 'M5', 'XXX_28_D_001', 4000, 5000)])];
+  var ifRow = buildBreakdownRows_(aggregateBudgets_(ifBudgets, fyBounds_(d(2026, 9, 26)),
+    chooseExclusivityReps_(ifBudgets)).budgetByKey, {}, {}, {}, {})[0];
+  check('only if funded: the row says so and expects its cost at the probability',
+    ifRow.ifFunded === true && Math.abs(agSum(ifRow.weightedCostByQ) - 1000) <= 2 &&
+    agSum(ifRow.budgetByQ) === 4000);
+  check('only if funded: a secured sheet is funded, so its cost always counts',
+    !costIfFunded_({ status: 'secured', metadata: { 'goes ahead': 'only if funded' } }) &&
+    !buildBreakdownRows_(ag.budgetByKey, {}, {}, {}, {})[0].ifFunded);
 
   // ---- deriving contribution: General's income comes from the policy ----------
   var cBudgets = [
@@ -1652,6 +1687,11 @@ function runTests() {
     income: 100, milestone: 'M', item: 'XXX_25_A_001' }] })];
   check('C8: an Income recognition it does not understand is flagged',
     eHealth(eSheets, []).some(function (f) { return f.id === 'C8'; }));
+  var gSheets = [Object.assign(eSheet('XXX_25_G', '', 100, 100), { metadata: {
+    'goes ahead': 'maybe' }, lines: [{ cost: 100, income: 100, milestone: 'M',
+    item: 'XXX_25_G_001' }] })];
+  check('C9: a Goes ahead it does not understand is flagged',
+    eHealth(gSheets, []).some(function (f) { return f.id === 'C9'; }));
   var jFor = function (src) { return Object.assign({}, jIncome, { fundingSource: src }); };
   var unmarked = [Object.assign(eSheet('XXX_25_B', '', 100, 100), { lines: [{ cost: 100,
     income: 100, milestone: 'M', item: 'XXX_25_B_001' }] })];
