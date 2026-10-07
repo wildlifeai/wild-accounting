@@ -293,7 +293,7 @@ function paginate_(path, collectionKey, mapper, modifiedAfter) {
     rows.forEach(r => {
       if (!isPosted_(collectionKey, r.Status)) {
         if (!isCancelled_(r.Status)) {
-          // SubTotal, because the app's line amounts are LineAmount and so tax-exclusive.
+          // SubTotal, the total without tax, as the line amounts are (netLineAmount_).
           const amount = Math.abs(Number(r.SubTotal == null ? r.Total : r.SubTotal) || 0);
           _lastUnposted.count++;
           _lastUnposted.total += amount;
@@ -326,7 +326,8 @@ function fetchBankTransactionLines_(modifiedAfter) {
     const date = parseXeroDate_(tx.DateString ? null : tx.Date) || new Date(tx.DateString);
     const kind = tx.Type === 'RECEIVE' ? 'income' : 'expense';
     const doc = xeroDoc_('BankTransactions', tx);
-    (tx.LineItems || []).forEach(li => out.push(normaliseLine_(li, date, kind, doc)));
+    (tx.LineItems || []).forEach(li =>
+      out.push(normaliseLine_(li, date, kind, doc, tx.LineAmountTypes)));
   }, modifiedAfter);
 }
 
@@ -335,7 +336,8 @@ function fetchInvoiceLines_(modifiedAfter) {
     const date = new Date(inv.DateString || parseXeroDate_(inv.Date));
     const kind = inv.Type === 'ACCREC' ? 'income' : 'expense';
     const doc = xeroDoc_('Invoices', inv);
-    (inv.LineItems || []).forEach(li => out.push(normaliseLine_(li, date, kind, doc)));
+    (inv.LineItems || []).forEach(li =>
+      out.push(normaliseLine_(li, date, kind, doc, inv.LineAmountTypes)));
   }, modifiedAfter);
 }
 
@@ -364,8 +366,24 @@ function unpostedDoc_(collectionKey, r, amount) {
   });
 }
 
-/** Normalise a Xero line item into the app's actual-line shape. */
-function normaliseLine_(li, date, kind, doc) {
+/**
+ * A line's amount without GST, as Xero's P&L and tracking reports show it. A document
+ * entered tax-inclusive (LineAmountTypes "Inclusive") carries the tax inside LineAmount,
+ * so it comes off here, toward zero so a negative line stays negative; otherwise
+ * LineAmount is already net. Without this, every line typed with GST in ran high by it.
+ */
+function netLineAmount_(li, amountTypes) {
+  const amount = Number(li.LineAmount) || 0;
+  if (String(amountTypes || '').toUpperCase() !== 'INCLUSIVE') return amount;
+  const tax = Math.abs(Number(li.TaxAmount) || 0);
+  return amount < 0 ? amount + tax : amount - tax;
+}
+
+/**
+ * Normalise a Xero line item into the app's actual-line shape. `amountTypes` is the
+ * document's LineAmountTypes, which says whether LineAmount includes GST.
+ */
+function normaliseLine_(li, date, kind, doc, amountTypes) {
   // Prefer the product/service code; if absent, recover a {SOURCE}_{NNN} code
   // from the line description (some lines, e.g. bank fees, carry the code only
   // in the description). This keeps such amounts attached to their milestone.
@@ -378,7 +396,7 @@ function normaliseLine_(li, date, kind, doc) {
     fundingSource: trackingValue_(li.Tracking, CONFIG.XERO.FUNDING_TRACKING_CATEGORY),
     item: code,
     itemName: li.Item ? (li.Item.Name || '') : '',
-    amount: Number(li.LineAmount) || 0,
+    amount: netLineAmount_(li, amountTypes),
     kind: kind,
     docType: doc.docType || '',
     reference: doc.reference || '',
@@ -399,15 +417,51 @@ function codeFromDescription_(desc) {
  */
 let _accountLabelCache = null;
 let _accountClassCache = null;
+let _accountCodeById = null;   // Xero AccountID -> code, for report rows
 function loadAccounts_() {
   if (_accountLabelCache) return;
   _accountLabelCache = {};
   _accountClassCache = {};
+  _accountCodeById = {};
   const data = xeroGet_('/Accounts');
   (data.Accounts || []).forEach(a => {
     _accountLabelCache[a.Code] = a.Name + ' (' + a.Code + ')';
     _accountClassCache[a.Code] = a.Class || '';
+    _accountCodeById[a.AccountID] = a.Code;
   });
+}
+
+/**
+ * Account balances on Xero's Balance Sheet at `date` ('yyyy-MM-dd'), for the reserves
+ * (syncReservesFromXero_). Needs accounting.reports.read: a token granted before that scope
+ * was added gets 401 or 403, which the caller reports as F4.
+ */
+function fetchBalanceSheet_(date) {
+  loadAccounts_();
+  const data = xeroGet_('/Reports/BalanceSheet', { date: date });
+  return parseBalanceSheet_((data.Reports || [])[0] || {}, _accountCodeById);
+}
+
+/**
+ * A Balance Sheet report's account rows as { byCode, byName } of amounts, read from the
+ * first value column, which is the date asked for (later columns compare earlier dates).
+ * Sections nest, so it walks them; section totals are SummaryRows and are skipped.
+ */
+function parseBalanceSheet_(report, codeById) {
+  const out = { byCode: {}, byName: {} };
+  (function walk(rows) {
+    (rows || []).forEach(r => {
+      if (r.Rows) walk(r.Rows);
+      if (r.RowType !== 'Row' || !r.Cells || r.Cells.length < 2) return;
+      const name = String(r.Cells[0].Value || '').trim();
+      const amount = parseFloat(String(r.Cells[1].Value || '').replace(/,/g, '')) || 0;
+      out.byName[name] = (out.byName[name] || 0) + amount;
+      const id = ((r.Cells[0].Attributes || []).filter(a => a.Id === 'account')[0] || {}).Value;
+      const code = id && (codeById || {})[id];
+      if (code) out.byCode[code] = (out.byCode[code] || 0) + amount;
+    });
+  })(report.Rows);
+  return out;
 }
 function accountLabelFromCode_(code) {
   if (code == null || code === '') return '';
@@ -449,12 +503,13 @@ function byAccountClass_(line, cls) {
 /**
  * One manual-journal line as an actual line, or null if it is not on a P&L account.
  * LineAmount is signed, debit positive, so income is its negative and an accrual and its
- * reversal net to zero; never Math.abs() it. Journal lines carry tracking but no item
+ * reversal net to zero; never Math.abs() it. A journal entered tax-inclusive carries GST
+ * in LineAmount, which netLineAmount_ takes off. Journal lines carry tracking but no item
  * code, so a milestone can only come from a code leading the description.
  */
-function journalLineToActual_(li, date, cls, accountLabel, narration) {
+function journalLineToActual_(li, date, cls, accountLabel, narration, amountTypes) {
   if (!PNL_CLASSES[cls]) return null;
-  const amount = Number(li.LineAmount) || 0;
+  const amount = netLineAmount_(li, amountTypes);
   return {
     date: date,
     account: accountLabel,
@@ -490,7 +545,7 @@ function fetchManualJournalLines_(sinceDate) {
       (j.JournalLines || []).forEach(li => {
         const label = accountLabelFromCode_(li.AccountCode);
         const line = journalLineToActual_(li, date, accountClassFromLabel_(label), label,
-          j.Narration);
+          j.Narration, j.LineAmountTypes);
         if (line) out.push(line);
       });
     });

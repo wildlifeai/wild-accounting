@@ -250,8 +250,8 @@ changing code:
   and `*Account` where an older sheet still has one, though nothing uses it. Required: `Start`,
   `End`, `Cost`.
 * **Forecasts are per sheet**, on each funding source's own `Forecast` tab, read by
-  `parseForecastTab_`. The central sheet, Cockpit Settings, holds only the Permissions tab
-  (`Permissions.js`).
+  `parseForecastTab_`. The central sheet, Cockpit Settings, holds only the Permissions and
+  Reserves tabs (`Permissions.js`).
 * **A milestone row with no forecast falls back to the budget baseline**, never to zero.
   `forecastOrBaseline_` in `ForecastEngine.js` is the one statement of that rule, used by the
   tracking grid, D5 and E2. Reading zero made every source with an unmaintained `Forecast` tab look
@@ -287,9 +287,12 @@ Never add a code path that drops data without a finding.
   A collection with no policy passes through, so a new fetcher never silently returns nothing.
 * **Balance-sheet accounts are excluded** by account **code**, in `fetchXeroActuals`, so a Xero
   rename cannot un-exclude one (`EXCLUDED_ACCOUNTS`, reported by F5).
-* Scopes: `offline_access accounting.transactions.read accounting.settings.read`. Xero has
-  deprecated the broad scopes in favour of granular ones; scopes are additive and cannot be removed
-  from a live token without re-consent, so plan changes rather than making them casually.
+* Scopes: `offline_access accounting.transactions.read accounting.settings.read
+  accounting.reports.read`, the last for the Balance Sheet the reserves come from. Xero has
+  deprecated the broad scopes in favour of granular ones (this app keeps them to September 2027);
+  scopes are additive and cannot be removed from a live token without re-consent, so plan
+  changes rather than making them casually. A token granted before a scope was added is refused
+  that scope's endpoints, which F4 reports.
 
 ## Payroll
 
@@ -314,6 +317,9 @@ categories, and that none carried an item code. The rules the reader follows:
   existing ones would succeed and produce exactly nothing. `?page=1` is mandatory.
 * `LineAmount` on journal lines is **signed**. Never `Math.abs()` it: an accrual and its reversal
   must net to zero.
+* `LineAmount` **includes GST** on any document (invoice, bank transaction or manual journal)
+  whose `LineAmountTypes` is `Inclusive`. `netLineAmount_` takes the line's `TaxAmount` off
+  there, so the cockpit matches Xero's reports, which are net of GST.
 * Filter to `Status === 'POSTED'` in the mapper, not via `where`, which `paginate_` overwrites when
   `modifiedAfter` is set.
 * A grant paid upfront is invoiced to a revenue account, deferred by a quarter-end journal and

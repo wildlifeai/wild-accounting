@@ -2,6 +2,7 @@
  * Permissions.js
  * Who may see what: the Permissions tab of the "Cockpit Settings" spreadsheet, which
  * getUserPermissions reads on every page load to scope the snapshot to a person's projects.
+ * The same spreadsheet's Reserves tab, read at refresh, starts the runway (readReserves_).
  *
  * This was ForecastStore.js until 2026-09-29. Forecasts were once stored centrally here;
  * they are now read from each funding source's own Forecast tab
@@ -78,4 +79,139 @@ function getUserPermissions(email) {
     }
   }
   return []; // default to no access
+}
+
+// ---- Reserves ----
+
+/**
+ * The latest reserves figure on the Reserves tab, or null, after writing the last
+ * quarter-end's row from Xero (syncReservesFromXero_). Read at refresh; the tab is created
+ * with its header the first time. A sheet that cannot be read leaves the runway as funded
+ * money only rather than failing the refresh: the rest of the snapshot does not depend on it.
+ */
+function readReserves_(now, quarterClose) {
+  _lastReservesIssue = null;
+  try {
+    var ss = openOrCreateSettingsSpreadsheet_();
+    var sheet = ss.getSheetByName(CONFIG.RESERVES.TAB);
+    if (!sheet) {
+      sheet = ss.insertSheet(CONFIG.RESERVES.TAB);
+      sheet.appendRow(CONFIG.RESERVES.HEADER);
+      sheet.setFrozenRows(1);
+    }
+    syncReservesFromXero_(sheet, now, quarterClose);
+    return latestReserves_(sheet.getDataRange().getValues().slice(1), now);
+  } catch (e) {
+    Logger.log('Reserves not read, so the runway shows funded money only: ' + e.message);
+    return null;
+  }
+}
+
+// Why the last refresh could not read reserves from Xero, for F4: 'scope' or null.
+var _lastReservesIssue = null;
+function lastReservesIssue() { return _lastReservesIssue; }
+
+// Column C of a row the refresh wrote starts with this, which is how a typed row is told
+// apart from it and left alone.
+var RESERVES_AUTO_NOTE = 'From Xero: ';
+
+/**
+ * Write the last quarter-end's reserves from Xero's Balance Sheet into the tab, replacing
+ * the row an earlier refresh wrote for that date. A row someone typed for that date wins,
+ * so a correction is never overwritten. Without the reports scope Xero refuses the report:
+ * F4 says so and the typed rows still work.
+ */
+function syncReservesFromXero_(sheet, now, quarterClose) {
+  if (!isXeroConnected()) return;
+  var qi = qiOfDate_(now) - 1;
+  var end = quarterBounds_(qi).end;
+  var rows = sheet.getDataRange().getValues();
+  var at = -1;
+  for (var i = 1; i < rows.length; i++) {
+    var d = parseSheetDate_(rows[i][0]);
+    if (!d || d.getTime() !== end.getTime()) continue;
+    if (String(rows[i][2] || '').indexOf(RESERVES_AUTO_NOTE) !== 0) return;
+    at = i;
+  }
+  var bs;
+  try {
+    bs = fetchBalanceSheet_(isoDate_(end));
+  } catch (e) {
+    if (/Xero API 40[13]/.test(e.message)) _lastReservesIssue = 'scope';
+    Logger.log('Reserves not read from Xero: ' + e.message);
+    return;
+  }
+  var r = reservesFromBalanceSheet_(bs, unpostedReleases_(quarterClose, labelOfQi_(qi)));
+  var row = [end, r.amount, r.note];
+  if (at === -1) sheet.appendRow(row);
+  else sheet.getRange(at + 1, 1, 1, 3).setValues([row]);
+}
+
+/**
+ * Free money from Balance Sheet balances: the bank accounts, plus invoices still owed to us,
+ * less bills still to pay and grants received in advance, plus releases still to post. The
+ * runway already counts a bill or invoice from its date, so what is unpaid on it at the
+ * quarter end comes off (or goes on) here; without that, an unpaid bill counted as cash
+ * still in the bank. Until a quarter's release journal is in, the liability still holds
+ * money that was spent, so the unposted releases go back on. The note shows each part, so
+ * the figure can be checked against Xero.
+ */
+function reservesFromBalanceSheet_(bs, unposted) {
+  var R = CONFIG.RESERVES;
+  var bank = 0;
+  R.BANK_CODES.forEach(function (c) { bank += (bs.byCode || {})[c] || 0; });
+  var named = function (name) {
+    var v = (bs.byName || {})[name];
+    return { amount: v || 0,
+      text: name + ' ' + (v === undefined ? '0 (not on the balance sheet)' : Math.round(v)) };
+  };
+  var owedToUs = named(R.RECEIVABLE_ACCOUNT), toPay = named(R.PAYABLE_ACCOUNT),
+    inAdvance = named(R.IN_ADVANCE_ACCOUNT);
+  var amount = Math.round(bank + owedToUs.amount - toPay.amount - inAdvance.amount +
+    (unposted || 0));
+  var note = RESERVES_AUTO_NOTE + 'accounts ' + R.BANK_CODES.join(' + ') + ' ' +
+    Math.round(bank) + ', plus ' + owedToUs.text + ', less ' + toPay.text + ', less ' +
+    inAdvance.text + ', plus releases not yet posted ' + Math.round(unposted || 0) +
+    '. Type your own row for this date to override.';
+  return { amount: amount, note: note };
+}
+
+/** What Quarter close says is still to post, all grants, cumulative to quarter `q`. */
+function unpostedReleases_(quarterClose, q) {
+  var qi = qiOfLabel_(q), total = 0;
+  ((quarterClose && quarterClose.releases) || []).forEach(function (r) {
+    Object.keys(r.byQ || {}).forEach(function (k) {
+      if (qiOfLabel_(k) <= qi) total += (r.byQ[k].earned || 0) - (r.byQ[k].xero || 0);
+    });
+  });
+  return Math.round(total);
+}
+
+/**
+ * The row dated latest but not after `now` that has an amount, as
+ * { amount, asAt: 'yyyy-MM-dd', month }. A row dated ahead is a figure nobody can know yet.
+ */
+function latestReserves_(rows, now) {
+  var best = null;
+  (rows || []).forEach(function (r) {
+    var d = parseSheetDate_(r[0]);
+    var raw = r[1];
+    if (!d || d > now || raw === '' || raw === null || raw === undefined) return;
+    if (!best || d >= best.date) best = { date: d, amount: parseAmount_(raw) };
+  });
+  if (!best) return null;
+  return { amount: Math.round(best.amount), asAt: isoDate_(best.date),
+    month: reservesMonth_(best.date, now) };
+}
+
+/**
+ * The month whose closing position the figure is: its own month when dated on the last
+ * day, otherwise the month before, since the runway walks whole months. Never this month
+ * or later, which the runway plans rather than reads from Xero.
+ */
+function reservesMonth_(d, now) {
+  var lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() === d.getDate();
+  var m = new Date(d.getFullYear(), d.getMonth() - (lastDay ? 0 : 1), 1);
+  var cap = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return DateMath.monthKey(m < cap ? m : cap);
 }

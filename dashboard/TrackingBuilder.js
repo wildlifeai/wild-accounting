@@ -1,7 +1,7 @@
 /**
  * TrackingBuilder.js
- * Builds the Project tracking payload for one project: every funding source with a
- * milestone on that project, and for each milestone its budget (frozen Budget tab),
+ * Builds the Project tracking payload for one project or several: every funding source
+ * with a milestone on them, and for each milestone its budget (frozen Budget tab),
  * actual (Xero) and forecast (the source's Forecast tab) per quarter, for cost and for
  * income, plus the quarters its bar spans. One call serves both views of the tab: the
  * client lays the quarters out as the actual-and-forecast grid or the timeline, picks
@@ -25,15 +25,22 @@
 /** The heading General's inflow from the other projects' sources sits under. */
 const CONTRIBUTIONS_HEADING = 'Contributions from other projects';
 
-function composeProjectTracking(tracking, timeline, project, currentQi) {
-  // Bar extents by source and milestone: the first and last quarter any budget line of
-  // that milestone runs through, from the segments the budget lines were cut into.
+function composeProjectTracking(tracking, timeline, projects, currentQi) {
+  // One project's name or several. Several share each funding source's heading, and each
+  // milestone row carries its project so the page can tell same-named milestones apart.
+  const list = [].concat(projects);
+  const shown = {};
+  list.forEach(p => (shown[p] = true));
+  const spanKey = (project, source, milestone) => project + '||' + source + '||' + milestone;
+
+  // Bar extents by project, source and milestone: the first and last quarter any budget
+  // line of that milestone runs through, from the segments the budget lines were cut into.
   const span = {};
   (timeline || []).forEach(t => {
-    if (t.project !== project) return;
+    if (!shown[t.project]) return;
     (t.segments || []).forEach(seg => {
       if (!seg.start || !seg.end) return;
-      const key = seg.source + '||' + t.milestone;
+      const key = spanKey(t.project, seg.source, t.milestone);
       const a = qiOfMonthKey_(seg.start), b = qiOfMonthKey_(seg.end);
       const s = span[key] || (span[key] = { from: a, to: b });
       if (a < s.from) s.from = a;
@@ -46,22 +53,25 @@ function composeProjectTracking(tracking, timeline, project, currentQi) {
   (tracking || []).forEach(t => {
     // A milestone counts toward the project its lines name, not the folder its sheet
     // sits in, so a WW_25_TOI line tagged General lands under General.
-    const mine = (t.milestones || []).filter(m => m.project === project);
+    const mine = (t.milestones || []).filter(m => shown[m.project]);
     if (!mine.length) return;
     sources.push({
       source: t.source, status: t.status || null, sheetUrl: t.sheetUrl || null,
-      milestones: mine.map(m => milestoneRow_(m, span[t.source + '||' + m.milestone], currentQi, qis))
+      milestones: mine.map(m =>
+        milestoneRow_(m, span[spanKey(m.project, t.source, m.milestone)], currentQi, qis))
     });
   });
 
   // General's inflow from the other projects' sources, by each one's Contribution policy,
   // under a heading of its own. Each row keeps its source's status, since that is what
-  // says whether the money is secured.
-  if (project === CONFIG.GENERAL_PROJECT) {
+  // says whether the money is secured. A project shown alongside already has that income
+  // in full on its own rows, so its share is left out rather than counted twice.
+  if (shown[CONFIG.GENERAL_PROJECT]) {
     const statusOf = {};
     (tracking || []).forEach(t => (statusOf[t.source] = t.status || null));
-    const rows = contributionMilestones_(tracking).map(m => {
-      const row = milestoneRow_(m, span[m.source + '||' + m.milestone], currentQi, qis);
+    const rows = contributionMilestones_(tracking, shown).map(m => {
+      const row = milestoneRow_(m, span[spanKey(m.project, m.source, m.milestone)],
+        currentQi, qis);
       row.status = statusOf[m.source];
       return row;
     });
@@ -82,8 +92,8 @@ function composeProjectTracking(tracking, timeline, project, currentQi) {
     quarters.push({ label: labelOfQi_(qi), past: qi < currentQi, current: qi === currentQi });
   }
 
-  return { project: project, currentQuarter: labelOfQi_(currentQi), quarters: quarters,
-    sources: sources };
+  return { project: list.join(' + '), projects: list, currentQuarter: labelOfQi_(currentQi),
+    quarters: quarters, sources: sources };
 }
 
 /**
@@ -116,7 +126,7 @@ function milestoneRow_(m, span, currentQi, qis) {
     }
   }
   return {
-    item: m.item, milestone: m.milestone, comment: m.forecastComment || '',
+    item: m.item, milestone: m.milestone, project: m.project, comment: m.forecastComment || '',
     actualOnly: !!m.actualOnly, byQ: byQ,
     from: from === null ? null : labelOfQi_(from),
     to: to === null ? null : labelOfQi_(to)

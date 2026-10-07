@@ -130,8 +130,12 @@ const CONFIG = {
     CONNECTIONS_URL: 'https://api.xero.com/connections',
     // Minimal read-only scopes. accounting.transactions.read covers bank
     // transactions + invoices; accounting.settings.read covers the chart of
-    // accounts and tracking categories; offline_access enables token refresh.
-    SCOPE: 'offline_access accounting.transactions.read accounting.settings.read',
+    // accounts and tracking categories; accounting.reports.read the Balance Sheet the
+    // reserves come from (readReserves_); offline_access enables token refresh. Xero
+    // retires the broad transactions and reports scopes for apps like this one in
+    // September 2027, so they move to the granular ones before then.
+    SCOPE: 'offline_access accounting.transactions.read accounting.settings.read ' +
+      'accounting.reports.read',
     PROJECT_TRACKING_CATEGORY: 'Projects',
     FUNDING_TRACKING_CATEGORY: 'Funding source'
   },
@@ -153,6 +157,24 @@ const CONFIG = {
     HEADER: ['Email', 'Allowed Projects (comma separated, or * for all)']
   },
 
+  // ---- Reserves ------------------------------------------------------------
+  // Also a tab in the Cockpit Settings spreadsheet: one row per quarter-end close, the
+  // money free to spend on that date. The latest row starts the runway (latestReserves_).
+  // Each refresh writes the last quarter-end's row from Xero's Balance Sheet: these bank
+  // accounts, by code, plus invoices still owed to us, less bills still to pay and the
+  // liability holding grants received but not yet released (those three matched by name),
+  // plus the releases still to post.
+  RESERVES: {
+    TAB: 'Reserves',
+    HEADER: ['As at', 'Reserves',
+      'How it was worked out (bank balance and invoices owed to us, minus bills to pay and ' +
+      'grant money received but not yet spent)'],
+    BANK_CODES: ['600', '605'],   // WILDLIFE.AI TRUST, ANZ Term Deposit
+    RECEIVABLE_ACCOUNT: 'Accounts Receivable',
+    PAYABLE_ACCOUNT: 'Accounts Payable',
+    IN_ADVANCE_ACCOUNT: 'Unused Donations and Grants with Conditions'
+  },
+
   // ---- Financial year -----------------------------------------------------
   // Quarters in the tracking screen follow this financial year. 4 = April start
   // (Apr-Mar), so Q1 = Apr-Jun, Q2 = Jul-Sep, Q3 = Oct-Dec, Q4 = Jan-Mar.
@@ -171,6 +193,11 @@ const CONFIG = {
   // blank Revenue row following its cost (remainingPlan_). It relies on ACTUALS_EARNED and
   // was turned on with it on 2026-10-02.
   PLAN_REMAINING: true,
+
+  // ---- Quarter close ------------------------------------------------------
+  // The Health tab's accrual candidates leave out shortfalls smaller than this, in dollars:
+  // a pay run a few dollars off its forecast is not an accrual. See buildQuarterClose_.
+  ACCRUAL_MIN_SHORTFALL: 100,
 
   // ---- Caching ------------------------------------------------------------
   // The snapshot is stored as a JSON file in Drive (no size ceiling, unlike

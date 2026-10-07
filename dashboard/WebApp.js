@@ -123,6 +123,12 @@ function filterSnapshotForProjects_(snap, allowedProjects) {
     filteredSnap.timeline = filteredSnap.timeline.filter(t => allowedProjects.includes(t.project));
   }
 
+  if (filteredSnap.quarterClose) {
+    const qc = filteredSnap.quarterClose;
+    qc.releases = (qc.releases || []).filter(r => allowedProjects.includes(r.project));
+    qc.accruals = (qc.accruals || []).filter(a => allowedProjects.includes(a.project));
+  }
+
   // Health findings name their funding source, its owner's email, the dollars at risk and
   // a link straight to the sheet. Unfiltered, the panel showed a project lead every budget
   // in the organisation. This was invisible while dataFlags was never populated; once
@@ -182,13 +188,14 @@ function apiListProjects() {
 }
 
 /**
- * Client API: one project's funding sources and their milestones, quarter by quarter,
- * for both views of the Project tracking tab. See composeProjectTracking.
+ * Client API: the funding sources and their milestones of one project or several (a name
+ * or a list), quarter by quarter, for both views of the Project tracking tab. See
+ * composeProjectTracking.
  */
-function apiGetProjectTracking(project) {
+function apiGetProjectTracking(projects) {
   const snap = getFilteredSnapshot_();
   const currentQi = quarterSortNum(snap.currentQuarter || currentQuarterLabel());
-  return composeProjectTracking(snap.tracking, snap.timeline, project, currentQi);
+  return composeProjectTracking(snap.tracking, snap.timeline, projects, currentQi);
 }
 
 /** Add values from source map into target map (mutates target). */
@@ -201,16 +208,18 @@ function addMaps_(target, source) {
 
 /**
  * General's contribution rows for Project tracking: per source, its policy's share of the
- * income on milestones not already General's. Income layers only, because a contribution
- * is income to General, not spend. Pure over the tracking entries, so it can be tested.
+ * income on milestones not already General's, nor on a project in `skip` (a set of names:
+ * those shown beside General, whose rows already carry that income). Income layers only,
+ * because a contribution is income to General, not spend. Pure over the tracking entries,
+ * so it can be tested.
  */
-function contributionMilestones_(tracking) {
+function contributionMilestones_(tracking, skip) {
   var out = [];
   (tracking || []).forEach(function (t) {
     var rate = t.contributionRate || 0;
     if (!rate) return;
     var items = (t.milestones || []).filter(function (m) {
-      return m.project !== CONFIG.GENERAL_PROJECT;
+      return m.project !== CONFIG.GENERAL_PROJECT && !(skip && skip[m.project]);
     });
     var incBase = {}, incAct = {}, incFc = {}, fcQuarters = {};
     items.forEach(function (m) {

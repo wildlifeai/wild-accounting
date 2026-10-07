@@ -163,6 +163,11 @@ const HEALTH_CATALOGUE = {
   F3: { severity: 'error', category: 'System',
     title: 'Xero credentials not configured',
     action: 'Set them in Project Settings > Script Properties.' },
+  F4: { severity: 'warning', category: 'System',
+    title: 'Xero has not given the cockpit a permission it needs',
+    action: 'Run resetXeroConnection, then logXeroAuthUrl, and approve: the new permission ' +
+            'is read-only. Actuals stop until you approve, so do both in one sitting. Until ' +
+            'then, type the Reserves row on Cockpit Settings by hand.' },
   F5: { severity: 'info', category: 'System',
     title: 'Refresh summary',
     action: '' },
@@ -189,7 +194,7 @@ const HEALTH_SEVERITY_RANK = { error: 0, warning: 1, info: 2 };
  * @param {Array} actualLines  normalised Xero lines
  * @param {Object} ctx  { now, xeroConnected, exclusion: {count,total},
  *                       unposted: {count,total}, secretsMissing: [],
- *                       exclusivity: {reps, suppressed} }
+ *                       reservesIssue: 'scope' | null, exclusivity: {reps, suppressed} }
  * @return {Array} findings, most severe first, and by value at risk within severity
  */
 function buildHealth(budgets, actualLines, ctx) {
@@ -611,6 +616,10 @@ function buildHealth(budgets, actualLines, ctx) {
   (ctx.secretsMissing || []).forEach(k => {
     add('F3', { detail: 'Script Property "' + k + '" is not set' });
   });
+  if (ctx.reservesIssue === 'scope') {
+    add('F4', { detail: 'reserves are not read from the Balance Sheet: the connection was ' +
+      'approved before accounting.reports.read was asked for' });
+  }
   const excl = ctx.exclusion || { count: 0, total: 0 };
   add('F5', { detail: (budgets || []).length + ' funding source(s) read, ' +
     countLines_(budgets) + ' budget line(s) parsed, ' +

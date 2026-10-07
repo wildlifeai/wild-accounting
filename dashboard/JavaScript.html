@@ -9,6 +9,13 @@
     var p = key.split('-');
     return MONTHS[parseInt(p[1], 10) - 1] + ' ' + p[0];
   }
+  // A calendar date sent as 'yyyy-MM-dd', e.g. '30 Sep 2026'. Read as text, so no time zone
+  // can move it a day.
+  function fmtIsoDate(iso) {
+    var p = String(iso || '').split('-');
+    if (p.length !== 3) return '';
+    return parseInt(p[2], 10) + ' ' + MONTHS[parseInt(p[1], 10) - 1] + ' ' + p[0];
+  }
   // Every date on the page is a calendar date in the script's zone. Read in the browser's
   // own zone, midnight 1 April in Auckland is 31 March, so the FY read "Mar 2026 - Feb 2027".
   var TZ = 'Pacific/Auckland';
@@ -52,6 +59,76 @@
     renderRunway();
 
     renderHealth(s.health || []);
+    renderQuarterClose(s.quarterClose);
+  }
+
+  // ---- Quarter close ----------------------------------------------------------
+  // The accountant's close, from buildQuarterClose_. Grant releases are cumulative to the
+  // quarter's end, so whatever was missed or posted short before still shows. The picker
+  // keeps its quarter across refreshes.
+  var qcQuarter = null;
+  function renderQuarterClose(qc) {
+    var el = document.getElementById('quarter-close');
+    if (!el) return;
+    if (!qc || !(qc.quarters || []).length) {
+      el.innerHTML = '<div class="health-info">No finished quarter to close yet.</div>';
+      return;
+    }
+    if (qc.quarters.indexOf(qcQuarter) === -1) qcQuarter = qc.quarters[0];
+    var q = qcQuarter, qi = qiOf(q);
+
+    var picker = '<select id="qc-quarter" class="dd-select" aria-label="Quarter to close">' +
+      qc.quarters.map(function (x) {
+        return '<option' + (x === q ? ' selected' : '') + '>' + esc(x) + '</option>';
+      }).join('') + '</select>';
+
+    var rel = (qc.releases || []).map(function (r) {
+      var spend = 0, earned = 0, xero = 0;
+      Object.keys(r.byQ).forEach(function (k) {
+        if (qiOf(k) > qi) return;
+        earned += r.byQ[k].earned; xero += r.byQ[k].xero;
+        if (k === q) spend = r.byQ[k].spend;
+      });
+      return { source: r.source, project: r.project, spend: spend, earned: earned,
+        xero: xero, post: earned - xero };
+    }).filter(function (r) { return r.spend || Math.abs(r.post) >= 1; });
+    var relHtml = rel.length
+      ? '<div class="table-wrap"><table><thead><tr><th>Funding source</th><th>Project</th>' +
+        '<th class="num">Spent in the quarter</th><th class="num">Earned to quarter end</th>' +
+        '<th class="num">In Xero to quarter end</th><th class="num">To post</th></tr></thead><tbody>' +
+        rel.map(function (r) {
+          var post = Math.abs(r.post) < 1 ? 'nothing'
+            : (r.post > 0 ? 'release ' : 'defer ') + fmtMoney(Math.abs(r.post));
+          return '<tr><td>' + esc(r.source) + '</td><td>' + esc(r.project) + '</td>' +
+            '<td class="num">' + fmtMoney(r.spend) + '</td><td class="num">' + fmtMoney(r.earned) +
+            '</td><td class="num">' + fmtMoney(r.xero) + '</td><td class="num">' + post +
+            '</td></tr>';
+        }).join('') + '</tbody></table></div>'
+      : '<div class="health-info">No grant marked "as spent" had income or spend to this quarter.</div>';
+
+    var acc = (qc.accruals || []).filter(function (a) { return a.quarter === q; });
+    var accHtml = acc.length
+      ? '<div class="table-wrap"><table><thead><tr><th>Funding source</th><th>Milestone</th>' +
+        '<th>Project</th><th class="num">Expected</th><th class="num">In Xero</th>' +
+        '<th class="num">Short</th><th>Forecast comment</th></tr></thead><tbody>' +
+        acc.map(function (a) {
+          var src = a.sheetUrl ? '<a class="health-link" target="_blank" rel="noopener" href="' +
+            esc(a.sheetUrl) + '">' + esc(a.source) + '</a>' : esc(a.source);
+          return '<tr><td>' + src + '</td><td>' + esc(a.milestone) + '</td><td>' +
+            esc(a.project) + '</td><td class="num">' + fmtMoney(a.expected) + '</td>' +
+            '<td class="num">' + fmtMoney(a.actual) + '</td><td class="num">' +
+            fmtMoney(a.expected - a.actual) + '</td><td>' + esc(a.comment) + '</td></tr>';
+        }).join('') + '</tbody></table></div>'
+      : '<div class="health-info">Every milestone spent what was expected in this quarter.</div>';
+
+    el.innerHTML = '<div class="qc-pick">' + picker + '</div>' +
+      '<h3 class="qc-h">Grant income to release or defer</h3>' + relHtml +
+      '<h3 class="qc-h">Spend expected but not in Xero: accrue it, or move it on the Forecast tab</h3>' +
+      accHtml;
+    document.getElementById('qc-quarter').addEventListener('change', function (ev) {
+      qcQuarter = ev.target.value;
+      renderQuarterClose(qc);
+    });
   }
 
   // Health findings: what is wrong, where, and what to do about it. Sorted by
@@ -176,12 +253,13 @@
   // list's id rather than being hardcoded. Without this the tracking tab's filters would
   // silently re-render the Overview instead.
   function rerenderFor(id) {
-    if (id === 'tr-sources' || id === 'tr-milestones') renderTracking();
+    if (id === 'tr-projects') loadProjectTracking(selectedValues('tr-projects'));
+    else if (id === 'tr-sources' || id === 'tr-milestones') renderTracking();
     else { renderOverview(); renderRunway(); }
   }
 
   var FILTER_NAMES = { 'filter-projects': 'Projects', 'filter-sources': 'Funding sources',
-    'tr-sources': 'Funding sources', 'tr-milestones': 'Milestones' };
+    'tr-projects': 'Projects', 'tr-sources': 'Funding sources', 'tr-milestones': 'Milestones' };
 
   function updateFilterSummary(id) {
     var box = document.getElementById(id);
@@ -189,6 +267,12 @@
     var on = box.querySelectorAll('input:checked');
     var sum = document.getElementById(id + '-sum');
     var base = FILTER_NAMES[id];
+    // The tracking tab's projects are few and chosen one or two at a time, so the box
+    // names them rather than counting them.
+    if (id === 'tr-projects' && on.length && on.length < all.length) {
+      sum.textContent = selectedValues(id).join(' + ');
+      return;
+    }
     sum.textContent = (on.length === all.length)
       ? base + ' (all)' : base + ' (' + on.length + '/' + all.length + ')';
   }
@@ -417,8 +501,10 @@
   }
 
   // ---- Runway ---------------------------------------------------------------
-  // Funded runway: the month cumulative income stops covering cumulative spend. Not
-  // cash runway; there is no bank balance anywhere in this system. It follows the show
+  // Runway: the month cumulative income stops covering cumulative spend. With a reserves
+  // figure in Cockpit Settings, the whole organisation's lines start from the money in hand,
+  // so secured only is the actual runway; any narrower view is funded money only, since
+  // reserves belong to nobody's project. It follows the show
   // and filter controls at the top of the tab, but not the financial-year selector: it
   // always runs from today. The walk is runwayWalk_, sent by the server as its own source
   // (Index.html), so every line here is the arithmetic the server's tests check.
@@ -464,6 +550,10 @@
     return document.getElementById('rw-group').value || 'status';
   }
 
+  function allChecked(id) {
+    return !document.querySelector('#' + id + ' input:not(:checked)');
+  }
+
   /** The runway parts the show and filter controls select. */
   function selectedRunwayParts(rw) {
     var statuses = selectedStatuses();
@@ -486,9 +576,14 @@
     var chart = document.getElementById('runway-chart');
     var table = document.getElementById('runway-table');
     var statuses = selectedStatuses();
-    // A snapshot written before the parts existed still draws the organisation's lines.
-    var total = rw.parts ? runwayWalk_(selectedRunwayParts(rw), rw.nowKey) : rw;
     var mode = rw.parts ? runwayGroupBy() : 'status';
+    // Reserves are the organisation's money, so they start the lines only when the whole
+    // organisation is drawn: every project and every source, as the three status lines.
+    var reserves = rw.reserves && mode === 'status' && allChecked('filter-projects') &&
+      allChecked('filter-sources') ? rw.reserves : null;
+    // A snapshot written before the parts existed still draws the organisation's lines.
+    var total = rw.parts
+      ? runwayWalk_(selectedRunwayParts(rw), rw.nowKey, undefined, reserves) : rw;
     var rows = total.months || [];
 
     function empty(note) {
@@ -525,7 +620,7 @@
       series.forEach(function (s) { s.values = s.values.slice(cut); });
     }
 
-    renderRunwayChart(rows, series, chart, mode === 'status', total.openingNet || 0);
+    renderRunwayChart(rows, series, chart, mode === 'status', total.openingNet || 0, reserves);
     table.innerHTML = runwayTable(rows, series, mode === 'status');
     table.querySelector('details').addEventListener('toggle', function (ev) {
       runwayTableOpen = ev.target.open;
@@ -588,8 +683,9 @@
   }
 
   // `series` is most important first: { label, color, values (net per month), cross,
-  // horizon }. `net` is the net position today, income received minus spend to date.
-  function renderRunwayChart(rows, series, host, withSpend, net) {
+  // horizon }. `net` is the position today: income received minus spend to date, plus the
+  // reserves figure when `reserves` ({ amount, asAt }) started the lines.
+  function renderRunwayChart(rows, series, host, withSpend, net, reserves) {
     // Sized to the container once at render, so text is 1:1 rather than scaled with
     // the viewBox. If the Overview is hidden when a refresh lands, the fallback width
     // still scales cleanly because the SVG is also width:100%.
@@ -616,8 +712,9 @@
 
     // Wash and today rule first, so the lines sit on top of them. The rule carries the
     // net position today, which is where the budget months start from.
-    var netLabel = '<tspan class="rw-net' + (net < 0 ? ' danger' : '') + '"> · net position ' +
-      esc(netMoney(net)) + '</tspan>';
+    var netLabel = '<tspan class="rw-net' + (net < 0 ? ' danger' : '') + '"> · ' +
+      (reserves ? 'position ' : 'net position ') + esc(netMoney(net)) + '</tspan>' +
+      (reserves ? ', from reserves at ' + esc(fmtIsoDate(reserves.asAt)) : '');
     var firstFuture = -1;
     for (var i = 0; i < n; i++) { if (!rows[i].actual) { firstFuture = i; break; } }
     if (firstFuture > 0) {
@@ -899,15 +996,15 @@
   function trStatus(text) { document.getElementById('tr-status').textContent = text; }
 
   function loadTrackingProjects() {
-    var sel = document.getElementById('tr-project');
     trStatus('loading projects…');
     google.script.run.withSuccessHandler(function (projects) {
       if (!projects.length) { trStatus('No projects found.'); return; }
-      sel.innerHTML = projects.map(function (p) {
-        return '<option value="' + esc(p) + '">' + esc(p) + '</option>';
-      }).join('');
-      sel.addEventListener('change', function () { loadProjectTracking(sel.value); });
-      loadProjectTracking(projects[0]);
+      // The tab opens on the first project alone, as it did when only one could be picked.
+      fillFilter('tr-projects', projects);
+      Array.prototype.slice.call(document.querySelectorAll('#tr-projects input'))
+        .forEach(function (i, k) { i.checked = k === 0; });
+      updateFilterSummary('tr-projects');
+      loadProjectTracking([projects[0]]);
     }).withFailureHandler(function (e) {
       // A failed first load is retried on the next click of the tab, not left for good.
       trLoaded = false;
@@ -915,19 +1012,41 @@
     }).apiListProjects();
   }
 
-  function loadProjectTracking(project) {
+  // A later answer can arrive before an earlier one when boxes are ticked quickly, so only
+  // the latest request's answer is drawn.
+  var trRequest = 0;
+  function loadProjectTracking(projects) {
     var link = document.getElementById('tr-folder');
-    link.classList.toggle('hidden', !PROJECT_LINKS[project]);
-    if (PROJECT_LINKS[project]) link.href = PROJECT_LINKS[project];
+    var one = projects.length === 1 ? PROJECT_LINKS[projects[0]] : null;
+    link.classList.toggle('hidden', !one);
+    if (one) link.href = one;
+    var req = ++trRequest;
+    if (!projects.length) {
+      trData = null;
+      document.getElementById('tr-title').textContent = '';
+      document.getElementById('tr-grid').innerHTML = '';
+      document.getElementById('tr-totals').innerHTML = '';
+      trStatus('Tick a project.');
+      return;
+    }
     trStatus('loading…');
     google.script.run.withSuccessHandler(function (t) {
+      if (req !== trRequest) return;
       trData = t;
       buildTrackingFilters(t);
       buildQuarterRange(t);
       renderTracking();
     }).withFailureHandler(function (e) {
+      if (req !== trRequest) return;
       trStatus('error: ' + errText(e));
-    }).apiGetProjectTracking(project);
+    }).apiGetProjectTracking(projects);
+  }
+
+  // With several projects shown, a milestone's row names its project: two projects can
+  // each have a milestone of the same name under one source.
+  function mileLabel(m) {
+    return esc(m.milestone) + (trData && trData.projects && trData.projects.length > 1 &&
+      m.project ? '<span class="mile-proj">' + esc(m.project) + '</span>' : '');
   }
 
   function buildTrackingFilters(t) {
@@ -1214,7 +1333,7 @@
         totalTds(sum) + '<td class="cmt-c"></td>') +
         (trFolded[g.source.source] ? '' : rows.map(function (r, k) {
           var m = g.milestones[k];
-          return '<tr><td class="mile">' + esc(m.milestone) + '</td>' +
+          return '<tr><td class="mile">' + mileLabel(m) + '</td>' +
             r.cells.map(function (c, i) { return cellTd(c, cols[i], false); }).join('') +
             totalTds(r) + '<td class="cmt-c">' +
             (m.comment ? '<span class="cmt-text">' + esc(m.comment) + '</span>' : '') + '</td></tr>';
@@ -1280,7 +1399,7 @@
             (qi === fromQi ? ' seg-first' : '') + (qi === toQi ? ' seg-last' : '') +
             '"><span class="seg-tip">' + esc(tip) + '</span></div></td>';
         }).join('');
-        rows += '<tr><td class="gantt-label">' + esc(m.milestone) + '</td>' +
+        rows += '<tr><td class="gantt-label">' + mileLabel(m) + '</td>' +
           figTds(cost, income) + cells + '</tr>';
       });
       if (!rows) return '';

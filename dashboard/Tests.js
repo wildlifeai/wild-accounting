@@ -244,6 +244,30 @@ function runTests() {
     composeProjectTracking(trk, tlines, 'Spyfish Aotearoa', quarterSortNum('26/27 Q1'))
       .quarters.map(function (q) { return q.label; }).join('|') ===
       '26/27 Q1|26/27 Q2|26/27 Q3|26/27 Q4|27/28 Q1');
+  // Several projects: one heading per source, each row naming its project.
+  var pt2 = composeProjectTracking(trk, tlines, ['Wildlife Watcher', 'General'],
+    quarterSortNum('26/27 Q1'));
+  check('several projects share each source heading, each row naming its project',
+    pt2.project === 'Wildlife Watcher + General' && pt2.sources.length === 1 &&
+    pt2.sources[0].milestones.map(function (x) { return x.milestone + '/' + x.project; })
+      .join('|') === 'General management/Wildlife Watcher|Admin/General|' +
+      'Unassigned (no product/service)/Wildlife Watcher');
+  check('several projects: each bar keeps its own project\'s segments',
+    pt2.sources[0].milestones[0].from === '25/26 Q3' &&
+    pt2.sources[0].milestones[1].from === '26/27 Q2');
+  // General's contribution from a project shown beside it is already in that project's
+  // rows, so it is not counted again; one from a project not shown still is.
+  var ctrk = [{ source: 'XXX_27_C', status: 'secured', contributionRate: 0.4, milestones: [
+    { item: 'XXX_27_C_001', milestone: 'Build', project: 'Wildlife Watcher',
+      baseline: { '26/27 Q2': 100 }, actual: {}, costForecast: {},
+      incomeBaseline: { '26/27 Q2': 1000 }, incomeActual: {}, incomeForecast: {} }] }];
+  var heads = function (projects) {
+    return composeProjectTracking(ctrk, [], projects, quarterSortNum('26/27 Q1')).sources
+      .map(function (s) { return s.source; }).join('|');
+  };
+  check('General alone gathers the contribution; with its project shown it is not doubled',
+    heads('General') === CONTRIBUTIONS_HEADING &&
+    heads(['General', 'Wildlife Watcher']) === 'XXX_27_C');
 
   // A source's tracking starts where the source does. The General option was renamed
   // GEN_27_CORE part way through a year, bringing years of history with it.
@@ -784,6 +808,129 @@ function runTests() {
     rwYear.crossover.secured === '2027-02' && rwYear.monthsOfRunway.secured === 3);
   check('runway: no crossover reports null, not zero',
     rwNoProb.monthsOfRunway.proposed === null);
+
+  // Reserves start the lines from money in hand: at the end of the figure's month every line
+  // is the figure, and from there it is reserves plus funding against the plan.
+  var rwRes = buildRunway_(rwBudgets, [
+    { date: new Date(2026, 4, 10), amount: 3000, kind: 'expense',
+      project: 'P', fundingSource: 'A', item: '' }
+  ], rwNow, {}, {}, { amount: 20000, asAt: '2026-05-31', month: '2026-05' });
+  var rwResMay = rwRes.months.filter(function (r) { return r.month === '2026-05'; })[0];
+  check('reserves: every line is the figure at the end of its month',
+    rwResMay.secured - rwResMay.spend === 20000 && rwResMay.proposed - rwResMay.spend === 20000);
+  check('reserves: today starts from them', rwRes.openingNet === 20000);
+  check('reserves: they push the crossover out',
+    rw.crossover.secured === '2026-08' && rwRes.crossover.secured === null);
+  check('reserves: travel with the snapshot', rwRes.reserves.amount === 20000);
+
+  var resNow = new Date(2026, 9, 5);
+  var res = latestReserves_([
+    ['30/Jun/26', 80000, 'Q1 close'],
+    ['30/Sep/26', '$95,000', 'Q2 close'],
+    ['31/Dec/26', 70000, 'typed ahead'],
+    ['15/Aug/26', '', 'no amount']
+  ], resNow);
+  check('reserves: the latest row, not one dated ahead or with no amount',
+    res.amount === 95000 && res.asAt === '2026-09-30' && res.month === '2026-09');
+  check('reserves: a date inside a month is the end of the month before',
+    reservesMonth_(new Date(2026, 9, 2), resNow) === '2026-09');
+  check('reserves: never this month, which is planned rather than read from Xero',
+    reservesMonth_(new Date(2026, 9, 31), new Date(2026, 9, 31)) === '2026-09');
+  check('reserves: an empty tab is no reserves', latestReserves_([], resNow) === null);
+
+  // ---- quarter close --------------------------------------------------------
+  // A grant invoiced to income, then part deferred by journal: earned to the quarter's end
+  // minus what Xero shows to the same end is the journal still to post.
+  var qcLine = function (y, m, kind, amount, source, extra) {
+    return Object.assign({ date: d(y, m, 10), kind: kind, amount: amount,
+      fundingSource: source, project: 'P', item: '' }, extra || {});
+  };
+  var qc = buildQuarterClose_([
+    { name: 'XXX_27_T', metadata: { 'income recognition': 'as spent' }, lines: [] },
+    { name: 'XXX_27_I', metadata: {}, lines: [] }
+  ], [
+    qcLine(2026, 4, 'income', 5000, 'XXX_27_T'),
+    qcLine(2026, 6, 'income', -3600, 'XXX_27_T', { journal: true }),
+    qcLine(2026, 5, 'income', 800, 'XXX_27_I')
+  ], [
+    qcLine(2026, 5, 'expense', 1000, 'XXX_27_T'),
+    qcLine(2026, 5, 'income', 1000, 'XXX_27_T', { earned: true }),
+    qcLine(2026, 8, 'expense', 500, 'XXX_27_T'),
+    qcLine(2026, 8, 'income', 500, 'XXX_27_T', { earned: true }),
+    qcLine(2026, 5, 'expense', 300, 'XXX_27_I')
+  ], [
+    { source: 'XXX_27_T', status: 'secured', sheetUrl: 'u', milestones: [
+      { item: 'XXX_27_T_001', milestone: 'Staff', project: 'P',
+        baseline: { '26/27 Q1': 1000, '26/27 Q2': 1000, '26/27 Q3': 1000 },
+        costForecast: { '26/27 Q2': 900 },
+        actual: { '26/27 Q1': 950, '26/27 Q2': 500 }, forecastComment: 'invoice late' }] },
+    { source: 'XXX_27_P', status: 'proposed', milestones: [
+      { item: 'XXX_27_P_001', milestone: 'Dive', project: 'P',
+        baseline: { '26/27 Q2': 5000 }, actual: {} }] }
+  ], quarterSortNum('26/27 Q3'));
+  var qcT = qc.releases[0];
+  check('quarter close: only grants marked as spent are released',
+    qc.releases.length === 1 && qcT.source === 'XXX_27_T');
+  check('quarter close: spend, earned and Xero income by quarter',
+    JSON.stringify(qcT.byQ['26/27 Q1']) === '{"spend":1000,"earned":1000,"xero":1400}' &&
+    JSON.stringify(qcT.byQ['26/27 Q2']) === '{"spend":500,"earned":500,"xero":0}');
+  var qcPost = function (q) {
+    return Object.keys(qcT.byQ).filter(function (k) { return qiOfLabel_(k) <= qiOfLabel_(q); })
+      .reduce(function (t, k) { return t + qcT.byQ[k].earned - qcT.byQ[k].xero; }, 0);
+  };
+  check('quarter close: to Q1 defers the unspent part, to Q2 releases what Q2 spent',
+    qcPost('26/27 Q1') === -400 && qcPost('26/27 Q2') === 100);
+  check('quarter close: a shortfall on a secured milestone is an accrual candidate',
+    qc.accruals.length === 1 && qc.accruals[0].quarter === '26/27 Q2' &&
+    qc.accruals[0].expected === 900 && qc.accruals[0].actual === 500 &&
+    qc.accruals[0].comment === 'invoice late');
+  check('quarter close: finished quarters only, latest first',
+    qc.quarters.join('|') === '26/27 Q2|26/27 Q1');
+
+  // ---- reserves from Xero's Balance Sheet ------------------------------------
+  // Account rows sit inside nested sections; the first value column is the date asked for.
+  var bsRow = function (name, id, now, before) {
+    return { RowType: 'Row', Cells: [
+      { Value: name, Attributes: [{ Id: 'account', Value: id }] },
+      { Value: now }, { Value: before }] };
+  };
+  var bs = parseBalanceSheet_({ Rows: [
+    { RowType: 'Header', Cells: [{ Value: '' }, { Value: '30 Sep 2026' }, { Value: '30 Sep 2025' }] },
+    { RowType: 'Section', Title: 'Assets', Rows: [
+      { RowType: 'Section', Title: 'Bank', Rows: [
+        bsRow('WILDLIFE.AI TRUST', 'id-600', '80000.50', '1.00'),
+        bsRow('ANZ Term Deposit', 'id-605', '30000.00', '1.00'),
+        { RowType: 'SummaryRow', Cells: [{ Value: 'Total Bank' }, { Value: '110000.50' }] }] },
+      { RowType: 'Section', Title: 'Current Assets', Rows: [
+        bsRow('Accounts Receivable', 'id-610', '2000', '0')] }] },
+    { RowType: 'Section', Title: 'Liabilities', Rows: [
+      bsRow('Accounts Payable', 'id-800', '12000', '0'),
+      bsRow('Unused Donations and Grants with Conditions', 'id-8xx', '50000', '0')] }
+  ] }, { 'id-600': '600', 'id-605': '605' });
+  check('balance sheet: bank rows by code, from the first value column, totals skipped',
+    bs.byCode['600'] === 80000.5 && bs.byCode['605'] === 30000 && !bs.byName['Total Bank']);
+  var resX = reservesFromBalanceSheet_(bs, 38000);
+  // 80000.5 + 30000 + 2000 owed to us - 12000 to pay - 50000 in advance + 38000 unposted.
+  check('reserves from Xero: bank and invoices owed to us, less bills to pay and in advance, ' +
+    'plus unposted releases', resX.amount === 88001);
+  check('reserves from Xero: the note shows each part',
+    resX.note.indexOf(RESERVES_AUTO_NOTE) === 0 &&
+    resX.note.indexOf('Accounts Receivable 2000') !== -1 &&
+    resX.note.indexOf('Accounts Payable 12000') !== -1 &&
+    resX.note.indexOf('releases not yet posted 38000') !== -1);
+  check('reserves from Xero: an in-advance account not on the sheet counts as nothing, and says so',
+    reservesFromBalanceSheet_({ byCode: { '600': 100 }, byName: {} }, 0).note
+      .indexOf('not on the balance sheet') !== -1);
+  check('reserves from Xero: releases still to post, cumulative to the quarter',
+    unpostedReleases_(qc, '26/27 Q1') === -400 && unpostedReleases_(qc, '26/27 Q2') === 100);
+  var f4 = function (issue) {
+    return buildHealth([], [], { now: d(2026, 10, 5), xeroConnected: true,
+      exclusion: { count: 0, total: 0 }, unposted: { count: 0, total: 0 },
+      secretsMissing: [], reservesIssue: issue })
+      .filter(function (f) { return f.id === 'F4'; }).length;
+  };
+  check('F4 when Xero refused the Balance Sheet, quiet otherwise',
+    f4('scope') === 1 && f4(null) === 0);
 
   // The page receives runwayWalk_ as its own source (Index.html), so it must stand alone:
   // a call to any server helper would work here and throw in the browser.
@@ -1476,6 +1623,23 @@ function runTests() {
   check('line: a bank line carries its document, contact and description',
     bankLine.docType === 'Spend money' && bankLine.reference === 'FEE' &&
     bankLine.contact === 'The Bank' && bankLine.description === 'Monthly fee');
+
+  // GST: Xero's reports are net of it. LineAmount includes it only on a document entered
+  // tax-inclusive, so only there does it come off.
+  var gstLine = function (amount, tax, types) {
+    return normaliseLine_({ LineAmount: amount, TaxAmount: tax, Tracking: [] },
+      d(2026, 10, 5), 'expense', {}, types).amount;
+  };
+  check('GST: a tax-inclusive line counts without its GST',
+    gstLine(115, 15, 'Inclusive') === 100);
+  check('GST: tax-exclusive and no-tax lines count as they are',
+    gstLine(100, 15, 'Exclusive') === 100 && gstLine(100, 0, 'NoTax') === 100 &&
+    gstLine(100, 0, undefined) === 100);
+  check('GST: a negative inclusive line stays negative, whichever sign its tax has',
+    gstLine(-115, -15, 'Inclusive') === -100 && gstLine(-115, 15, 'Inclusive') === -100);
+  check('GST: a tax-inclusive journal line counts without its GST',
+    journalLineToActual_({ LineAmount: -2300, TaxAmount: -300, Tracking: [] },
+      d(2025, 9, 30), 'REVENUE', 'Grants (102)', '', 'Inclusive').amount === 2000);
   var billDoc = xeroDoc_('Invoices', { Type: 'ACCPAY', InvoiceNumber: '', Reference: 'R-9' });
   check('line: a bill with no number falls back to its reference',
     billDoc.docType === 'Bill' && billDoc.reference === 'R-9' && billDoc.contact === '' &&

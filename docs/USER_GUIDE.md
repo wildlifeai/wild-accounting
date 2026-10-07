@@ -27,13 +27,14 @@ in (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
 
 - **Overview**: the organisation-wide picture, with a runway chart you can regroup and filter
   (below).
-- **Project tracking**: one project at a time, its funding sources and their milestones quarter
+- **Project tracking**: one project or several, their funding sources and milestones quarter
   by quarter, as an actual-and-forecast grid or as a timeline. See
   [Tracking and forecasting](#tracking-and-forecasting-quarterly).
 - **Health**: sheet, Xero-coding and system problems found on the last refresh. The tab carries
   a badge: red when a number on screen is wrong right now, amber when one may be, nothing when
   clean. Each finding says what is wrong, where, the amount at stake and what to do, with a
-  link to the sheet. [Health checks](HEALTH_CHECKS.md) explains every one.
+  link to the sheet. [Health checks](HEALTH_CHECKS.md) explains every one. Under the findings,
+  [Quarter close](#quarter-close) gives the accountant what to post for a finished quarter.
 
 Each tab's controls sit in a ribbon of dropdown boxes, grouped and named underneath. The title
 under the ribbon names what was chosen, so a screenshot says what it is, and the **?** at its
@@ -61,8 +62,25 @@ at its right explains the cards and the chart. Under the line come the cards, th
    landing. Each line's label at the right edge gives the months until cumulative spend
    overtakes cumulative income and the month it goes short. "Beyond *month*" means no shortfall
    before the last budgeted month, which is not the same as safe: the budgets may simply stop
-   there. This is **funded** runway, not cash: the cockpit reads no bank balance. Because it is
-   the whole organisation's position, only people with access to every project see it.
+   there. Because it is the whole organisation's position, only people with access to every
+   project see it.
+
+   **Reserves** make it the actual runway: the money free to spend, which is the bank balance
+   minus grant money received but not yet spent (the chart already counts that as income as it
+   is spent). They live on the `Reserves` tab of the **Cockpit Settings** sheet, one row per
+   quarter end, and each refresh writes the last quarter end's row from Xero's Balance Sheet:
+   the bank and term deposit accounts, plus *Accounts Receivable*, less *Accounts Payable* and
+   *Unused Donations and Grants with Conditions*, plus the releases
+   [Quarter close](#quarter-close) says are still to post. The chart counts a bill or invoice
+   from its date, so what is still unpaid on it comes off or goes on here; and until the
+   releases are posted, the liability still holds money already spent. Its column C shows each
+   part, to check against Xero. To correct a figure, type your own row for the same date: the
+   refresh never
+   overwrites a row it did not write. The latest row is used: with every project and source
+   shown and grouped by status, all three lines start from it, so **Secured only** is reserves
+   plus secured funding against the plan, and the label at today reads "position ..., from
+   reserves at" its date. Any narrower view, filtered or grouped, is funded money only, because
+   reserves belong to no one project. With no row, every view is funded money only.
 
    **Group by** changes the chart only. **Status** draws the three lines above. **Project**,
    **Funding source** or **Milestone** draws one line per group, counting applications at their
@@ -110,11 +128,13 @@ The **Project tracking** tab replaces the old "Budget, Actual, Forecast Tracking
 to live in each sheet. You no longer keep one per funding source, and you no longer copy Xero
 into each sheet by hand.
 
-Pick a **project**. The tab shows every funding source with a milestone on it, each under its
-own heading with a 📄 link to its sheet and its own subtotals; click the heading to fold its
-milestones away and back. General also gathers the `(contribution)` rows from the projects that
-pay overhead into it. The ribbon narrows what is
-shown, in both views:
+Tick a **project**, or several. The tab shows every funding source with a milestone on them,
+each under its own heading with a 📄 link to its sheet and its own subtotals; click the heading
+to fold its milestones away and back. With several projects, a source's milestones from each
+sit under its one heading and each names its project. General also gathers the
+`(contribution)` rows from the projects that pay overhead into it, except from a project ticked
+beside it, whose own rows already hold that income. The ribbon narrows what is shown, in both
+views:
 
 - **View**: Actual and forecast, with its Cost / Income / Net measure, or Timeline, with its
   optional columns.
@@ -176,6 +196,23 @@ The totals on the right are **Budget**, **Actual to date**, **Expected** (actual
 plus the forecast for the rest) and **Variance** (Expected minus Budget: red is heading over,
 green under). Review this once a quarter with the project leads: what actually landed, then
 adjust the `Forecast` tabs.
+
+## Quarter close
+
+At the bottom of the **Health** tab, pick a finished quarter. Refresh after the quarter's
+bills, receipts and pay runs are in Xero, so both tables read the closed quarter.
+
+- **Grant income to release or defer**, for every grant marked `Income recognition: as spent`,
+  by project: what it spent in the quarter, the income its spend earned to the quarter's end,
+  and the income Xero's P&L shows for it to the same date. **To post** is the difference:
+  *release* moves that much from income received in advance into income, *defer* the reverse.
+  It is cumulative, so a release missed in an earlier quarter shows until it is posted; once
+  the journal is in and the cockpit refreshed, the row reads *nothing*.
+- **Spend expected but not in Xero**: milestones on secured sheets that spent at least $100
+  less in the quarter than the grid expected (the `Forecast` row, or the budget where there is
+  none), with the `Forecast` comment. Accrue the ones where the work was done and the bill has
+  not arrived; for work that slipped, move the amount to a later quarter on the `Forecast` tab.
+  The comment is where a project lead tells the accountant which it is.
 
 ## Coding transactions in Xero
 

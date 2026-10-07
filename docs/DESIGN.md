@@ -101,9 +101,10 @@ Ranked by how badly they hurt the persona who depends on them:
   income by each project's share of its cost, while the Overview's cards and runway credit each
   line's own income. They agree for most sheets and can differ slightly for one whose lines are not
   priced in proportion to their cost. Only the line attribution is on screen.
-- **Cash runway is out of scope** (decided 2026-09-21). It needs `accounting.reports.read`, a Xero
-  re-consent and a balance-sheet read, and scopes cannot be removed from a live token without
-  re-consent, so adding one is not a casual change.
+- **Granular Xero scopes by September 2027.** Xero retires the broad `accounting.transactions`
+  and `accounting.reports.read` scopes then for apps created before 2 March 2026, which this one
+  is. Moving means naming the granular scopes for bank transactions, invoices, manual journals
+  and the balance sheet report, and one re-consent.
 
 ## Decisions
 
@@ -166,6 +167,29 @@ Ranked by how badly they hurt the persona who depends on them:
   archived General option to GEN_27_CORE so one code covers the whole financial year, which
   brought every earlier year of General spend onto the new code. The grid leaves out actuals
   dated before a source's start; the Overview and runway keep them, since they are still spend.
+- **2026-10-05: reserves start the runway.** Funded runway alone could not say whether there
+  is room to carry unfunded roles: it starts at zero on the first budgeted month, so it reads
+  "short" while the bank holds money. Xero's scopes reach no bank balance, so the free money
+  is typed at each quarter close on the Cockpit Settings `Reserves` tab, and every line moves
+  by one amount to sit at it at that month end. Only the whole organisation's view uses it;
+  reserves belong to no project, and adding them to one would overstate it.
+- **2026-10-05: the quarter close on the Health tab.** The accountant worked out each grant's
+  release from Xero's P&L by hand, and the project leads' comments were the only list of costs
+  to accrue. The cockpit already earns as-spent income from spend, so the release still to post
+  is that income to the quarter's end minus Xero's, cumulative so a missed one resurfaces; and a
+  closed quarter that spent less than the grid expected is either unbilled work or slippage, so
+  it is listed with the comment that says which. Under the findings rather than a fourth tab.
+- **2026-10-05: reserves come from Xero's Balance Sheet.** Typing them each quarter relied on
+  the accountant reading the liability after posting the releases, or reserves came out low by
+  the releases. The cockpit asks for `accounting.reports.read` (a one-off re-consent; cash
+  runway had been left out on 2026-09-21 for that cost alone) and writes the last quarter end's
+  row: bank and term deposit, less grants received in advance, plus the releases Quarter close
+  has not seen posted. A row typed for the same date wins, so a correction is never overwritten.
+- **2026-10-07: reserves net off unpaid bills and invoices.** Bills dated in a quarter but
+  unpaid at its end raised reserves by their full amount: the runway counts them as spent from
+  their date, the release they earn went back on, and the bank had not paid them yet. Accounts
+  Payable now comes off and Accounts Receivable goes on, both matched by name like the
+  in-advance liability.
 
 ## History
 

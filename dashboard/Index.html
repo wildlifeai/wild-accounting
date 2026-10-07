@@ -106,8 +106,10 @@
             <div class="help-pop hidden" id="overview-help">
               The cards total the years, projects, funding sources and statuses chosen. The
               chart is runway: income minus spend, cumulative, <b>actuals</b> to last month and
-              <b>budget</b> from this month on. Funded, not cash: the cockpit reads no bank
-              balance. It follows Show and Filter, not the year. Each line's label says the
+              <b>budget</b> from this month on. With every project and source shown, grouped by
+              status, the lines start from the reserves on the Cockpit Settings sheet, so
+              Secured only is the organisation's actual runway; any narrower view is funded
+              money only. It follows Show and Filter, not the year. Each line's label says the
               month it goes short, or that it stays above zero to the last budgeted month,
               which only means the budgets stop there. Grouped by project, funding source or
               milestone, each line is one group's expected case: applications at their
@@ -136,6 +138,15 @@
         </div>
         <div id="flags" class="flags"></div>
       </div>
+      <div class="overview-section">
+        <h2>Quarter close</h2>
+        <div class="coverage">
+          <span>For the accountant: grant income to release or defer, and spend expected in
+            the quarter that Xero does not show yet.</span>
+        </div>
+        <!-- Filled by renderQuarterClose: the quarter picker and both tables. -->
+        <div id="quarter-close"></div>
+      </div>
     </div>
 
     <div id="view-tracking" class="hidden">
@@ -146,7 +157,14 @@
       <div class="ribbon">
         <div class="ribbon-group">
           <div class="ribbon-items">
-            <select id="tr-project" class="dd-select" aria-label="Project"></select>
+            <!-- Several can be ticked: their milestones share each funding source's heading
+                 and name their project. The folder link shows for one project only. -->
+            <details class="bd-dd">
+              <summary id="tr-projects-sum">Projects</summary>
+              <div class="bd-dd-panel">
+                <div class="bd-dd-list" id="tr-projects"></div>
+              </div>
+            </details>
             <a id="tr-folder" href="#" target="_blank" class="hidden tr-link">📁 Drive folder</a>
           </div>
           <div class="ribbon-label">Project</div>
@@ -239,7 +257,8 @@
               each milestone runs, green when its money is secured, amber when proposed; hover a
               quarter for its budget and actual. Click a funding source to fold its milestones
               away. To change a forecast, open the sheet from its 📄 link, edit the Forecast
-              tab, then click <b>Refresh now</b>.
+              tab, then click <b>Refresh now</b>. Tick more than one project to see them
+              together: each milestone then names its project.
             </div>
           </span>
         </div>

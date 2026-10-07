@@ -254,8 +254,16 @@ function buildSnapshot() {
   // Project tracking timeline: the months each milestone's funding runs, by source.
   const timeline = buildTimeline_(planned);
 
-  // Funded runway: cumulative income against cumulative spend, month by month.
-  const runway = buildRunway_(planned, actualLines, now, exclusivityReps, itemToMilestone);
+  // For the accountant's close, on the Health tab: grant income to release or defer, and
+  // spend expected but not in Xero. Before the runway, because the reserves Xero gives need
+  // the releases still to post.
+  const quarterClose = buildQuarterClose_(judged, earnedBasis ? fetched : [], actualLines,
+    tracking, quarterSortNum(currentQuarterLabel(now)));
+
+  // Runway: cumulative income against cumulative spend, month by month, starting from the
+  // reserves on Cockpit Settings, whose last quarter-end row the refresh writes from Xero.
+  const runway = buildRunway_(planned, actualLines, now, exclusivityReps, itemToMilestone,
+    readReserves_(now, quarterClose));
 
   // Per-project rollups (feed the summary cards / org totals).
   const rows = Object.keys(projects).map(name => {
@@ -299,6 +307,8 @@ function buildSnapshot() {
     exclusion: lastExclusionSummary(),
     unposted: lastUnpostedSummary(),
     secretsMissing: secretsMissing,
+    // F4: the connection predates the reports scope, so reserves could not be read.
+    reservesIssue: lastReservesIssue(),
     // So G3 can name which source had its cost suppressed and which carries it instead.
     exclusivity: { reps: exclusivityReps, suppressed: costSuppressed }
   });
@@ -326,9 +336,87 @@ function buildSnapshot() {
     tracking: tracking,
     timeline: timeline,
     runway: runway,
+    quarterClose: quarterClose,
     health: health,
     dataFlags: dataFlags.concat(healthToFlags(health))
   };
+}
+
+/**
+ * What the accountant needs at a quarter close, for every finished quarter.
+ *
+ * `releases`: each grant marked "as spent", by project and quarter, with its spend, the
+ * income it earned by the cockpit's rule (earnedActuals_, so `actualLines` must be on the
+ * earned basis) and the income Xero's P&L shows for it (`xeroLines`, the lines as fetched).
+ * Earned to a quarter's end minus Xero's to the same end is the journal still to post:
+ * positive releases income received in advance, negative defers it. Cumulative, not one
+ * quarter's difference, so a release missed or posted short shows again until it is right.
+ *
+ * `accruals`: milestones on secured sheets whose spend in a finished quarter fell short of
+ * what the grid expected for it (forecastOrBaseline_) by CONFIG.ACCRUAL_MIN_SHORTFALL or
+ * more, with the Forecast comment. Either work done and not yet billed, to accrue, or work
+ * that slipped, to move on the Forecast tab: the comment is what tells them apart.
+ */
+function buildQuarterClose_(budgets, xeroLines, actualLines, tracking, currentQi) {
+  const asSpent = {};
+  (budgets || []).forEach(b => { if (incomeRecognition_(b) === 'as spent') asSpent[b.name] = true; });
+  const quarterOf = l => quarterOfMonthKey_(DateMath.monthKey(new Date(l.date)));
+  const finished = q => qiOfLabel_(q) < currentQi;
+
+  const rel = {};
+  function cell(l) {
+    const project = l.project || '(no project)';
+    const k = clean_(l.fundingSource) + '||' + project;
+    const r = rel[k] || (rel[k] = { source: clean_(l.fundingSource), project: project, byQ: {} });
+    const q = quarterOf(l);
+    return r.byQ[q] || (r.byQ[q] = { spend: 0, earned: 0, xero: 0 });
+  }
+  (actualLines || []).forEach(l => {
+    if (!asSpent[clean_(l.fundingSource || '')]) return;
+    if (l.kind === 'expense') cell(l).spend += Number(l.amount) || 0;
+    else if (l.earned) cell(l).earned += Number(l.amount) || 0;
+  });
+  (xeroLines || []).forEach(l => {
+    if (!asSpent[clean_(l.fundingSource || '')] || l.kind === 'expense') return;
+    cell(l).xero += Number(l.amount) || 0;
+  });
+  const releases = Object.keys(rel).sort().map(k => {
+    const r = rel[k];
+    Object.keys(r.byQ).forEach(q => {
+      const c = r.byQ[q];
+      r.byQ[q] = { spend: Math.round(c.spend), earned: Math.round(c.earned),
+        xero: Math.round(c.xero) };
+    });
+    return r;
+  });
+
+  const accruals = [];
+  (tracking || []).forEach(t => {
+    if (t.status !== 'secured') return;
+    (t.milestones || []).forEach(m => {
+      if (m.actualOnly) return;
+      const qs = {};
+      [m.baseline, m.costForecast].forEach(map => Object.keys(map || {}).forEach(q => (qs[q] = true)));
+      Object.keys(qs).filter(finished).forEach(q => {
+        const expected = Math.round(forecastOrBaseline_(m.costForecast, m.baseline, q));
+        const actual = Math.round((m.actual || {})[q] || 0);
+        if (expected - actual < CONFIG.ACCRUAL_MIN_SHORTFALL) return;
+        accruals.push({ quarter: q, source: t.source, project: m.project,
+          milestone: m.milestone, expected: expected, actual: actual,
+          comment: m.forecastComment || '', sheetUrl: t.sheetUrl || null });
+      });
+    });
+  });
+  accruals.sort((a, b) => (b.expected - b.actual) - (a.expected - a.actual));
+
+  // Finished quarters with anything to show, latest first: the page opens on the latest.
+  const seen = {};
+  releases.forEach(r => Object.keys(r.byQ).forEach(q => (seen[q] = true)));
+  accruals.forEach(a => (seen[a.quarter] = true));
+  const quarters = Object.keys(seen).filter(finished)
+    .sort((a, b) => qiOfLabel_(b) - qiOfLabel_(a));
+
+  return { quarters: quarters, releases: releases, accruals: accruals };
 }
 
 /**
@@ -686,16 +774,18 @@ function roundMapValues_(map) {
 }
 
 /**
- * The organisation's funded runway (runwayWalk_ over every part), plus the parts
- * themselves, so the Overview can redraw it for any filter or grouping without a round trip.
+ * The organisation's runway (runwayWalk_ over every part, from `reserves` when given), plus
+ * the parts and the reserves, so the Overview can redraw it for any filter or grouping
+ * without a round trip.
  */
-function buildRunway_(budgets, actualLines, now, exclusivityReps, itemToMilestone) {
+function buildRunway_(budgets, actualLines, now, exclusivityReps, itemToMilestone, reserves) {
   const nowKey = DateMath.monthKey(now);
   const parts = runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone);
-  const walk = runwayWalk_(parts, nowKey);
+  const walk = runwayWalk_(parts, nowKey, undefined, reserves);
   // The parts travel with the snapshot so the Overview can walk any selection of them.
   // Whole dollars, each map rounded so it still sums to its unrounded total.
   walk.nowKey = nowKey;
+  walk.reserves = reserves || null;
   walk.parts = parts.map(p => Object.assign({}, p, {
     cost: roundMapValues_(p.cost), income: roundMapValues_(p.income),
     actualCost: roundMapValues_(p.actualCost), actualIncome: roundMapValues_(p.actualIncome)
@@ -782,10 +872,14 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
  * so the chart runs exactly the code the tests run here. It may not call
  * anything outside itself.
  *
- * This is NOT cash runway. There is no bank balance anywhere in this system and the Xero
- * scopes cannot reach one, so it answers "when does the plan go underwater on money we have
- * actually won", not "when does the account empty". Anyone quoting it to a board must say
- * which one they mean.
+ * On its own this is funded runway, not cash: the Xero scopes cannot reach a bank balance,
+ * so it answers "when does the plan go underwater on money we have actually won". The
+ * money already in hand comes from `reserves` ({ amount, month }, latestReserves_): the
+ * free money at the end of `month` as the bookkeeper worked it out at a quarter close.
+ * Every line moves by one amount so that its position at the end of that month is the
+ * figure; from there on the secured line is reserves plus secured funding against the
+ * plan, the organisation's actual runway. Only the whole organisation has reserves, so
+ * the Overview passes them for that view alone.
  *
  * Months before the current one use Xero actuals; the current month and every month after
  * use the budget. The current month is deliberately budget rather than actual-so-far,
@@ -811,7 +905,7 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
  *
  * `months`, optional, fixes the axis, so several walks line up on one chart.
  */
-function runwayWalk_(parts, nowKey, months) {
+function runwayWalk_(parts, nowKey, months, reserves) {
   function add(m, k, v) { m[k] = (m[k] || 0) + (v || 0); }
   function monthsUntil(fromKey, toKey) {
     if (!toKey) return null;
@@ -848,7 +942,20 @@ function runwayWalk_(parts, nowKey, months) {
       monthsOfRunway: { secured: null, weighted: null, proposed: null } };
   }
 
-  let spend = 0, secured = 0, weighted = 0, proposed = 0;
+  // The past is actuals on every line alike, so one offset puts all three at the reserves
+  // figure at the end of its month.
+  let offset = 0;
+  if (reserves && typeof reserves.amount === 'number' && reserves.month) {
+    let base = 0;
+    months.forEach(k => {
+      if (k <= reserves.month && k < nowKey) {
+        base += (actualIncome[k] || 0) - (actualCost[k] || 0);
+      }
+    });
+    offset = reserves.amount - base;
+  }
+
+  let spend = 0, secured = offset, weighted = offset, proposed = offset;
   let openingNet = null;
   const rows = [];
   months.forEach(key => {
