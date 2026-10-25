@@ -56,7 +56,8 @@ at its right explains the cards and the chart. Under the line come the cards, th
    at their probability). When income covers the cost, the card shows the **surplus** instead.
 2. **Runway**: income minus spend, walked month by month, Xero actuals to last month and the
    plan from this month on. The chart starts three months before the current financial year.
-   The vertical rule is today, labelled with the *net position*, income received minus spend to
+   Its first two lines name the months it runs, the grouping, and what Show and Filter
+   picked, so a screenshot of the chart alone says what it shows. The vertical rule is today, labelled with the *net position*, income received minus spend to
    date; shaded months are budget, and a hollow dot is where a line goes below zero. The three
    lines are secured money only, the probability-weighted pipeline, and every application
    landing. Each line's label at the right edge gives the months until cumulative spend
