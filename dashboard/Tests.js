@@ -353,9 +353,12 @@ function runTests() {
     return buildHealth(budgets, actuals || [],
       { now: NOW, xeroConnected: true }).map(function (f) { return f.id; });
   }
-  var spend_ = function (amount, date, over) {
+  // The date as XeroClient gives a line one: the calendar day at local midnight. A bare
+  // '2026-07-01' reads as midnight UTC, which west of Greenwich is the day before.
+  var spend_ = function (amount, ymd, over) {
+    var p = ymd.split('-');
     var l = { kind: 'expense', project: 'General', fundingSource: 'XXX_27_GOOD',
-      item: 'XXX_27_GOOD_001 - Delivery', amount: amount, date: date };
+      item: 'XXX_27_GOOD_001 - Delivery', amount: amount, date: d(+p[0], +p[1], +p[2]) };
     Object.keys(over || {}).forEach(function (k) { l[k] = over[k]; });
     return l;
   };
@@ -1670,6 +1673,18 @@ function runTests() {
   check('journal: the line says which journal it came from',
     jNamed.docType === 'Manual journal' && jNamed.reference === 'Q1 release' &&
     jNamed.description === 'Release deferred revenue to 30 Sept');
+  // Xero dates a journal at midnight UTC, mid-day in Auckland. Read as that instant, one
+  // dated 31 March fell after the year's last day, and one dated on Funding end raised D6.
+  var xeroDay = function (y, m, day) { return '/Date(' + Date.UTC(y, m - 1, day) + '+0000)/'; };
+  check('journal: a Xero date is its calendar day at local midnight, so 31 March is in its year',
+    parseXeroDate_(xeroDay(2027, 3, 31)).getTime() === d(2027, 3, 31).getTime() &&
+    parseXeroDate_(xeroDay(2027, 3, 31)) <= fyBounds_(NOW).end && parseXeroDate_('') === null);
+  var jOnEnd = journalLineToActual_({ LineAmount: 500, Tracking: [
+      { Name: CONFIG.XERO.PROJECT_TRACKING_CATEGORY, Option: 'General' },
+      { Name: CONFIG.XERO.FUNDING_TRACKING_CATEGORY, Option: 'XXX_27_GOOD' }] },
+    parseXeroDate_(xeroDay(2027, 3, 31)), 'EXPENSE', 'Salaries');
+  check('journal: one dated on Funding end is not spend after it',
+    idsFor([sheet_()], [jOnEnd]).indexOf('D6') === -1);
 
   // A Health finding names the transaction, so every line carries its document.
   var bankLine = normaliseLine_({ Description: 'Monthly fee', LineAmount: 5, Tracking: [] },

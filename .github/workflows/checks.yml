@@ -31,5 +31,13 @@ jobs:
       - name: Apps Script tests
         run: node tools/run_tests.js
 
+      # The runner is UTC, where local midnight and midnight UTC are the same instant, so a
+      # date read in the wrong zone passes the step above. Apps Script runs in the script
+      # zone from appsscript.json, Pacific/Auckland, where such a date is off.
+      - name: Apps Script tests in the script zone
+        run: node tools/run_tests.js
+        env:
+          TZ: Pacific/Auckland
+
       - name: No content in commit messages
         run: node tools/scan_commit_range.js "${{ github.event.pull_request.base.sha || github.event.before }}"
