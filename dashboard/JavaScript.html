@@ -282,6 +282,15 @@
       .map(function (c) { return c.value; });
   }
 
+  // What a filter box holds, for a title: by name when a few are picked, by count otherwise.
+  function pickedText(id, noun) {
+    var all = document.querySelectorAll('#' + id + ' input').length;
+    var on = selectedValues(id);
+    if (on.length === all) return 'all ' + noun;
+    if (!on.length) return 'no ' + noun;
+    return on.length <= 3 ? on.join(', ') : on.length + ' of ' + all + ' ' + noun;
+  }
+
   // ---- Financial-year scope -----------------------------------------------
   // Quarter labels are "26/27 Q2", so the FY is everything before the space. The client
   // totals whichever quarters belong to the selected year, which is why the snapshot
@@ -390,20 +399,13 @@
     });
 
     // The title: the years as the option reads, the statuses, and which projects and
-    // sources, by name when a few are picked and by count otherwise.
+    // sources.
     var sel = fySelectEl();
-    function picked(id, noun) {
-      var all = document.querySelectorAll('#' + id + ' input').length;
-      var on = selectedValues(id);
-      if (on.length === all) return 'all ' + noun;
-      if (!on.length) return 'no ' + noun;
-      return on.length <= 3 ? on.join(', ') : on.length + ' of ' + all + ' ' + noun;
-    }
     document.getElementById('ov-title').textContent = [
       sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '',
       statusText(statuses),
-      picked('filter-projects', 'projects'),
-      picked('filter-sources', 'funding sources')
+      pickedText('filter-projects', 'projects'),
+      pickedText('filter-sources', 'funding sources')
     ].join(' · ');
 
     // With the plan running from today, the cost card is actual spend so far plus what is
@@ -624,7 +626,18 @@
       series.forEach(function (s) { s.values = s.values.slice(cut); });
     }
 
-    renderRunwayChart(rows, series, chart, mode === 'status', total.openingNet || 0, reserves);
+    // The chart names its own months and what the controls chose. It does not follow the
+    // year, so the title above it can name a different span, and a screenshot of the chart
+    // alone would otherwise say nothing about what it shows.
+    var group = document.getElementById('rw-group');
+    var caption = [
+      'Runway, ' + fmtMonthKey(rows[0].month) + ' to ' + fmtMonthKey(rows[rows.length - 1].month) +
+        ' · grouped by ' + (rw.parts ? group.options[group.selectedIndex].text : 'Status').toLowerCase(),
+      statusText(statuses) + ' · ' + pickedText('filter-projects', 'projects') + ' · ' +
+        pickedText('filter-sources', 'funding sources')
+    ];
+    renderRunwayChart(rows, series, chart, mode === 'status', total.openingNet || 0, reserves,
+      caption);
     table.innerHTML = runwayTable(rows, series, mode === 'status');
     table.querySelector('details').addEventListener('toggle', function (ev) {
       runwayTableOpen = ev.target.open;
@@ -688,14 +701,16 @@
 
   // `series` is most important first: { label, color, values (net per month), cross,
   // horizon }. `net` is the position today: income received minus spend to date, plus the
-  // reserves figure when `reserves` ({ amount, asAt }) started the lines.
-  function renderRunwayChart(rows, series, host, withSpend, net, reserves) {
+  // reserves figure when `reserves` ({ amount, asAt }) started the lines. `caption` is the
+  // lines of words the chart opens with.
+  function renderRunwayChart(rows, series, host, withSpend, net, reserves, caption) {
     // Sized to the container once at render, so text is 1:1 rather than scaled with
     // the viewBox. If the Overview is hidden when a refresh lands, the fallback width
     // still scales cleanly because the SVG is also width:100%.
     var twoLine = series.some(function (s) { return s.horizon; });
-    var W = Math.max(480, host.clientWidth || 720), H = 240;
-    var padL = 64, padR = twoLine ? 180 : 150, padT = 22, padB = 30;
+    var capH = (caption || []).length * 16;
+    var W = Math.max(480, host.clientWidth || 720), H = 240 + capH;
+    var padL = 64, padR = twoLine ? 180 : 150, padT = 22 + capH, padB = 30;
     var pw = W - padL - padR, ph = H - padT - padB;
     var n = rows.length;
     var xStep = pw / Math.max(1, n - 1);
@@ -713,6 +728,10 @@
     var svg = ['<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H +
       '" role="img" aria-label="Net funded position by month, ' + series.length +
       ' line' + (series.length === 1 ? '' : 's') + '">'];
+    (caption || []).forEach(function (line, i) {
+      svg.push('<text class="rw-caption' + (i ? '' : ' first') + '" x="8" y="' + (12 + i * 16) +
+        '">' + esc(line) + '</text>');
+    });
 
     // Wash and today rule first, so the lines sit on top of them. The rule carries the
     // net position today, which is where the budget months start from.
@@ -1187,13 +1206,17 @@
       groups.push({ source: s, milestones: ms });
     });
 
-    // The title names everything the controls chose, so the grid reads on its own in a
-    // screenshot: project, status, measure, quarters and how many milestones.
+    // The title names everything the controls chose, so the grid or timeline reads on its
+    // own in a screenshot: project, status, measure or columns, quarters, sources and how
+    // many milestones.
+    var cols = Array.prototype.slice.call(document.querySelectorAll('.tr-col:checked'))
+      .map(function (c) { return c.parentElement.textContent.trim(); }).join(', ');
     document.getElementById('tr-title').textContent = [
       t.project,
       statusText(statuses),
-      trView === 'grid' ? trMeasure.charAt(0).toUpperCase() + trMeasure.slice(1) : null,
+      trView === 'grid' ? trMeasure.charAt(0).toUpperCase() + trMeasure.slice(1) : cols,
       fromQ + ' to ' + toQ,
+      pickedText('tr-sources', 'funding sources'),
       (shown < total ? shown + ' of ' + total : shown) + (total === 1 ? ' milestone' : ' milestones')
     ].filter(Boolean).join(' · ');
 
