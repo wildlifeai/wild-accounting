@@ -41,15 +41,22 @@
 
     <div id="view-overview">
       <div class="overview-section">
-        <!-- The controls as a ribbon: three groups, each named underneath. Filter (the year,
-             filled by buildFySelector, applies to the cards only since runway always runs
-             from today; projects and sources apply to everything), Group by (the chart
-             only: Status draws the three scenario lines, any other choice one expected-case
-             line per group) and Show (everything on the tab). -->
+        <!-- The controls as a ribbon: three groups, each named underneath. Filter (the
+             financial years, filled by buildFyFilter, the projects and the sources, all
+             applying to the cards and the chart), Group by (the chart only: Status draws the
+             three scenario lines, any other choice one expected-case line per group) and
+             Show (everything on the tab). -->
         <div class="ribbon">
           <div class="ribbon-group">
             <div class="ribbon-items">
-              <span id="fy-slot"></span>
+              <details class="bd-dd">
+                <summary id="filter-fys-sum">Financial years</summary>
+                <div class="bd-dd-panel">
+                  <div class="bd-dd-actions"><a data-target="filter-fys" data-act="all">all</a>
+                    <a data-target="filter-fys" data-act="none">none</a></div>
+                  <div class="bd-dd-list" id="filter-fys"></div>
+                </div>
+              </details>
               <details class="bd-dd">
                 <summary id="filter-projects-sum">Projects</summary>
                 <div class="bd-dd-panel">
@@ -109,9 +116,9 @@
               <b>budget</b> from this month on. With every project and source shown, grouped by
               status, the lines start from the reserves on the Cockpit Settings sheet, so
               Secured only is the organisation's actual runway; any narrower view is funded
-              money only. It follows Show and Filter, not the year. Each line's label says the
-              month it goes short, or that it stays above zero to the last budgeted month,
-              which only means the budgets stop there. Grouped by project, funding source or
+              money only. It draws the months of the years chosen. Each line's label says the
+              month it goes short, even after those months, or that it stays above zero to the
+              last budgeted month, which only means the budgets stop there. Grouped by project, funding source or
               milestone, each line is one group's expected case: applications at their
               probability, or secured money only when Proposed is unticked.
             </div>
