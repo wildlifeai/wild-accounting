@@ -315,10 +315,18 @@ function trackingValue_(tracking, categoryName) {
   return hit ? hit.Option : '';
 }
 
+/**
+ * A Xero "/Date(1612137600000+0000)/" as the calendar day it names, at local midnight.
+ * Xero sends a document's date as midnight UTC on that day, which in Auckland is the
+ * middle of it, so a manual journal dated 31 March fell after the financial year's last
+ * day and out of its total, and one dated on Funding end raised D6. A DateString already
+ * reads as local midnight, so every line's date now has the one shape.
+ */
 function parseXeroDate_(value) {
-  // Xero returns "/Date(1612137600000+0000)/"
   const m = /\/Date\((\d+)/.exec(value || '');
-  return m ? new Date(parseInt(m[1], 10)) : null;
+  if (!m) return null;
+  const utc = new Date(parseInt(m[1], 10));
+  return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
 }
 
 function fetchBankTransactionLines_(modifiedAfter) {
