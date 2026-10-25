@@ -52,10 +52,9 @@
       }).apiXeroStatus();
     }
 
-    buildFySelector(s);
+    buildFyFilter(s);
     buildFilters();
     renderOverview();
-    // Follows show and filter, not the year: runway always runs from today.
     renderRunway();
 
     renderHealth(s.health || []);
@@ -233,13 +232,16 @@
     fillFilter('filter-sources', distinct(rows, 'fundingSource'));
   }
 
-  function fillFilter(id, values) {
+  // `onAtFirst` says which values start ticked the first time the list is filled; every
+  // one, by default. After that each keeps what the user left it at.
+  function fillFilter(id, values, onAtFirst) {
     var box = document.getElementById(id);
     var prev = {};
+    var first = !box.querySelector('input');
     Array.prototype.slice.call(box.querySelectorAll('input'))
       .forEach(function (i) { prev[i.value] = i.checked; });
     box.innerHTML = values.map(function (v) {
-      var checked = (v in prev) ? prev[v] : true;
+      var checked = (v in prev) ? prev[v] : !(first && onAtFirst) || onAtFirst(v);
       return '<label><input type="checkbox" value="' + esc(v) + '"' +
         (checked ? ' checked' : '') + '> ' + esc(v) + '</label>';
     }).join('');
@@ -267,6 +269,11 @@
     var on = box.querySelectorAll('input:checked');
     var sum = document.getElementById(id + '-sum');
     var base = FILTER_NAMES[id];
+    // The years are few and read as a span, so the box names them.
+    if (id === 'filter-fys') {
+      sum.textContent = fysText(selectedFys());
+      return;
+    }
     // The tracking tab's projects are few and chosen one or two at a time, so the box
     // names them rather than counting them.
     if (id === 'tr-projects' && on.length && on.length < all.length) {
@@ -298,38 +305,33 @@
 
   function fyOf(quarterLabel) { return String(quarterLabel).split(' ')[0]; }
 
-  // The selector is created once and kept, rather than rebuilt from markup on each
-  // render: rebuilding it would drop the user's choice and its change listener.
-  var fySelect = null;
-  var fyChosen = false; // true once the user picks a year; until then, the current FY
+  // The years ticked, in order. Labels are "26/27", so they order as strings.
+  function selectedFys() { return selectedValues('filter-fys').sort(); }
 
-  var fyYears = []; // the years the selector lists, the current FY onwards
-
-  function fySelectEl() {
-    if (!fySelect) {
-      fySelect = document.createElement('select');
-      fySelect.id = 'bd-fy';
-      fySelect.className = 'dd-select';
-      fySelect.setAttribute('aria-label', 'Financial year');
-      // Changing the year only re-totals per-quarter buckets already in the snapshot,
-      // so no server round trip is needed.
-      fySelect.addEventListener('change', function () { fyChosen = true; renderOverview(); });
-      document.getElementById('fy-slot').appendChild(fySelect);
-    }
-    return fySelect;
-  }
-
-  // The years the cards total: one, or every year the selector lists.
-  function selectedFys() {
-    var v = fySelect ? fySelect.value : 'all';
-    return v === 'all' ? fyYears : [v];
-  }
-
-  // "26/27", "26/27 and 27/28", "26/27 to 28/29".
+  // "26/27", "26/27 and 28/29", "26/27 to 28/29" for a run, "26/27, 27/28 and 29/30" for
+  // years with a gap between them.
   function fysLabel(fys) {
     if (fys.length <= 1) return fys[0] || '';
     if (fys.length === 2) return fys.join(' and ');
-    return fys[0] + ' to ' + fys[fys.length - 1];
+    var run = fys.every(function (y, i) {
+      return !i || parseInt(y, 10) === parseInt(fys[i - 1], 10) + 1;
+    });
+    if (run) return fys[0] + ' to ' + fys[fys.length - 1];
+    return fys.slice(0, -1).join(', ') + ' and ' + fys[fys.length - 1];
+  }
+  function fysText(fys) {
+    if (!fys.length) return 'No financial year';
+    return fysLabel(fys) + (fys.length === 1 ? ' Financial year' : ' Financial years');
+  }
+
+  // The first and last month keys ('YYYY-MM') of a financial year "26/27", from the month
+  // the current year starts in.
+  function fyMonths(fy) {
+    var c = snapshot && snapshot.coverage;
+    var m = c && c.fyStart ? parseInt(zoned(c.fyStart, { month: 'numeric' }).month, 10) : 4;
+    var y = 2000 + parseInt(fy, 10);
+    var endY = m === 1 ? y : y + 1, endM = m === 1 ? 12 : m - 1;
+    return { from: y + '-' + ('0' + m).slice(-2), to: endY + '-' + ('0' + endM).slice(-2) };
   }
 
   function sumFys(byQuarter, fys) {
@@ -341,31 +343,28 @@
   }
 
   /**
-   * Populate the selector from the quarters the snapshot covers, the current FY onwards:
-   * each year on its own, and when there is more than one, all of them together. A
-   * finished year answers nothing the Overview is for. Labels are "26/27", so they order
-   * as strings.
+   * Fill the year list from the quarters the snapshot covers, the current FY onwards: a
+   * finished year answers nothing the Overview is for. The current FY starts ticked, or the
+   * earliest year to come if the current one has nothing in it; across refreshes each year
+   * keeps what the user left it at. Changing them only re-totals per-quarter buckets
+   * already in the snapshot, so no server round trip is needed.
    */
-  function buildFySelector(snap) {
-    var sel = fySelectEl();
+  function buildFyFilter(snap) {
     var current = fyOf(snap.currentQuarter || '');
     var years = [];
     (snap.quarters || []).forEach(function (q) {
       var fy = fyOf(q);
       if (fy >= current && years.indexOf(fy) === -1) years.push(fy);
     });
-    fyYears = years;
-    var keep = sel.value;
-    sel.innerHTML = years.map(function (y) {
-        return '<option value="' + esc(y) + '">' + esc(y) + ' Financial year</option>';
-      }).join('') +
-      (years.length > 1
-        ? '<option value="all">' + esc(fysLabel(years)) + ' Financial years</option>' : '');
-    // Keep a year the user picked across refreshes; otherwise the current FY, or the
-    // earliest year to come if the current one has nothing in it.
-    if (fyChosen && ((keep === 'all' && years.length > 1) || years.indexOf(keep) !== -1)) sel.value = keep;
-    else if (years.indexOf(current) !== -1) sel.value = current;
-    else if (years.length) sel.value = years[0];
+    years.sort();
+    var start = years.indexOf(current) !== -1 ? current : years[0];
+    fillFilter('filter-fys', years, function (y) { return y === start; });
+    // A new financial year drops the finished one; if that was the only year ticked, tick
+    // the one that starts the list, rather than show nothing.
+    if (!selectedFys().length && start) {
+      document.querySelector('#filter-fys input[value="' + start + '"]').checked = true;
+      updateFilterSummary('filter-fys');
+    }
   }
 
   // The Overview cards: totals for the chosen years over whatever show and filter
@@ -398,11 +397,9 @@
       totWeighted += sumFys(r.weightedByQ, fys);
     });
 
-    // The title: the years as the option reads, the statuses, and which projects and
-    // sources.
-    var sel = fySelectEl();
+    // The title: the years, the statuses, and which projects and sources.
     document.getElementById('ov-title').textContent = [
-      sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '',
+      fysText(fys),
       statusText(statuses),
       pickedText('filter-projects', 'projects'),
       pickedText('filter-sources', 'funding sources')
@@ -510,10 +507,10 @@
   // Runway: the month cumulative income stops covering cumulative spend. With a reserves
   // figure in Cockpit Settings, the whole organisation's lines start from the money in hand,
   // so secured only is the actual runway; any narrower view is funded money only, since
-  // reserves belong to nobody's project. It follows the show
-  // and filter controls at the top of the tab, but not the financial-year selector: it
-  // always runs from today. The walk is runwayWalk_, sent by the server as its own source
-  // (Index.html), so every line here is the arithmetic the server's tests check.
+  // reserves belong to nobody's project. It follows the show and filter controls at the
+  // top of the tab, and draws the months of the financial years ticked there. The walk is
+  // runwayWalk_, sent by the server as its own source (Index.html), so every line here is
+  // the arithmetic the server's tests check.
   //
   // Group by Status draws three scenario lines as an ordinal ramp on the secured green:
   // dark is money in hand, each lighter step adds money that is less certain. Validated
@@ -530,11 +527,6 @@
   var GROUP_OTHER_COLOR = 'var(--grp-8)';
   // Colour thresholds for a line's horizon, in months. Presentation only.
   var RUNWAY_DANGER_MONTHS = 6, RUNWAY_AMBER_MONTHS = 12;
-  // The chart starts this many months before the current financial year. The walk still
-  // runs from the first budgeted month, so the lines open at their position then; the
-  // earlier months are closed years and only flattened the part that matters.
-  var RUNWAY_MONTHS_BEFORE_FY = 3;
-
   function netMoney(n) { return n < 0 ? '-' + fmtMoney(-n) : fmtMoney(n); }
   function compactMoney(n) {
     var a = Math.abs(n), s = n < 0 ? '-$' : '$';
@@ -617,18 +609,21 @@
         })
       : groupSeries(rw, mode, rows);
 
-    // Crop after the walk, so the lines open at their true cumulative position.
-    var from = runwayFromKey();
-    var cut = 0;
-    while (cut < rows.length - 1 && rows[cut].month < from) cut++;
-    if (cut) {
-      rows = rows.slice(cut);
-      series.forEach(function (s) { s.values = s.values.slice(cut); });
-    }
+    // The months of the years ticked, from the first one's start to the last one's end.
+    // Cropped after the walk, so the lines open at their true cumulative position, and each
+    // line's label still says when it goes short, even after those months.
+    var fys = selectedFys();
+    if (!fys.length) return empty('No financial year is ticked in Filter above.');
+    var from = fyMonths(fys[0]).from, to = fyMonths(fys[fys.length - 1]).to;
+    var keep = rows.map(function (r) { return r.month >= from && r.month <= to; });
+    if (keep.indexOf(true) === -1) return empty('Nothing is budgeted in ' + fysText(fys) + '.');
+    rows = rows.filter(function (r, i) { return keep[i]; });
+    series.forEach(function (s) {
+      s.values = s.values.filter(function (v, i) { return keep[i]; });
+    });
 
-    // The chart names its own months and what the controls chose. It does not follow the
-    // year, so the title above it can name a different span, and a screenshot of the chart
-    // alone would otherwise say nothing about what it shows.
+    // The chart names its own months and what the controls chose, so a screenshot of the
+    // chart alone says what it shows.
     var group = document.getElementById('rw-group');
     var caption = [
       'Runway, ' + fmtMonthKey(rows[0].month) + ' to ' + fmtMonthKey(rows[rows.length - 1].month) +
@@ -686,17 +681,6 @@
     if (n === 0) return { text: 'short now', cls: cls };
     return { text: n + (n === 1 ? ' month' : ' months') + ', short from ' + fmtMonthKey(at),
       cls: cls };
-  }
-
-  // The first month the chart draws: RUNWAY_MONTHS_BEFORE_FY before the current
-  // financial year, as a 'YYYY-MM' key.
-  function runwayFromKey() {
-    var c = snapshot && snapshot.coverage;
-    if (!c || !c.fyStart) return '';
-    var p = zoned(c.fyStart, { month: 'numeric', year: 'numeric' });
-    var y = parseInt(p.year, 10), m = parseInt(p.month, 10) - RUNWAY_MONTHS_BEFORE_FY;
-    if (m < 1) { m += 12; y--; }
-    return y + '-' + ('0' + m).slice(-2);
   }
 
   // `series` is most important first: { label, color, values (net per month), cross,

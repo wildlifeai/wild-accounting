@@ -42,21 +42,21 @@ right opens a short reminder of what is on screen; this guide has the rest.
 
 ## What you're looking at (Overview)
 
-The ribbon at the top has three groups. **Filter** (the year, projects, funding sources) and
-**Show** (secured, proposed) apply to everything on the tab, the cards and the runway, except
-that the year applies to the cards only, because runway always runs from today. **Group by**
-changes the runway chart only. The title under the ribbon names what was chosen, and the **?**
-at its right explains the cards and the chart. Under the line come the cards, then the chart.
+The ribbon at the top has three groups. **Filter** (financial years, projects, funding
+sources) and **Show** (secured, proposed) apply to everything on the tab, the cards and the
+runway. **Group by** changes the runway chart only. The title under the ribbon names what was
+chosen, and the **?** at its right explains the cards and the chart. Under the line come the
+cards, then the chart.
 
-1. **Summary cards**: totals for the period picked in the selector, the current
-   financial year by default, a later one, or every year from this one on together (finished
-   years are left out): **expected cost** (actual spend for the months gone, plus the plan for the rest),
+1. **Summary cards**: totals for the financial years ticked, the current one by default
+   (finished years are left out): **expected cost** (actual spend for the months gone, plus the plan for the rest),
    secured funding, actual spent, the **unsecured gap** (expected cost not yet covered by secured
    funding) and the **gap after pipeline** (what is still uncovered once applications are counted
    at their probability). When income covers the cost, the card shows the **surplus** instead.
 2. **Runway**: income minus spend, walked month by month, Xero actuals to last month and the
-   plan from this month on. The chart starts three months before the current financial year.
-   Its first two lines name the months it runs, the grouping, and what Show and Filter
+   plan from this month on. The chart draws the months from the start of the first year
+   ticked to the end of the last; each line's label still says when it goes short, even after
+   them. Its first two lines name the months it runs, the grouping, and what Show and Filter
    picked, so a screenshot of the chart alone says what it shows. The vertical rule is today, labelled with the *net position*, income received minus spend to
    date; shaded months are budget, and a hollow dot is where a line goes below zero. The three
    lines are secured money only, the probability-weighted pipeline, and every application

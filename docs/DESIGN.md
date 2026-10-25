@@ -208,6 +208,14 @@ Ranked by how badly they hurt the persona who depends on them:
   said nothing about its months or selections. The chart now opens with them: the months it
   runs, the grouping, and what Show and Filter picked. The Project tracking title also names
   the funding sources picked, and the timeline's columns.
+- **2026-10-25: the financial years are a multi-choice filter, and the chart follows them.**
+  With 26/27 picked, the chart still ran from before the year to the last budgeted month, so
+  it did not show the span the cards beside it totalled. The year selector is now a list of
+  ticks like Projects and Funding sources, the current year ticked by default, and the
+  chart draws the months from the start of the first year ticked to the end of the last.
+  The walk still runs from the first budgeted month, so each line opens at its true position
+  and its label still names the month it goes short, even after the years shown. The
+  combined-years option went with the selector.
 
 ## History
 
