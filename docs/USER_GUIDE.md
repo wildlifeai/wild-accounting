@@ -56,7 +56,8 @@ at its right explains the cards and the chart. Under the line come the cards, th
    at their probability). When income covers the cost, the card shows the **surplus** instead.
 2. **Runway**: income minus spend, walked month by month, Xero actuals to last month and the
    plan from this month on. The chart starts three months before the current financial year.
-   The vertical rule is today, labelled with the *net position*, income received minus spend to
+   Its first two lines name the months it runs, the grouping, and what Show and Filter
+   picked, so a screenshot of the chart alone says what it shows. The vertical rule is today, labelled with the *net position*, income received minus spend to
    date; shaded months are budget, and a hollow dot is where a line goes below zero. The three
    lines are secured money only, the probability-weighted pipeline, and every application
    landing. Each line's label at the right edge gives the months until cumulative spend
@@ -75,12 +76,19 @@ at its right explains the cards and the chart. Under the line come the cards, th
    from its date, so what is still unpaid on it comes off or goes on here; and until the
    releases are posted, the liability still holds money already spent. Its column C shows each
    part, to check against Xero. To correct a figure, type your own row for the same date: the
-   refresh never
-   overwrites a row it did not write. The latest row is used: with every project and source
-   shown and grouped by status, all three lines start from it, so **Secured only** is reserves
-   plus secured funding against the plan, and the label at today reads "position ..., from
-   reserves at" its date. Any narrower view, filtered or grouped, is funded money only, because
-   reserves belong to no one project. With no row, every view is funded money only.
+   refresh never overwrites a row it did not write. The latest row is used: with every project
+   and source shown and grouped by status, all three lines start from it, so **Secured only**
+   is reserves plus secured funding against the plan, and the label at today reads "position
+   ..., from reserves at" its date. Any narrower view, filtered or grouped, is funded money
+   only, because reserves belong to no one project. With no row, every view is funded money
+   only.
+
+   **Work that goes ahead only if funded**, such as a new role or a next stage, is a proposed
+   sheet marked `Goes ahead: only if funded`. Its cost counts only where its funding does: not
+   on **Secured only** or in the unsecured gap, at its probability in expected cost, the gap
+   after pipeline and the weighted line, and in full on the line where every application
+   lands. Every other sheet's cost counts on every line, as work planned whatever lands, so
+   *cumulative spend* in the chart's table is that work alone.
 
    **Group by** changes the chart only. **Status** draws the three lines above. **Project**,
    **Funding source** or **Milestone** draws one line per group, counting applications at their

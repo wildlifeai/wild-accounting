@@ -353,9 +353,12 @@ function runTests() {
     return buildHealth(budgets, actuals || [],
       { now: NOW, xeroConnected: true }).map(function (f) { return f.id; });
   }
-  var spend_ = function (amount, date, over) {
+  // The date as XeroClient gives a line one: the calendar day at local midnight. A bare
+  // '2026-07-01' reads as midnight UTC, which west of Greenwich is the day before.
+  var spend_ = function (amount, ymd, over) {
+    var p = ymd.split('-');
     var l = { kind: 'expense', project: 'General', fundingSource: 'XXX_27_GOOD',
-      item: 'XXX_27_GOOD_001 - Delivery', amount: amount, date: date };
+      item: 'XXX_27_GOOD_001 - Delivery', amount: amount, date: d(+p[0], +p[1], +p[2]) };
     Object.keys(over || {}).forEach(function (k) { l[k] = over[k]; });
     return l;
   };
@@ -801,6 +804,24 @@ function runTests() {
   ], rwNow, {});
   check('runway: archived project actuals are excluded', rwArch.openingNet === 0);
 
+  // Work that goes ahead only if funded: its cost rides with its income, at its weight, and
+  // never touches the secured line or the shared spend.
+  var rwIf = runwayWalk_([
+    { status: 'secured', cost: { '2026-11': 100 }, income: { '2026-11': 100 } },
+    { status: 'proposed', probability: 0.5, ifFunded: true,
+      cost: { '2026-11': 800 }, income: { '2026-11': 1000 } }], '2026-11');
+  var rwIfNov = rwIf.months[0];
+  check('only if funded: the cost leaves the secured line and the shared spend alone',
+    rwIfNov.spend === 100 && rwIfNov.secured - rwIfNov.spend === 0);
+  check('only if funded: the cost rides with the income, weighted and in full',
+    rwIfNov.weighted - rwIfNov.spend === 100 && rwIfNov.proposed - rwIfNov.spend === 200);
+  var rwAnyway = runwayWalk_([
+    { status: 'secured', cost: { '2026-11': 100 }, income: { '2026-11': 100 } },
+    { status: 'proposed', probability: 0.5,
+      cost: { '2026-11': 800 }, income: { '2026-11': 1000 } }], '2026-11').months[0];
+  check('regardless: a proposal\'s cost is spend on every line, as before',
+    rwAnyway.spend === 900 && rwAnyway.secured - rwAnyway.spend === -800);
+
   var rwYear = runwayWalk_([{ status: 'secured',
     cost: { '2026-11': 100, '2026-12': 100, '2027-01': 100, '2027-02': 100 },
     income: { '2026-11': 350 } }], '2026-11');
@@ -1192,6 +1213,23 @@ function runTests() {
     Math.abs(Object.keys(ag.projects).reduce(function (t, p) {
       return t + ag.projects[p].securedIncome; }, 0) - 12000) < 1);
 
+  // Goes ahead: only if funded. The cost is expected at the ask's probability, for the cards.
+  function goes(v) { return goesAhead_({ metadata: { 'goes ahead': v } }); }
+  check('goes ahead: "Only if funded" is read, blank and "regardless" are the default',
+    goes('Only if funded') === 'only if funded' && goes('') === 'regardless' &&
+    goes('Regardless') === 'regardless');
+  check('goes ahead: anything else is unknown, not guessed', goes('if funded') === 'unknown');
+  var ifBudgets = [agSrc('XXX_28_D', 'proposed', { probability: '25',
+    'goes ahead': 'only if funded' }, [agLine('Spyfish Aotearoa', 'M5', 'XXX_28_D_001', 4000, 5000)])];
+  var ifRow = buildBreakdownRows_(aggregateBudgets_(ifBudgets, fyBounds_(d(2026, 9, 26)),
+    chooseExclusivityReps_(ifBudgets)).budgetByKey, {}, {}, {}, {})[0];
+  check('only if funded: the row says so and expects its cost at the probability',
+    ifRow.ifFunded === true && Math.abs(agSum(ifRow.weightedCostByQ) - 1000) <= 2 &&
+    agSum(ifRow.budgetByQ) === 4000);
+  check('only if funded: a secured sheet is funded, so its cost always counts',
+    !costIfFunded_({ status: 'secured', metadata: { 'goes ahead': 'only if funded' } }) &&
+    !buildBreakdownRows_(ag.budgetByKey, {}, {}, {}, {})[0].ifFunded);
+
   // ---- deriving contribution: General's income comes from the policy ----------
   var cBudgets = [
     agSrc('XXX_27_P', 'secured', { 'contribution policy': 'percent_of_income:40' }, [
@@ -1328,6 +1366,26 @@ function runTests() {
   check('G1 quiet when finished work lands inside the band',
     !g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000, d(2026, 6, 30)) }),
       [spend_(5500, '2026-06-01')]));
+  // No share for General: no overhead for spend to eat, so G1 leaves spend to E1 and E5.
+  var e5Lines = g1Line(6000, 6000).concat([{ description: 'GM', milestone: 'GM',
+    item: 'XXX_27_GOOD_002 - GM', project: 'General', start: d(2026, 4, 1),
+    end: d(2027, 3, 31), cost: 9000, income: 9000, contribution: 0 }]);
+  var e5Sheet = g1Sheet('percent_of_income:0', 6000, 6000, { lines: e5Lines });
+  var e5Spend = [spend_(7500, '2026-07-01'),
+    spend_(4000, '2026-07-01', { item: 'XXX_27_GOOD_002 - GM', project: 'General' })];
+  var e5All = buildHealth([e5Sheet], e5Spend, { now: NOW, xeroConnected: true });
+  var e5 = e5All.filter(function (f) { return f.id === 'E5'; })[0];
+  check('G1 does not judge spend on a source with no share for General',
+    !e5All.some(function (f) { return f.id === 'G1'; }));
+  check('E5: project lines over their budget, with the General lines beside them',
+    !!e5 && e5.amount === 1500 && e5.detail.indexOf('Spyfish Aotearoa lines: actual 7500 ' +
+      'against budget 6000, 25% over') !== -1 &&
+    e5.detail.indexOf('General lines: actual 4000 against budget 9000') !== -1);
+  check('E5 quiet within ten percent, and on a source with no General lines',
+    !buildHealth([e5Sheet], [spend_(6500, '2026-07-01')], { now: NOW, xeroConnected: true })
+      .some(function (f) { return f.id === 'E5'; }) &&
+    !buildHealth([g1Sheet('percent_of_income:0', 6000, 6000)], [spend_(7500, '2026-07-01')],
+      { now: NOW, xeroConnected: true }).some(function (f) { return f.id === 'E5'; }));
   // Spend on an item whose lines are all General's is General's work, not this source's.
   check('G1 leaves spend on General lines out of the actual',
     !g1For(g1Sheet(P40, 6000, 10000, { lines: g1Line(6000, 10000).concat([{
@@ -1615,6 +1673,18 @@ function runTests() {
   check('journal: the line says which journal it came from',
     jNamed.docType === 'Manual journal' && jNamed.reference === 'Q1 release' &&
     jNamed.description === 'Release deferred revenue to 30 Sept');
+  // Xero dates a journal at midnight UTC, mid-day in Auckland. Read as that instant, one
+  // dated 31 March fell after the year's last day, and one dated on Funding end raised D6.
+  var xeroDay = function (y, m, day) { return '/Date(' + Date.UTC(y, m - 1, day) + '+0000)/'; };
+  check('journal: a Xero date is its calendar day at local midnight, so 31 March is in its year',
+    parseXeroDate_(xeroDay(2027, 3, 31)).getTime() === d(2027, 3, 31).getTime() &&
+    parseXeroDate_(xeroDay(2027, 3, 31)) <= fyBounds_(NOW).end && parseXeroDate_('') === null);
+  var jOnEnd = journalLineToActual_({ LineAmount: 500, Tracking: [
+      { Name: CONFIG.XERO.PROJECT_TRACKING_CATEGORY, Option: 'General' },
+      { Name: CONFIG.XERO.FUNDING_TRACKING_CATEGORY, Option: 'XXX_27_GOOD' }] },
+    parseXeroDate_(xeroDay(2027, 3, 31)), 'EXPENSE', 'Salaries');
+  check('journal: one dated on Funding end is not spend after it',
+    idsFor([sheet_()], [jOnEnd]).indexOf('D6') === -1);
 
   // A Health finding names the transaction, so every line carries its document.
   var bankLine = normaliseLine_({ Description: 'Monthly fee', LineAmount: 5, Tracking: [] },
@@ -1652,6 +1722,11 @@ function runTests() {
     income: 100, milestone: 'M', item: 'XXX_25_A_001' }] })];
   check('C8: an Income recognition it does not understand is flagged',
     eHealth(eSheets, []).some(function (f) { return f.id === 'C8'; }));
+  var gSheets = [Object.assign(eSheet('XXX_25_G', '', 100, 100), { metadata: {
+    'goes ahead': 'maybe' }, lines: [{ cost: 100, income: 100, milestone: 'M',
+    item: 'XXX_25_G_001' }] })];
+  check('C9: a Goes ahead it does not understand is flagged',
+    eHealth(gSheets, []).some(function (f) { return f.id === 'C9'; }));
   var jFor = function (src) { return Object.assign({}, jIncome, { fundingSource: src }); };
   var unmarked = [Object.assign(eSheet('XXX_25_B', '', 100, 100), { lines: [{ cost: 100,
     income: 100, milestone: 'M', item: 'XXX_25_B_001' }] })];

@@ -103,6 +103,7 @@ row has any entry, its blank cells count as 0 for every quarter the tab has a co
 | C6 | error | `Contribution policy` missing or unparseable | General's income cannot be derived. The three values are `none`, `per_line` and `percent_of_income:<n>`, with `n` from 0 to 100. Case, surrounding spaces, hyphens for underscores and a space after the colon are all normalised before matching, so `None` and `Percent of income: 40` pass. The finding quotes the value back exactly as typed. `40%` is still rejected: it is a different statement, and guessing which was meant is not the checker's job. |
 | C7 | warning | `proposed` with no `Decision date` | Needed for pipeline forecasting and funder forms. |
 | C8 | warning | `Income recognition` is something other than `as spent`, `as invoiced` or blank | Fix the value. Until then its income counts when invoiced. |
+| C9 | warning | `Goes ahead` is something other than `only if funded`, `regardless` or blank | Fix the value. Until then its cost counts whatever lands. |
 
 ### D. Xero coding, aimed at the bookkeeper
 
@@ -131,6 +132,7 @@ is in the totals whatever its date and its fix is usually in Drive.
 | E2 | warning | A secured source has spent well below what was expected by the end of the last finished quarter, by the same rule as D5 | Funders care about underspend as much as overspend. Fires once at least half the budget was due (`UNDERSPEND_MIN_DUE`) and the shortfall is a quarter of the budget or more (`UNDERSPEND_GAP`). Spend so far this quarter counts toward catching up. If the work has slipped, move it to later quarters on the `Forecast` tab. |
 | E3 | error | Same item code in two funding sources | One cost billed twice. |
 | E4 | warning | Same `Description` in two sources with overlapping dates | Double-funding signal, for example the same FTE in two grants. |
+| E5 | warning | A secured grant with both General lines and project lines, and no share for General in its `Contribution policy`, has spent more on its project lines than they budget, by more than `CONTRIBUTION_TOLERANCE` (10%) | The grant's total can still be within budget, which is why E1 is quiet: the money moved from its General lines. The detail gives both sides. Explain it in the funder's report, or agree a new split with the funder and then update the `Budget` tab. |
 
 ### G. Funding pipeline
 
@@ -139,7 +141,7 @@ Complements **E4**: that one detects duplication nobody declared, these handle d
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
-| G1 | warning | A source's overhead, its margin over the cost of its own work as a share of the income on lines not already General's, is more than `CONTRIBUTION_TOLERANCE` (10 points) from its `Contribution policy` | At 40%, anything from 30 to 50 is fine. Judged on the budget; on actual spend while work continues only once it has already taken the overhead below the band; and on actual spend in both directions once every one of those lines has ended. The Forecast tab is deliberately not used: the budget is what was agreed with the funder, and re-timing work does not change its margin. Above the band: two applications for the same work both landed, income is on the wrong milestone, or work is underspent. Below it: costs are eating the overhead. Secured and proposed sources both, so an application's budget is checked before it goes in. |
+| G1 | warning | A source's overhead, its margin over the cost of its own work as a share of the income on lines not already General's, is more than `CONTRIBUTION_TOLERANCE` (10 points) from its `Contribution policy` | At 40%, anything from 30 to 50 is fine. Judged on the budget; on actual spend while work continues only once it has already taken the overhead below the band; and on actual spend in both directions once every one of those lines has ended. Spend is judged only for a policy above 0%: with none there is no overhead to eat, and spend over budget is **E1** and **E5**. The Forecast tab is deliberately not used: the budget is what was agreed with the funder, and re-timing work does not change its margin. Above the band: work is underspent, income is on the wrong milestone, or two applications for the same work both landed. Below it: costs are taking the money meant for General. Secured and proposed sources both, so an application's budget is checked before it goes in. |
 | G2 | info | A `proposed` source with no `Probability` in `Funding_info` | That ask is left out of expected income entirely rather than guessed at. "Unknown" is deliberately not "zero". |
 | G3 | info | Cost suppressed because a competing application in the same `Exclusivity group` carries it | Expected, and reported so the suppression is never invisible arithmetic. Remove the group value if these are genuinely separate work. |
 
