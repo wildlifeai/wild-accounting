@@ -196,6 +196,13 @@ Ranked by how badly they hurt the persona who depends on them:
   if funded`, and its cost then rides with its income at the same weight, on the runway and in
   the Overview's gaps. Opt-in per sheet rather than the rule for every proposal: most proposed
   sheets, such as next year's core budget, are work that happens whatever lands.
+- **2026-10-22: General's unfunded costs are one multi-year source, Reserves.** One budget
+  sheet per year (GEN_27_CORE, GEN_28_CORE) needed a new Xero option every April, and the
+  accountant wants General's tracking category the same year on year. Core costs that no
+  grant pays now sit in one sheet and one Xero option, both named `Reserves`, with a line
+  per cost per year; the board approves each year's lines. It needs no code: budgets and
+  actuals join on the name, as for any source. It is not the Cockpit Settings `Reserves`
+  tab, which holds the money in hand that this source draws down.
 - **2026-10-22: the runway chart names what it shows.** The Overview title names the year,
   but the chart does not follow the year, so a screenshot of it pasted into a board paper
   said nothing about its months or selections. The chart now opens with them: the months it
