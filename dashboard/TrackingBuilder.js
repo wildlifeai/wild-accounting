@@ -110,8 +110,11 @@ function milestoneRow_(m, span, currentQi, qis) {
   Object.keys(labels).forEach(q => {
     const qi = qiOfLabel_(q);
     qis[qi] = true;
+    const cost = cell_(m.baseline, m.actual, m.costForecast, q, qi, currentQi);
+    // A Reserves row netted by netReservesTracking_: its full cost and who pays it, to hover.
+    if (m.cover && m.cover[q]) cost.cover = m.cover[q];
     byQ[q] = {
-      cost: cell_(m.baseline, m.actual, m.costForecast, q, qi, currentQi),
+      cost: cost,
       income: cell_(m.incomeBaseline, m.incomeActual, m.incomeForecast, q, qi, currentQi)
     };
   });

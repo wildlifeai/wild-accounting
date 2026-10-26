@@ -202,7 +202,8 @@ Ranked by how badly they hurt the persona who depends on them:
   grant pays now sit in one sheet and one Xero option, both named `Reserves`, with a line
   per cost per year; the board approves each year's lines. It needs no code: budgets and
   actuals join on the name, as for any source. It is not the Cockpit Settings `Reserves`
-  tab, which holds the money in hand that this source draws down.
+  tab, which holds the money in hand that this source draws down. From 2026-10-25 it holds
+  the full cost, below.
 - **2026-10-22: the runway chart names what it shows.** The Overview title names the year,
   but the chart does not follow the year, so a screenshot of it pasted into a board paper
   said nothing about its months or selections. The chart now opens with them: the months it
@@ -226,6 +227,18 @@ Ranked by how badly they hurt the persona who depends on them:
   Every project nets to zero over a source's life, and General is the one pot. The policy is
   the margin G1 expects. Published figures move: General gains where a margin beats its
   policy and loses where it falls short; organisation totals and runway do not.
+- **2026-10-25: Reserves holds General's full cost, and what other sheets pay comes off it.**
+  Holding only the part no grant pays meant working out each remainder by hand and retyping it
+  whenever a grant's plan moved. `Reserves` now holds every General cost in full; a General line
+  on any other sheet, on a milestone of the same name, comes off it month by month inside the
+  months `Reserves` holds that milestone over. The name is the match, so funder sheets gain no
+  column and their `Budget` tabs stay as submitted. In the views that count money the
+  difference is an offset with the paying sheet's status and probability, so the cost counts
+  once at `Reserves`' figure on every runway line, and an application comes off only where its
+  money counts. Project tracking nets secured sheets only, having no expected case. More paid
+  than `Reserves` holds leaves it negative and raises H1, rather than being floored, so the
+  arithmetic stays the same on every line; General work on a milestone `Reserves` lacks counts
+  on top and raises H2. Nothing changes until a source named `Reserves` exists.
 
 ## History
 

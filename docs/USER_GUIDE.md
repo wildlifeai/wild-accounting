@@ -133,6 +133,28 @@ click **Refresh now**.
   status; the secured forecast counts `secured/` only, the proposed forecast counts both.
 - **A funding source has finished**: see [Archiving a funding source](#archiving-a-funding-source).
 
+## General and Reserves
+
+`Reserves` is General's one budget sheet, in General's `secured/` folder: the **full cost** of
+every General cost, a line per cost per year, whoever ends up paying it. A grant that pays part
+of a General cost has its line tagged `Project: General` with the **same `Milestone` name** as the
+`Reserves` line, and the cockpit takes it off `Reserves` month by month, inside the months
+`Reserves` holds that milestone over. Nothing is retyped: when the grant's plan moves, what is
+left for `Reserves` moves with it.
+
+- Every view counts the cost once, at `Reserves`' full cost. An application comes off `Reserves`
+  only where its money counts: not on *Secured only*, at its probability on the expected line,
+  and in full where every application lands.
+- In Project tracking, `Reserves`' rows show what is left for reserves to pay, so they compare
+  with what Xero codes to `Reserves`. Hover a quarter for its full cost and who pays what. Only
+  secured sheets come off there: an application shows beside `Reserves` until it is won.
+- More paid than `Reserves` holds in a month is **H1**. A General line on a milestone `Reserves`
+  has no line for is **H2**, and counts on top of `Reserves`.
+- What every project's funding leaves after its costs, its margin, is General's income: see
+  [What you're looking at](#what-youre-looking-at-overview).
+
+The `Reserves` source is not the Cockpit Settings `Reserves` tab, which holds the money in hand.
+
 ## Tracking and forecasting (quarterly)
 
 The **Project tracking** tab replaces the old "Budget, Actual, Forecast Tracking" tab that used

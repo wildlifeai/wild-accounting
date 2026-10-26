@@ -373,6 +373,10 @@ It is enforced rather than remembered:
   and **G3** reports the ones whose cost was suppressed.
 * **E4 stays silent inside an exclusivity group.** E4 is for duplication nobody declared; G3 is for
   duplication that was. Reporting both would charge the reader twice for one decision.
+* **`Reserves` holds General's full cost** (`CONFIG.RESERVES_SOURCE`). A General line on any other
+  sheet, on a milestone of the same name, pays part of it and comes off it: `reservesOffsets_` for
+  the Overview and runway, `netReservesTracking_` for Project tracking. E4 is quiet for those
+  pairs; H1 reports more paid than `Reserves` holds, H2 General work on a milestone it lacks.
 
 ---
 

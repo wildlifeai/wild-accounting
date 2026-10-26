@@ -1862,6 +1862,161 @@ function runTests() {
     !eHealth([], [{ kind: 'expense', amount: 10, item: '', journal: true, fundingSource: '',
       project: 'P', date: d(2025, 9, 1) }]).some(function (f) { return f.id === 'D3'; }));
 
+  // ---- Reserves holds General's full cost; what other sheets pay comes off it ----------
+  function resLine(source, mile, code, project, y1, m1, y2, m2, cost, desc) {
+    return { description: desc || mile, milestone: mile, item: source + '_' + code + ' - ' + mile,
+      project: project, start: d(y1, m1, 1), end: new Date(y2, m2, 0), cost: cost, income: 0 };
+  }
+  function resSrc(name, status, meta, lines) {
+    return { name: name, status: status, projectFolder: 'General', metadata: meta || {},
+      forecast: { cost: {}, income: {}, comments: {} }, lines: lines, budgetLines: lines };
+  }
+  var resBudgets = [
+    resSrc(CONFIG.RESERVES_SOURCE, 'secured', { owner: 'someone@wildlife.ai' }, [
+      resLine('XXX_27_CORE', 'General management', '004', 'General', 2026, 10, 2026, 12, 9000,
+        'General manager')]),
+    resSrc('XXX_27_GRANT', 'secured', {}, [
+      resLine('XXX_27_GRANT', 'General management', '005', 'General', 2026, 10, 2026, 11, 4000,
+        'General manager'),
+      resLine('XXX_27_GRANT', 'Maintenance', '006', 'General', 2026, 10, 2026, 12, 600),
+      resLine('XXX_27_GRANT', 'Build', '001', 'Wildlife Watcher', 2026, 10, 2026, 12, 3000)]),
+    // Matched whatever its spacing and case. Goes ahead only if funded, at 50%.
+    resSrc('XXX_28_ASK', 'proposed', { probability: '50', 'goes ahead': 'only if funded' }, [
+      resLine('XXX_28_ASK', ' general Management', '001', 'General', 2026, 12, 2026, 12, 1000)])
+  ];
+  var resOffsets = reservesOffsets_(resBudgets, {}, null);
+  check('reserves: one offset per paying sheet, named Reserves, keeping that sheet\'s status',
+    resOffsets.length === 2 && resOffsets.every(function (o) {
+      return o.name === CONFIG.RESERVES_SOURCE; }) &&
+    resOffsets[0].offsetFor === 'XXX_27_GRANT' && resOffsets[0].status === 'secured' &&
+    resOffsets[1].offsetFor === 'XXX_28_ASK' && resOffsets[1].status === 'proposed' &&
+    resOffsets[1].metadata['goes ahead'] === 'only if funded');
+  check('reserves: an offset is the paying line\'s cost, negative, month by month',
+    Math.abs(rSum(resOffsets[0].lines, 'cost') + 4000) < 0.01 &&
+    resOffsets[0].lines.length === 2 && Math.abs(rSum(resOffsets[1].lines, 'cost') + 1000) < 0.01);
+  check('reserves: lines on no Reserves milestone, or not General\'s, take nothing off',
+    resOffsets[0].lines.every(function (l) { return l.milestone === 'General management'; }));
+  check('reserves: an offset takes Reserves\' spelling of the milestone, to group with it',
+    resOffsets[1].lines[0].milestone === 'General management');
+  check('reserves: from the month the plan turns, months gone keep their actuals',
+    reservesOffsets_(resBudgets, {}, '2026-11')[0].lines.length === 1 &&
+    reservesOffsets_(resBudgets, {}, '2026-11')[1].lines.length === 1);
+  check('reserves: nothing comes off a source not named Reserves',
+    reservesOffsets_(resBudgets.slice(1), {}, null).length === 0);
+  // Outside the months Reserves holds a milestone over, it holds nothing of it to net.
+  var resEarly = reservesOffsets_([resBudgets[0], resSrc('XXX_26_OLD', 'secured', {}, [
+    resLine('XXX_26_OLD', 'General management', '002', 'General', 2026, 7, 2026, 11, 5000)])],
+    {}, null);
+  check('reserves: only the months Reserves holds the milestone over come off',
+    resEarly.length === 1 && resEarly[0].lines.map(function (l) {
+      return DateMath.monthKey(l.start); }).join() === '2026-10,2026-11');
+
+  // Every runway line costs General's work at Reserves' full cost: what is paid elsewhere
+  // moves who pays it, not what it costs, whether the ask lands or not.
+  var resCounted = resBudgets.concat(resOffsets);
+  var resParts = runwayParts_(resCounted, [], {}, {});
+  var resGeneral = resParts.filter(function (p) { return p.project === 'General' &&
+    /general management/i.test(p.milestone); });
+  var resWalk = runwayWalk_(resGeneral, '2026-09').months.slice(-1)[0];
+  check('reserves: General management costs its full cost on every runway line',
+    Math.abs(resWalk.secured - resWalk.spend + 9000) < 1 &&
+    Math.abs(resWalk.weighted - resWalk.spend + 9000) < 1 &&
+    Math.abs(resWalk.proposed - resWalk.spend + 9000) < 1);
+  var resReservesOnly = runwayWalk_(resGeneral.filter(function (p) {
+    return p.fundingSource === CONFIG.RESERVES_SOURCE; }), '2026-09').months.slice(-1)[0];
+  check('reserves: Reserves alone is what is left for it, the ask weighted',
+    Math.abs(resReservesOnly.secured - resReservesOnly.spend + 5000) < 1 &&
+    Math.abs(resReservesOnly.weighted - resReservesOnly.spend + 4500) < 1 &&
+    Math.abs(resReservesOnly.proposed - resReservesOnly.spend + 4000) < 1);
+  var resAg = aggregateBudgets_(resCounted, fyBounds_(d(2026, 9, 26)), {});
+  var resRows = buildBreakdownRows_(resAg.budgetByKey, {}, {}, {}, resAg.sourceStatus);
+  check('reserves: the offsets are Reserves rows with the paying sheet\'s status',
+    resRows.filter(function (r) { return r.fundingSource === CONFIG.RESERVES_SOURCE; })
+      .map(function (r) { return r.status + ':' + r.budget; }).sort().join('|') ===
+      'proposed:-1000|secured:-4000|secured:9000' &&
+    resAg.sourceStatus[CONFIG.RESERVES_SOURCE] === 'secured' &&
+    resAg.fundingSources.filter(function (f) {
+      return f.name === CONFIG.RESERVES_SOURCE; }).length === 1);
+
+  // H1: more paid than Reserves holds in a month, every ask counted as won.
+  var overBudgets = [
+    resSrc(CONFIG.RESERVES_SOURCE, 'secured', {}, [resLine('XXX_27_CORE', 'General management',
+      '004', 'General', 2026, 11, 2026, 11, 3000)]),
+    resSrc('XXX_27_GRANT', 'secured', {}, [resLine('XXX_27_GRANT', 'General management', '005',
+      'General', 2026, 11, 2026, 11, 3500)])];
+  var over = reservesOverPaid_(overBudgets, reservesOffsets_(overBudgets, {}, null));
+  check('reserves: H1 names the milestone, the month, and who pays',
+    over.length === 1 && over[0].milestone === 'General management' &&
+    over[0].months.length === 1 && over[0].months[0].month === '2026-11' &&
+    over[0].months[0].paid === 3500 && over[0].months[0].full === 3000 &&
+    over[0].by.join() === 'XXX_27_GRANT');
+  var resHealth = buildHealth(resBudgets, [], { reservesOverPaid: over });
+  var resIds = function (id) { return resHealth.filter(function (f) { return f.id === id; }); };
+  check('reserves: H1 raised on Reserves, for the excess',
+    resIds('H1').length === 1 && resIds('H1')[0].amount === 500 &&
+    resIds('H1')[0].fundingSource === CONFIG.RESERVES_SOURCE);
+  check('reserves: H2 names General work on a milestone Reserves lacks',
+    resIds('H2').length === 1 && resIds('H2')[0].fundingSource === 'XXX_27_GRANT' &&
+    /Maintenance/.test(resIds('H2')[0].detail));
+  check('reserves: the line that pays and Reserves\' own share a description, and E4 is quiet',
+    resIds('E4').length === 0);
+  check('reserves: no H2 for a sheet whose General work is all on Reserves\' milestones',
+    !resIds('H2').some(function (f) { return f.fundingSource === 'XXX_28_ASK'; }));
+
+  // Project tracking: Reserves' rows are what is left for it, secured payers only.
+  var resTrk = [
+    { source: CONFIG.RESERVES_SOURCE, status: 'secured', milestones: [
+      { item: 'XXX_27_CORE_004', milestone: 'General management', project: 'General',
+        baseline: { '26/27 Q3': 9000 }, actual: {}, costForecast: {}, incomeBaseline: {},
+        incomeActual: {}, incomeForecast: {} },
+      { item: 'XXX_28_CORE_004', milestone: 'General management', project: 'General',
+        baseline: { '26/27 Q4': 9000 }, actual: {}, costForecast: {}, incomeBaseline: {},
+        incomeActual: {}, incomeForecast: {} }] },
+    { source: 'XXX_27_GRANT', status: 'secured', milestones: [
+      { item: 'XXX_27_GRANT_005', milestone: 'General management', project: 'General',
+        baseline: { '26/27 Q2': 3000, '26/27 Q3': 4000, '26/27 Q4': 1000 }, actual: {},
+        costForecast: { '26/27 Q3': 5000 }, incomeBaseline: {}, incomeActual: {},
+        incomeForecast: {} }] },
+    { source: 'XXX_28_ASK', status: 'proposed', milestones: [
+      { item: 'XXX_28_ASK_001', milestone: 'General management', project: 'General',
+        baseline: { '26/27 Q4': 2000 }, actual: {}, costForecast: {}, incomeBaseline: {},
+        incomeActual: {}, incomeForecast: {} }] }
+  ];
+  var resNet = netReservesTracking_(resTrk)[0].milestones;
+  check('reserves tracking: each quarter\'s budget less what secured sheets budget',
+    resNet[0].baseline['26/27 Q3'] === 5000 && resNet[1].baseline['26/27 Q4'] === 8000);
+  check('reserves tracking: a quarter before Reserves holds the milestone is left alone',
+    resNet[0].baseline['26/27 Q2'] === undefined && !resNet[0].cover['26/27 Q2']);
+  check('reserves tracking: a payer\'s forecast comes off as a forecast',
+    resNet[0].costForecast['26/27 Q3'] === 4000 && resNet[1].costForecast['26/27 Q4'] === undefined);
+  check('reserves tracking: each row keeps its full cost and who pays, a proposal not',
+    resNet[0].cover['26/27 Q3'].full === 9000 &&
+    resNet[0].cover['26/27 Q3'].by.map(function (b) { return b.source + ':' + b.amount; })
+      .join() === 'XXX_27_GRANT:5000' && resNet[1].cover['26/27 Q4'].by.length === 1);
+  check('reserves tracking: the paying sheets\' own rows are untouched',
+    netReservesTracking_(resTrk)[1].milestones[0].baseline['26/27 Q3'] === 4000 &&
+    resTrk[0].milestones[0].baseline['26/27 Q3'] === 9000);
+  var resPt = composeProjectTracking(netReservesTracking_(resTrk), [], 'General',
+    quarterSortNum('26/27 Q3'));
+  check('reserves tracking: the cell carries what to hover',
+    resPt.sources[0].milestones[0].byQ['26/27 Q3'].cost.cover.full === 9000);
+
+  // The plan from today: other sheets' spend so far on a Reserves milestone is spent of it.
+  var resPlanBudgets = [
+    resSrc(CONFIG.RESERVES_SOURCE, 'secured', {}, [resLine('XXX_27_CORE', 'General management',
+      '004', 'General', 2026, 10, 2027, 3, 12000)]),
+    resSrc('XXX_27_GRANT', 'secured', {}, [resLine('XXX_27_GRANT', 'General management', '005',
+      'General', 2026, 10, 2027, 3, 6000)])
+  ];
+  var resPlan = remainingPlan_(resPlanBudgets, [{ date: d(2026, 10, 15), kind: 'expense',
+    amount: 1000, fundingSource: 'XXX_27_GRANT', project: 'General', item: 'XXX_27_GRANT_005' },
+    { date: d(2026, 3, 15), kind: 'expense', amount: 700, fundingSource: 'XXX_27_GRANT',
+      project: 'General', item: 'XXX_27_GRANT_005' }], '2026-11');
+  // The paying sheet's own plan is its budget less all of its own spend, as before.
+  check('reserves plan: what is left is its full cost less every sheet\'s spend in its span',
+    Math.abs(rSum(resPlan[0].lines, 'cost', '2026-11') - 11000) < 0.01 &&
+    Math.abs(rSum(resPlan[1].lines, 'cost', '2026-11') - 4300) < 0.01);
+
   Logger.log(results.join('\n'));
   return results;
 }

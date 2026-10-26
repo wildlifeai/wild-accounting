@@ -107,6 +107,10 @@ const CONFIG = {
   },
   DEFAULT_PROJECT: 'Unallocated',
   GENERAL_PROJECT: 'General',
+  // The funding source holding the full cost of General's work, whoever pays it. A line on any
+  // other sheet tagged General, on a milestone of the same name, pays part of that cost, so it
+  // comes off this source (reservesOffsets_). Not the Reserves tab below, the money in hand.
+  RESERVES_SOURCE: 'Reserves',
 
   // ---- Chart of accounts ------------------------------------------------------
   // Balance-sheet / non-operational accounts excluded from spend + forecast. Matched on
