@@ -96,9 +96,12 @@ cards, then the chart.
    organisation's. The largest groups are named and the rest share an "Other" line. **Show as a
    table** lists every value the chart draws.
 
-Grouped by project, General's line includes the share of each project's income its
-`Contribution policy` sends to General to pay for overheads; the project's line keeps the rest.
-Grouped by milestone, those shares appear as lines named like `SPY_26_UOA (contribution)`.
+Grouped by project, General's line includes every project's margin: the income its funding
+sources pay for its work, less what the work costs, which is what pays for General. A project's
+line nets to zero over each source's life, dipping while it spends ahead of a tranche. Grouped
+by milestone, the margins appear as lines named like `SPY_26_UOA (margin)`; a source with no
+income for its project work, such as a cost General carries for a project, shows there as a
+negative margin.
 
 ## Where each number comes from
 
@@ -107,7 +110,7 @@ Grouped by milestone, those shares appear as lines named like `SPY_26_UOA (contr
 | Budget (Cost and Income per milestone) | The funding source's **`Budget` tab** | Budgets Drive |
 | Secured vs proposed | Which **folder** the budget sits in (`secured/` or `proposed/`) | Budgets Drive |
 | Which project a line counts toward | The **`Project` column** on the `Budget` tab; blank means the budget's own project folder | Budgets Drive |
-| General's overhead from other projects, the `(contribution)` rows | Each sheet's **`Contribution policy`**: `percent_of_income:40` sends 40% of that source's income to General | `Funding_info` tab |
+| General's income from other projects, the `(margin)` rows | Each source's **margin**: the income on its lines not tagged General less their cost, from actuals so far and what is left. Its **`Contribution policy`** is the margin it is expected to leave, which health check G1 holds it to | `Budget` and `Forecast` tabs, and Xero |
 | Actual spent and received | **Approved Xero transactions and the accountant's posted journals**, counted as Xero's P&L counts them, split by the *Projects* and *Funding source* tracking categories. A sheet marked `Income recognition: as spent` earns its income as it spends instead | Xero |
 | Milestone-level actuals | The **product/service** code on each Xero line (`WW_25_TOI_002` and so on) | Xero |
 | Quarterly forecasts | The funding source's own **`Forecast` tab** | Budgets Drive |
@@ -139,10 +142,9 @@ into each sheet by hand.
 Tick a **project**, or several. The tab shows every funding source with a milestone on them,
 each under its own heading with a 📄 link to its sheet and its own subtotals; click the heading
 to fold its milestones away and back. With several projects, a source's milestones from each
-sit under its one heading and each names its project. General also gathers the
-`(contribution)` rows from the projects that pay overhead into it, except from a project ticked
-beside it, whose own rows already hold that income. The ribbon narrows what is shown, in both
-views:
+sit under its one heading and each names its project. General also gathers the `(margin)` rows,
+under *Margins from other projects*, except from a project ticked beside it, whose own rows
+already hold that income. The ribbon narrows what is shown, in both views:
 
 - **View**: Actual and forecast, with its Cost / Income / Net measure, or Timeline, with its
   optional columns.

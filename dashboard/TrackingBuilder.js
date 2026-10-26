@@ -15,15 +15,15 @@
  * source with an unmaintained Forecast tab look certain to underspend. The rule lives in
  * forecastOrBaseline_ so health check D5 applies the same one.
  *
- * `tracking` is snapshot.tracking: [{ source, status, sheetUrl, contributionRate,
+ * `tracking` is snapshot.tracking: [{ source, status, sheetUrl, margin,
  *   milestones: [{ item, milestone, project, baseline:{q:n}, actual, incomeBaseline,
  *   incomeActual, costForecast, incomeForecast, forecastComment, actualOnly }] }].
  * `timeline` is snapshot.timeline: [{ project, milestone, segments: [{ source, start:
  *   'YYYY-MM', end }] }], which gives each bar its first and last quarter.
  */
 
-/** The heading General's inflow from the other projects' sources sits under. */
-const CONTRIBUTIONS_HEADING = 'Contributions from other projects';
+/** The heading General's margins from the other projects' sources sit under. */
+const MARGINS_HEADING = 'Margins from other projects';
 
 function composeProjectTracking(tracking, timeline, projects, currentQi) {
   // One project's name or several. Several share each funding source's heading, and each
@@ -62,22 +62,22 @@ function composeProjectTracking(tracking, timeline, projects, currentQi) {
     });
   });
 
-  // General's inflow from the other projects' sources, by each one's Contribution policy,
-  // under a heading of its own. Each row keeps its source's status, since that is what
-  // says whether the money is secured. A project shown alongside already has that income
-  // in full on its own rows, so its share is left out rather than counted twice.
+  // General's margins from the other projects' sources (marginRule_), under a heading of
+  // its own. Each row keeps its source's status, since that is what says whether the money
+  // is secured. A project shown alongside already has that money in full on its own rows,
+  // so its margin is left out rather than counted twice.
   if (shown[CONFIG.GENERAL_PROJECT]) {
     const statusOf = {};
     (tracking || []).forEach(t => (statusOf[t.source] = t.status || null));
-    const rows = contributionMilestones_(tracking, shown).map(m => {
+    const rows = marginMilestones_(tracking, shown).map(m => {
       const row = milestoneRow_(m, span[spanKey(m.project, m.source, m.milestone)],
         currentQi, qis);
       row.status = statusOf[m.source];
       return row;
     });
     if (rows.length) {
-      sources.push({ source: CONTRIBUTIONS_HEADING, status: null, sheetUrl: null,
-        contributions: true, milestones: rows });
+      sources.push({ source: MARGINS_HEADING, status: null, sheetUrl: null,
+        margins: true, milestones: rows });
     }
   }
 

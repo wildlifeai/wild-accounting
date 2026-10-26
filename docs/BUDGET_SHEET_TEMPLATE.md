@@ -84,7 +84,7 @@ which `parseBudgetFile_` reads as a fallback. Where both exist, `Funding_info` w
 | `Funder` | yes | The organisation. Free text; for reporting and for spotting two applications to the same funder. |
 | `Status` | no | Optional, and better left out. The `secured/` or `proposed/` folder the sheet sits in **is** the status, and the cockpit trusts the folder over this field. A second copy can only agree, which adds nothing, or disagree, which is C2. Keep it and it must match the folder. |
 | `Funding start` / `Funding end` | yes | The grant period. `Funding end` is what lets the cockpit flag actuals still landing against a finished grant. |
-| `Contribution policy` | yes | How much of this source's income funds `General`. One of `none`, `percent_of_income:<n>`, `per_line`. See below. |
+| `Contribution policy` | yes | The margin this source is expected to leave for `General`. One of `none`, `percent_of_income:<n>`, `per_line`. See below. |
 | `Amount requested` | yes | GST-exclusive total sought. |
 | `Amount secured` | proposed: `0` | GST-exclusive total confirmed. |
 | `Decision date` | proposed only | When the funder decides. Blank for secured. Funders ask for this on application forms. |
@@ -99,22 +99,26 @@ which `parseBudgetFile_` reads as a fallback. Where both exist, `Funding_info` w
 
 ### `Contribution policy`
 
-This replaces hand-computing overheads each quarter and writing the split as prose into a Comments
-cell, which nothing could read and which drifted from the project budgets.
+General takes each source's whole margin, whatever the policy says: the income on its lines not
+already on General, less their cost, from actuals so far and what is left, landing with the
+income at the source's margin rate. It shows as a `<source> (margin)` row under General, and the
+project keeps what its work costs. A source with no income for its project lines passes their
+cost to General instead. The policy states the margin the source is expected to leave, so a
+budget priced away from it is caught.
 
 | Value | Meaning |
 |---|---|
-| `none` | Project-specific grant that disallows overheads. Contributes nothing to General. |
-| `percent_of_income:40` | 40% of the income on this source's lines that are not already on General funds General. The cockpit derives the amount and shows it as a `<source> (contribution)` row under General. `n` runs 0 to 100. |
-| `per_line` | The split is expressed per budget line via the `Project` column, used where some lines are General work and others are project work (for example `WW_25_TOI`). Nothing further is derived: those lines are General's already. |
+| `none` | Project-specific grant that disallows overheads: no margin is expected. |
+| `percent_of_income:40` | 40% of the income on this source's lines that are not already on General is expected to be margin. `n` runs 0 to 100. |
+| `per_line` | General's work is expressed per budget line via the `Project` column, used where some lines are General work and others are project work (for example `WW_25_TOI`). Those lines are General's already; a margin on the others still goes to General. |
 
 The margin a budget actually leaves need not match the policy exactly: health check G1 allows ten
 points either side, on the budget and on actual spend, so a 40% policy is satisfied by anything
 from 30 to 50.
 
 **Delete any negative-cost "Overheads from projects" lines in a General budget.** They are a
-hand-maintained copy of the derived number, and now that the cockpit derives it, keeping them
-counts General's overhead twice.
+hand-maintained copy of the margin, and now that the cockpit moves it, keeping them counts
+General's income twice.
 
 ## `Budget` tab
 
@@ -152,7 +156,7 @@ Product management    | 01/Jul/26 | 30/Jun/27 | 12000 | 20000 | 8000  | Product 
 | `Start`, `End` | **yes** | A line with either unparseable is **silently skipped**. Use `DD/MMM/YY`. Check the year: `30/Jun/01` parses as 2001, and a line whose End precedes its Start is dropped. |
 | `Cost` | **yes** | GST-exclusive. Use `0`, not blank. |
 | `Income` | yes | GST-exclusive. A line where `Cost` and `Income` are both `0` is **silently skipped**. |
-| `Contribution` | optional | `Income − Cost`, the sheet's own arithmetic, checked by B5. What General receives is decided by the `Contribution policy`, not by this column. **Derived when the column is absent.** |
+| `Contribution` | optional | `Income − Cost`, the sheet's own arithmetic, checked by B5. What General receives is worked out from `Income` and `Cost`, not read from this column. **Derived when the column is absent.** |
 | `Milestone` | **yes** | The grouping key for the Overview breakdown, the tracking-grid row label and a filter dimension. Blank collapses the source into one `(unassigned)` group. |
 | `Xero Inventory Item` | yes | The `{SOURCE}_{NNN}` product/service code, for example `WW_25_TOI_002`. This is the milestone dimension; without it a line falls out of the Project tracking grid. |
 | `Project` | yes (column) | Per-line override, so one funding source can book some lines to General and the rest to its own project. Blank means "use the `Project` metadata value". The column must exist even if every cell is blank. |

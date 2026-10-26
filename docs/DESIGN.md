@@ -67,7 +67,7 @@ means "does it answer these".
 | # | What | Freq | Persona | Source of truth | Today |
 |---|---|---|---|---|---|
 | 1 | Forecast reported to Board | Q | Board | Cockpit: secured + weighted pipeline, frozen | Runway on the Overview on secured, weighted and all-proposed money, and a gap after pipeline. **Freezing does not exist**: the snapshot is overwritten every 6 hours, so August's figure is gone by November |
-| 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | Exists. General's overhead is derived from each sheet's `Contribution policy`, the same way in every view |
+| 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | Exists. General takes each source's whole margin, the same way in every view |
 | 3 | P&L (income and expenses) | Q | Board | Xero | Approved bank transactions, invoices and bills, and posted manual journals, counted as Xero's P&L counts them. Payroll posts as Xero Payroll bills and reaches the cockpit; milestone grain depends on each line carrying an item code, which D3 reports |
 | 4 | Working capital balance and forecast | Q | Board, Treasurer | Xero balance sheet + deferred grants | **Absent.** Needs a Xero scope the cockpit does not hold |
 | 5 | Bill payments | M | Bookkeeper | Xero | Native Xero. Deliberately out of scope |
@@ -216,6 +216,16 @@ Ranked by how badly they hurt the persona who depends on them:
   The walk still runs from the first budgeted month, so each line opens at its true position
   and its label still names the month it goes short, even after the years shown. The
   combined-years option went with the selector.
+- **2026-10-25: General takes each source's whole margin.** Taking the policy's share of
+  income left the rest of a margin, or an overrun, on the project, so what General had
+  depended on how each sheet was priced against its policy, and a cost General carries for a
+  project sat on that project with nothing paying it. Now the income on a source's lines not
+  already General's, less their cost, is General's: from the plan, actuals so far and what is
+  left, and landing with the income at the source's margin rate, so a project still shows its
+  spend running ahead of a tranche. A source with no such income passes its cost instead.
+  Every project nets to zero over a source's life, and General is the one pot. The policy is
+  the margin G1 expects. Published figures move: General gains where a margin beats its
+  policy and loses where it falls short; organisation totals and runway do not.
 
 ## History
 

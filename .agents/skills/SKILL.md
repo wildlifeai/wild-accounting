@@ -181,7 +181,7 @@ figure is right, which is what the next invariant is for.
 
 Ship each as its own commit, never inside an unrelated refactor, and say what moves and by how
 much before it ships. When the figures live in the sheets rather than the code, measure them
-first: `reportContributions()` in `Probe.js` is the model, a read-only dry run shipped before the
+first: `reportMargins()` in `Probe.js` is the model, a read-only dry run shipped before the
 change it measures, run from the editor, whose output states the move.
 
 The figures themselves go in the conversation and in `wildlife-ai-management`, **never in a
@@ -190,7 +190,7 @@ commit message or a PR description**: this repository is public (see `AGENTS.md`
 Examples of changes that moved numbers, all correct: removing `Math.abs()` from `normaliseLine_`,
 so credit notes reduce spend; wiring up `EXCLUDED_ACCOUNTS`; counting only approved Xero
 documents; removing an archived source's actuals from organisation totals; deriving General's
-overhead from each sheet's `Contribution policy`.
+overhead from each sheet's `Contribution policy`, and later moving each source's whole margin.
 
 ---
 
@@ -337,18 +337,20 @@ categories, and that none carried an item code. The rules the reader follows:
 > invoice identifiers into tracked files, including examples and test fixtures. Describe the shape
 > of a problem and invent the numbers.
 
-## Overhead / General contribution
+## Overhead / General's margins
 
-Projects contribute a share of their income to `General` at the rate each funding source declares
-in its `Contribution policy`. The rates live in each sheet's `Funding_info`, not here, because a
-list copied into this file drifts from the sheets: `reportContributions()` prints the current ones.
+Every funding source's whole margin goes to `General`: the income on its lines not already on
+General, less their cost, over the plan (actuals so far and what is left). It lands with the
+income at the source's margin rate; a source with no such income passes its cost instead. The
+margins live in each sheet, not here, because a list copied into this file drifts from the
+sheets: `reportMargins()` prints the current ones, beside what each policy expects.
 
-`contributionRate_` and `lineContribution_` in `Aggregator.js` are the one statement of the rule,
-used by the Overview, the timeline, General's tracking view and G1.
-`percent_of_income` takes its share from lines not already on General; `per_line` and `none`
-derive nothing. Organisation totals and runway do not move; only the split between projects does.
+`marginRule_` and `lineMargin_` in `Aggregator.js` are the one statement of the rule, used by the
+Overview, the runway, the timeline and General's tracking view (`marginMilestones_`).
+Organisation totals and runway do not move; only the split between projects does.
 
-G1 checks a source's actual margin against its policy with ten points either side
+The `Contribution policy` is the margin a source is expected to leave, read by
+`contributionRate_`. G1 checks a source's margin against it with ten points either side
 (`CONTRIBUTION_TOLERANCE`). It deliberately does not read the `Forecast` tab.
 
 Any negative-cost "Overheads from projects" lines left in a General budget count the overhead

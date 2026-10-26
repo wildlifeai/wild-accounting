@@ -12,9 +12,8 @@
  * Project-level attribution of a funding source's expense uses each project's
  * day-weighted share of that source's operating expense, and the rollup allocates income
  * by the same share; the Overview breakdown credits income to each line's own project.
- * General's overhead is derived from each source's Contribution policy, see
- * contributionRate_. Actuals come pre-split by Xero's Projects tracking category, so
- * actual numbers are exact, not approximated.
+ * Each source's margin is General's, see marginRule_. Actuals come pre-split by Xero's
+ * Projects tracking category, so actual numbers are exact, not approximated.
  */
 
 /**
@@ -44,12 +43,11 @@ function isArchivedSource_(name) {
 }
 
 /**
- * Share of a funding source's income that funds General, from its Contribution policy.
+ * The share of a funding source's income its Contribution policy expects to fund General.
  *
- * Only percent_of_income derives anything. A per_line source already puts its General
- * work on General line by line, through the Project column, so deriving on top would
- * count it twice. None contributes nothing, and neither does a missing or unreadable
- * policy: C6 reports those, and guessing a rate would move money on a typo.
+ * Since 2026-10-25 this moves no money: General takes each source's whole margin
+ * (marginRule_), and the policy is the margin G1 expects. Only percent_of_income states a
+ * rate. None states none, and so does a missing or unreadable policy: C6 reports those.
  */
 function contributionRate_(src) {
   const raw = clean_(((src && src.metadata) || {})['contribution policy'] || '');
@@ -59,15 +57,56 @@ function contributionRate_(src) {
   return pct > 0 && pct <= 100 ? pct / 100 : 0;
 }
 
-/** The part of one budget line's income owed to General: none if the line is General's. */
-function lineContribution_(line, rate) {
-  if (!rate || !line) return 0;
-  if ((line.project || CONFIG.DEFAULT_PROJECT) === CONFIG.GENERAL_PROJECT) return 0;
-  return (Number(line.income) || 0) * rate;
+/** A line of General's own work, whichever sheet it is on. */
+function isGeneralLine_(l) {
+  return (l.project || CONFIG.DEFAULT_PROJECT) === CONFIG.GENERAL_PROJECT;
 }
 
-/** The milestone General's inflow from one source appears under, in every view. */
-function contributionMilestone_(sourceName) { return sourceName + ' (contribution)'; }
+/**
+ * How a source's margin reaches General: all of it, so every project nets to zero over a
+ * source's life, and General keeps what the work leaves or covers what it overruns.
+ *
+ * The margin is the income on the source's lines not already General's, less their cost,
+ * over the lines given: the plan, actuals to date and what is left, so it follows the work
+ * as it turns out. It lands with the income, at the source's margin rate, so a project
+ * still shows its spend running ahead of a tranche. A source with no such income has
+ * nothing for it to ride on, so its loss lands with its cost instead. Null when there is
+ * nothing to move.
+ */
+function marginRule_(src) {
+  let income = 0, cost = 0;
+  ((src && src.lines) || []).forEach(l => {
+    if (isGeneralLine_(l)) return;
+    income += Number(l.income) || 0;
+    cost += Number(l.cost) || 0;
+  });
+  if (income > 0) return Math.abs(income - cost) < 0.005 ? null : { rate: (income - cost) / income };
+  return cost ? { byCost: true } : null;
+}
+
+/** One line's margin to General, month by month: nothing for a line already General's. */
+function lineMargin_(line, rule) {
+  if (!rule || !line || isGeneralLine_(line)) return {};
+  return rule.byCost ? scaleMap_(distributeByMonth_([line], 'cost'), -1)
+    : scaleMap_(distributeByMonth_([line], 'income'), rule.rate);
+}
+
+/** Every source's margin rule, by name, from the plan, for the views that are not given it. */
+function marginRules_(budgets) {
+  const out = {};
+  (budgets || []).forEach(src => { out[src.name] = marginRule_(src); });
+  return out;
+}
+
+/** The milestone General's margin from one source appears under, in every view. */
+function marginMilestone_(sourceName) { return sourceName + ' (margin)'; }
+
+/** A map less another, key by key. */
+function lessMap_(map, minus) {
+  const out = Object.assign({}, map);
+  Object.keys(minus || {}).forEach(k => { out[k] = (out[k] || 0) - minus[k]; });
+  return out;
+}
 
 /**
  * A sheet's Income recognition, normalised: 'as spent', 'as invoiced' (also the blank
@@ -147,17 +186,21 @@ function earnedActuals_(actualLines, budgets) {
 }
 
 /**
- * What deriving contribution moves between projects, per source and per (status,
- * project), without changing anything. The Overview credits income to each line's own
- * project, so this does the same: a dry run reports what the breakdown will show.
+ * What moving each source's margin to General moves between projects, per source and per
+ * (status, project), without changing anything, beside what its Contribution policy
+ * expects. The Overview credits income to each line's own project, so this does the same:
+ * a dry run reports what the breakdown will show.
  */
-function contributionMoves_(budgets) {
+function marginMoves_(budgets) {
   const sources = [], moves = {};
+  const total = m => Object.keys(m).reduce((t, k) => t + m[k], 0);
   (budgets || []).forEach(src => {
+    const rule = marginRule_(src);
     const rate = contributionRate_(src);
-    let toGeneral = 0;
+    let toGeneral = 0, policyShare = 0;
     (src.lines || []).forEach(l => {
-      const c = lineContribution_(l, rate);
+      if (!isGeneralLine_(l)) policyShare += (Number(l.income) || 0) * rate;
+      const c = total(lineMargin_(l, rule));
       if (!c) return;
       toGeneral += c;
       const from = src.status + '||' + (l.project || CONFIG.DEFAULT_PROJECT);
@@ -165,7 +208,8 @@ function contributionMoves_(budgets) {
       moves[from] = (moves[from] || 0) - c;
       moves[to] = (moves[to] || 0) + c;
     });
-    sources.push({ name: src.name, status: src.status, rate: rate, toGeneral: toGeneral,
+    sources.push({ name: src.name, status: src.status, rule: rule, toGeneral: toGeneral,
+      policyShare: policyShare,
       policy: clean_(((src.metadata) || {})['contribution policy'] || '') });
   });
   return { sources: sources, moves: moves };
@@ -270,7 +314,7 @@ function buildSnapshot() {
   // Project tracking grid (baseline + actual per funding source / milestone /
   // quarter). Forecast is layered on at view time from the live Forecast sheet,
   // so GM edits show immediately without a full refresh.
-  const tracking = buildTracking_(judged, actualLines);
+  const tracking = buildTracking_(judged, actualLines, marginRules_(planned));
 
   // Project tracking timeline: the months each milestone's funding runs, by source.
   const timeline = buildTimeline_(planned);
@@ -476,8 +520,12 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
     const expenseFY = sumMonthsInFY_(fc.expenseByMonth, fy);
     const incomeFY = sumMonthsInFY_(fc.incomeByMonth, fy);
 
-    // The share of this source's income its Contribution policy sends to General.
-    const rate = contributionRate_(src);
+    // This source's margin, which is General's: see marginRule_.
+    const rule = marginRule_(src);
+    const margin = {};
+    src.lines.forEach(l => addInto_(margin, lineMargin_(l, rule)));
+    const marginTotal = Object.keys(margin).reduce((t, k) => t + margin[k], 0);
+    const marginFY = sumMonthsInFY_(margin, fy);
 
     // Income into a project's rollup, in every form the rollup keeps. Expected income:
     // secured counts in full, proposed at its stated probability. A proposed source with
@@ -497,20 +545,22 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
     };
 
     // Project-level rollups, for the org totals and a project lead's totals. Income
-    // follows the cost share, and the policy's share of it is General's.
+    // follows the cost share, and the margin moves from the other projects to General, each
+    // giving up its part by its share of the cost off General.
+    const otherShare = Object.keys(shares).reduce((t, pName) =>
+      pName === CONFIG.GENERAL_PROJECT ? t : t + shares[pName], 0);
     Object.keys(shares).forEach(pName => {
       const share = shares[pName];
       const p = project_(pName);
-      const toGeneral = pName === CONFIG.GENERAL_PROJECT ? 0 : rate;
-      const incTotal = fc.totalBudgetIncome * share;
-      const incFY = incomeFY * share;
+      const out = pName === CONFIG.GENERAL_PROJECT || !otherShare ? 0 : share / otherShare;
       p.proposedBudget += fc.totalBudgetExpense * share * costFactor;
       p.proposedBudgetFY += expenseFY * share * costFactor;
-      creditIncome(p, incTotal * (1 - toGeneral), incFY * (1 - toGeneral));
-      if (toGeneral) {
-        creditIncome(project_(CONFIG.GENERAL_PROJECT), incTotal * toGeneral, incFY * toGeneral);
-      }
+      creditIncome(p, fc.totalBudgetIncome * share - marginTotal * out,
+        incomeFY * share - marginFY * out);
     });
+    if (marginTotal || marginFY) {
+      creditIncome(project_(CONFIG.GENERAL_PROJECT), marginTotal, marginFY);
+    }
 
     // Build budgetByKey at (project, source, milestone) granularity.
     // Each budget line carries its own cost, income, milestone, and project.
@@ -527,7 +577,6 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
       const lineCostByMonth = distributeByMonth_([l], 'cost');
       const lineIncByMonth = distributeByMonth_([l], 'income');
       const lineCostFY = sumMonthsInFY_(lineCostByMonth, fy);
-      const lineIncFY = sumMonthsInFY_(lineIncByMonth, fy);
 
       const entry = budgetByKey[bkey] || (budgetByKey[bkey] = newBudgetEntry_(src.status));
       // costFactor is 0 when a competing application in the same exclusivity group carries
@@ -546,16 +595,15 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
           costFactor * (probability || 0)));
       }
 
-      // The policy's share of this line's income is General's, and shows under General as
-      // this source's contribution; the project keeps the rest. lineContribution_ is what
-      // the dry run used, so what it reported is what this does.
-      const toGeneral = lineContribution_(l, rate) ? rate : 0;
-      creditLineIncome_(entry, l, lineIncByMonth, lineIncFY, probability, 1 - toGeneral);
-      if (toGeneral) {
-        const gkey = CONFIG.GENERAL_PROJECT + '||' + src.name + '||' +
-          contributionMilestone_(src.name);
+      // The margin on this line is General's, and shows under General as this source's
+      // margin; the project keeps the rest of the line's income. lineMargin_ is what the dry
+      // run uses, so what it reports is what this does.
+      const lineToGeneral = lineMargin_(l, rule);
+      creditLineIncome_(entry, l, lessMap_(lineIncByMonth, lineToGeneral), fy, probability);
+      if (Object.keys(lineToGeneral).length) {
+        const gkey = CONFIG.GENERAL_PROJECT + '||' + src.name + '||' + marginMilestone_(src.name);
         const g = budgetByKey[gkey] || (budgetByKey[gkey] = newBudgetEntry_(src.status));
-        creditLineIncome_(g, l, lineIncByMonth, lineIncFY, probability, toGeneral);
+        creditLineIncome_(g, l, lineToGeneral, fy, probability);
       }
 
       if (!entry.comment && code && src.forecast && src.forecast.comments) {
@@ -591,14 +639,14 @@ function newBudgetEntry_(status) {
 }
 
 /**
- * Credit `share` of one budget line's income to an entry, in every form it keeps: total,
- * this FY, by quarter, and expected. One function, so the part a project keeps and the
- * part General receives cannot be computed two different ways.
+ * Credit income from one budget line, month by month, to an entry, in every form it keeps:
+ * total, this FY, by quarter, and expected. One function, so the part a project keeps and
+ * the part General receives cannot be computed two different ways.
  */
-function creditLineIncome_(entry, l, lineIncByMonth, lineIncFY, probability, share) {
-  const byQ = scaleMap_(bucketToQuarters(lineIncByMonth), share);
-  entry.income += l.income * share;
-  entry.incomeFY += lineIncFY * share;
+function creditLineIncome_(entry, l, incByMonth, fy, probability) {
+  const byQ = bucketToQuarters(incByMonth);
+  entry.income += Object.keys(incByMonth).reduce((t, k) => t + incByMonth[k], 0);
+  entry.incomeFY += sumMonthsInFY_(incByMonth, fy);
   addInto_(entry.incomeByQ, byQ);
   if (probability !== null) addInto_(entry.weightedByQ, scaleMap_(byQ, probability));
   if (l.start && (!entry.start || l.start < new Date(entry.start)))
@@ -750,18 +798,15 @@ function buildTimeline_(budgets) {
     });
   });
 
-  // General's contribution: one row per contributing source, running the months the
-  // policy's share of that source's income falls in, from lines not already on General.
+  // General's margins: one row per source with one, running the months its margin lands
+  // in, from lines not already on General.
   budgets.forEach(src => {
-    const rate = contributionRate_(src);
-    if (!rate) return;
+    const rule = marginRule_(src);
     const monthly = {};
-    src.lines.forEach(l => {
-      if (lineContribution_(l, rate)) addInto_(monthly, distributeByMonth_([l], 'income'));
-    });
-    const months = Object.keys(monthly).sort();
+    src.lines.forEach(l => addInto_(monthly, lineMargin_(l, rule)));
+    const months = Object.keys(monthly).filter(k => monthly[k]).sort();
     if (!months.length) return;
-    const mile = contributionMilestone_(src.name);
+    const mile = marginMilestone_(src.name);
     byProjMile[CONFIG.GENERAL_PROJECT + '||' + mile] = {
       project: CONFIG.GENERAL_PROJECT, milestone: mile,
       segments: [{ source: src.name, status: src.status, start: months[0],
@@ -831,11 +876,10 @@ function buildRunway_(budgets, actualLines, now, exclusivityReps, itemToMileston
  * The runway's building blocks: one part per project, funding source and milestone, with
  * its budgeted cost and income and its Xero actual cost and income, month by month.
  *
- * Income is split the way the Overview's cards split it. A source's Contribution policy
- * moves its share of each non-General line's income to a "(contribution)" part under
- * General, and the same share of that source's actual income, so a project's line does not
- * jump at today. A source whose exclusivity group another source carries has no cost here,
- * as in the org totals.
+ * Income is split the way the Overview's cards split it. A source's margin (marginRule_)
+ * moves from each non-General line to a "(margin)" part under General, and from that
+ * source's actuals by the same rule, so a project's line does not jump at today. A source
+ * whose exclusivity group another source carries has no cost here, as in the org totals.
  */
 function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
   const parts = {};
@@ -853,20 +897,19 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
     // A proposed source with no Probability counts nothing towards expected income rather
     // than being guessed at, exactly as in the org totals. G2 asks for the number.
     const probability = sourceProbability_(src.status, src.metadata);
-    const rate = contributionRate_(src);
+    const rule = marginRule_(src);
     const ifFunded = costIfFunded_(src);
-    bySource[src.name] = { status: src.status, probability: probability, rate: rate };
+    bySource[src.name] = { status: src.status, probability: probability, rule: rule };
     (src.lines || []).forEach(l => {
       const p = part(l.project || CONFIG.DEFAULT_PROJECT, src.name,
         l.milestone || '(unassigned)', src.status, probability);
       if (ifFunded) p.ifFunded = true;
       addInto_(p.cost, scaleMap_(distributeByMonth_([l], 'cost'), carriesCost ? 1 : 0));
-      const income = distributeByMonth_([l], 'income');
-      const share = lineContribution_(l, rate) ? rate : 0;
-      addInto_(p.income, scaleMap_(income, 1 - share));
-      if (share) {
-        addInto_(part(CONFIG.GENERAL_PROJECT, src.name, contributionMilestone_(src.name),
-          src.status, probability).income, scaleMap_(income, share));
+      const margin = lineMargin_(l, rule);
+      addInto_(p.income, lessMap_(distributeByMonth_([l], 'income'), margin));
+      if (Object.keys(margin).length) {
+        addInto_(part(CONFIG.GENERAL_PROJECT, src.name, marginMilestone_(src.name),
+          src.status, probability).income, margin);
       }
     });
   });
@@ -878,23 +921,21 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
     const fs = l.fundingSource || '(unassigned)';
     // Money already spent or received is real whatever its sheet says, so a tag with no
     // sheet counts as secured.
-    const s = bySource[fs] || { status: 'secured', probability: 1, rate: 0 };
+    const s = bySource[fs] || { status: 'secured', probability: 1, rule: null };
     const code = itemCode_(l.item);
     const mile = (code && (itemToMilestone || {})[fs + '||' + code]) || '(unassigned)';
     const key = DateMath.monthKey(new Date(l.date));
     const amount = Number(l.amount) || 0;
     const p = part(l.project, fs, mile, s.status, s.probability);
-    if (l.kind === 'expense') {
-      p.actualCost[key] = (p.actualCost[key] || 0) + amount;
-      return;
-    }
-    const share = s.rate && l.project !== CONFIG.GENERAL_PROJECT ? s.rate : 0;
-    p.actualIncome[key] = (p.actualIncome[key] || 0) + amount * (1 - share);
-    if (share) {
-      const g = part(CONFIG.GENERAL_PROJECT, fs, contributionMilestone_(fs), s.status,
-        s.probability);
-      g.actualIncome[key] = (g.actualIncome[key] || 0) + amount * share;
-    }
+    if (l.kind === 'expense') p.actualCost[key] = (p.actualCost[key] || 0) + amount;
+    else p.actualIncome[key] = (p.actualIncome[key] || 0) + amount;
+    // The margin on what was actually spent and received, by the plan's rule.
+    const rule = l.project === CONFIG.GENERAL_PROJECT ? null : s.rule;
+    if (!rule || !!rule.byCost !== (l.kind === 'expense')) return;
+    const toGeneral = rule.byCost ? -amount : amount * rule.rate;
+    p.actualIncome[key] = (p.actualIncome[key] || 0) - toGeneral;
+    const g = part(CONFIG.GENERAL_PROJECT, fs, marginMilestone_(fs), s.status, s.probability);
+    g.actualIncome[key] = (g.actualIncome[key] || 0) + toGeneral;
   });
 
   return Object.keys(parts).map(k => parts[k]);
@@ -1044,8 +1085,10 @@ function runwayWalk_(parts, nowKey, months, reserves) {
  * Per funding source: baseline (frozen budget) and actual (from Xero) spend,
  * bucketed by milestone (item code) and quarter. Returns an array ready for the
  * quarterly tracking screen; the live forecast layer is merged in WebApp/UI.
+ * `margins` is each source's marginRule_ from the plan, by name (marginRules_), since the
+ * sheets given here are the Budget tab's own lines.
  */
-function buildTracking_(budgets, actualLines) {
+function buildTracking_(budgets, actualLines, margins) {
   // A source's grid starts where the source does. A Xero option can be renamed onto a new
   // source part way through a year (General became GEN_27_CORE), and the history it brings
   // would otherwise fill the Before column and the totals. Runway and the Overview keep it.
@@ -1138,8 +1181,8 @@ function buildTracking_(budgets, actualLines) {
     const quarters = Object.keys(quarterSet).sort((a, b) => quarterSortNum(a) - quarterSortNum(b));
     return { source: src.name, status: src.status, project: src.projectFolder,
       quarters: quarters, milestones: milestones, sheetUrl: src.sheetUrl || null,
-      // So General's tracking view can show its contribution by the same policy.
-      contributionRate: contributionRate_(src) };
+      // So General's tracking view can show its margin by the same rule.
+      margin: (margins || {})[src.name] || null };
   });
 }
 
@@ -1222,7 +1265,7 @@ function isoOrNull_(d) { return d ? d.toISOString() : null; }
  *
  * The gap is taken on the totals, not summed from each row's gap. Each row's gap is
  * floored at zero, so summing them let no project's surplus offset another's shortfall.
- * Once General receives its contribution it can end a period in surplus, and summed
+ * Once General receives the margins it can end a period in surplus, and summed
  * gaps would then report the organisation short of money that its own figures show it has.
  */
 function orgTotals_(rows) {
