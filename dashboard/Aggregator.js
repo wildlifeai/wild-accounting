@@ -739,11 +739,13 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
       // margin; the project keeps the rest of the line's income. lineMargin_ is what the dry
       // run uses, so what it reports is what this does.
       const lineToGeneral = lineMargin_(l, rule);
-      creditLineIncome_(entry, l, lessMap_(lineIncByMonth, lineToGeneral), fy, probability);
+      const moved = Object.keys(lineToGeneral).reduce((t, k) => t + lineToGeneral[k], 0);
+      creditLineIncome_(entry, l, lessMap_(lineIncByMonth, lineToGeneral),
+        (Number(l.income) || 0) - moved, fy, probability);
       if (Object.keys(lineToGeneral).length) {
         const gkey = CONFIG.GENERAL_PROJECT + '||' + src.name + '||' + marginMilestone_(src.name);
         const g = budgetByKey[gkey] || (budgetByKey[gkey] = newBudgetEntry_(src.status));
-        creditLineIncome_(g, l, lineToGeneral, fy, probability);
+        creditLineIncome_(g, l, lineToGeneral, moved, fy, probability);
       }
 
       if (!entry.comment && code && src.forecast && src.forecast.comments) {
@@ -780,13 +782,14 @@ function newBudgetEntry_(status) {
 }
 
 /**
- * Credit income from one budget line, month by month, to an entry, in every form it keeps:
- * total, this FY, by quarter, and expected. One function, so the part a project keeps and
- * the part General receives cannot be computed two different ways.
+ * Credit income from one budget line to an entry, in every form it keeps: `total`, and from
+ * `incByMonth` this FY, by quarter, and expected. One function, so the part a project keeps
+ * and the part General receives cannot be computed two different ways. The total is passed
+ * rather than summed from the months, which day-weighting leaves a fraction of a cent off.
  */
-function creditLineIncome_(entry, l, incByMonth, fy, probability) {
+function creditLineIncome_(entry, l, incByMonth, total, fy, probability) {
   const byQ = bucketToQuarters(incByMonth);
-  entry.income += Object.keys(incByMonth).reduce((t, k) => t + incByMonth[k], 0);
+  entry.income += total;
   entry.incomeFY += sumMonthsInFY_(incByMonth, fy);
   addInto_(entry.incomeByQ, byQ);
   if (probability !== null) addInto_(entry.weightedByQ, scaleMap_(byQ, probability));
