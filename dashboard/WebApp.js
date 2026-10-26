@@ -207,43 +207,49 @@ function addMaps_(target, source) {
 }
 
 /**
- * General's contribution rows for Project tracking: per source, its policy's share of the
- * income on milestones not already General's, nor on a project in `skip` (a set of names:
- * those shown beside General, whose rows already carry that income). Income layers only,
- * because a contribution is income to General, not spend. Pure over the tracking entries,
- * so it can be tested.
+ * General's margin rows for Project tracking: per source, by its margin rule
+ * (marginRule_), its margin on milestones not already General's, nor on a project in
+ * `skip` (a set of names: those shown beside General, whose rows already carry that
+ * money). The margin rate's share of their income, or, for a source with no income on
+ * them, their cost as a loss. Income layers only, because a margin is income to General,
+ * not spend. Pure over the tracking entries, so it can be tested.
  */
-function contributionMilestones_(tracking, skip) {
+function marginMilestones_(tracking, skip) {
   var out = [];
   (tracking || []).forEach(function (t) {
-    var rate = t.contributionRate || 0;
-    if (!rate) return;
+    var rule = t.margin;
+    if (!rule) return;
     var items = (t.milestones || []).filter(function (m) {
       return m.project !== CONFIG.GENERAL_PROJECT && !(skip && skip[m.project]);
     });
-    var incBase = {}, incAct = {}, incFc = {}, fcQuarters = {};
+    // The income layers carry the margin, or the cost layers the loss.
+    var layer = rule.byCost ? ['baseline', 'actual', 'costForecast']
+      : ['incomeBaseline', 'incomeActual', 'incomeForecast'];
+    var base = {}, act = {}, fc = {}, fcQuarters = {};
     items.forEach(function (m) {
-      addMaps_(incBase, m.incomeBaseline);
-      addMaps_(incAct, m.incomeActual);
-      Object.keys(m.incomeForecast || {}).forEach(function (q) { fcQuarters[q] = true; });
+      addMaps_(base, m[layer[0]]);
+      addMaps_(act, m[layer[1]]);
+      Object.keys(m[layer[2]] || {}).forEach(function (q) { fcQuarters[q] = true; });
     });
-    // Where any milestone has an income forecast, the row's figure is each milestone's own
+    // Where any milestone has a forecast, the row's figure is each milestone's own
     // forecastOrBaseline_, summed. Summing the entries alone would let one milestone's
     // forecast erase another's budget for that quarter.
     Object.keys(fcQuarters).forEach(function (q) {
-      incFc[q] = items.reduce(function (s, m) {
-        return s + forecastOrBaseline_(m.incomeForecast, m.incomeBaseline, q);
+      fc[q] = items.reduce(function (s, m) {
+        return s + forecastOrBaseline_(m[layer[2]], m[layer[0]], q);
       }, 0);
     });
-    if (!Object.keys(incBase).length && !Object.keys(incAct).length &&
-        !Object.keys(incFc).length) return;
-    var share = function (map) { return roundMapValues_(scaleMap_(map, rate)); };
+    if (!Object.keys(base).length && !Object.keys(act).length &&
+        !Object.keys(fc).length) return;
+    var share = function (map) {
+      return roundMapValues_(scaleMap_(map, rule.byCost ? -1 : rule.rate));
+    };
     out.push({
-      item: t.source + '_contrib', milestone: contributionMilestone_(t.source),
+      item: t.source + '_margin', milestone: marginMilestone_(t.source),
       source: t.source, project: CONFIG.GENERAL_PROJECT,
       baseline: {}, actual: {}, costForecast: {},
-      incomeBaseline: share(incBase), incomeActual: share(incAct),
-      incomeForecast: share(incFc), forecastComment: ''
+      incomeBaseline: share(base), incomeActual: share(act),
+      incomeForecast: share(fc), forecastComment: ''
     });
   });
   return out;

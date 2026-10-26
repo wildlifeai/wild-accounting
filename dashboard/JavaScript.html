@@ -1135,14 +1135,25 @@
     var cost = c ? c.cost : none, inc = c ? c.income : none;
     function one(x) {
       return { budget: x.budget, actual: x.actual, hasForecast: x.forecast !== null,
-        forecast: x.forecast === null ? x.budget : x.forecast, effective: x.effective };
+        forecast: x.forecast === null ? x.budget : x.forecast, effective: x.effective,
+        cover: x.cover || null };
     }
     if (measure === 'cost') return one(cost);
     if (measure === 'income') return one(inc);
     var a = one(inc), b = one(cost);
     return { budget: a.budget - b.budget, actual: a.actual - b.actual,
       hasForecast: a.hasForecast || b.hasForecast, forecast: a.forecast - b.forecast,
-      effective: a.effective - b.effective };
+      effective: a.effective - b.effective, cover: b.cover };
+  }
+
+  // A Reserves cell's hover: the full cost, what each other sheet pays of it, and what is
+  // left for reserves, which is the figure in the cell.
+  function coverNote(cover) {
+    if (!cover) return '';
+    var paid = 0;
+    var by = cover.by.map(function (b) { paid += b.amount; return b.source + ' pays ' + money0(b.amount); });
+    return 'Full cost ' + money0(cover.full) + ' · ' + by.join(' · ') + ' · left for reserves ' +
+      money0(cover.full - paid);
   }
 
   function renderTracking() {
@@ -1311,7 +1322,9 @@
       } else {
         inner = main(money0(c.forecast)) + sub('budget ' + money0(c.budget));
       }
-      return '<td class="' + cellCls(col) + '"><div class="cell-q">' + inner + '</div></td>';
+      var note = summary ? '' : coverNote(c.cover);
+      return '<td class="' + cellCls(col) + '"' + (note ? ' title="' + esc(note) + '"' : '') +
+        '><div class="cell-q">' + inner + '</div></td>';
     }
     function totalTds(r) {
       return '<td class="tot">' + money0(r.budget) + '</td>' +

@@ -159,6 +159,14 @@ const HEALTH_CATALOGUE = {
     title: 'Cost not counted, a competing application carries it',
     action: 'Expected: one exclusivity group is one piece of work. Remove the ' +
       'Exclusivity group value if these are genuinely separate work.' },
+  H1: { severity: 'warning', category: 'Reserves',
+    title: 'Other sheets pay more of a General cost than Reserves holds',
+    action: 'Reserves holds the full cost of General\'s work, so raise its line for those ' +
+      'months. Until then Reserves goes negative there and General\'s cost is understated.' },
+  H2: { severity: 'info', category: 'Reserves',
+    title: 'General work with no milestone on Reserves',
+    action: 'It counts on top of Reserves. If it pays for a cost Reserves holds, give both ' +
+      'lines the same Milestone name so it comes off Reserves instead.' },
   D1: { severity: 'error', category: 'Xero coding',
     title: 'Actual spend with no Projects tag',
     action: 'Tag these in Xero. Untagged lines are dropped from every total.' },
@@ -202,7 +210,8 @@ const HEALTH_SEVERITY_RANK = { error: 0, warning: 1, info: 2 };
  * @param {Array} actualLines  normalised Xero lines
  * @param {Object} ctx  { now, xeroConnected, exclusion: {count,total},
  *                       unposted: {count,total}, secretsMissing: [],
- *                       reservesIssue: 'scope' | null, exclusivity: {reps, suppressed} }
+ *                       reservesIssue: 'scope' | null, exclusivity: {reps, suppressed},
+ *                       reservesOverPaid: reservesOverPaid_'s list }
  * @return {Array} findings, most severe first, and by value at risk within severity
  */
 function buildHealth(budgets, actualLines, ctx) {
@@ -554,11 +563,16 @@ function buildHealth(budgets, actualLines, ctx) {
         dueBy = isoDate_(new Date(qs.getFullYear(), qs.getMonth(), 0));
       }
 
+      // Reserves holds General's full cost and other sheets pay part of it, so what was
+      // expected of its own spend is not its lines: D5 and E2 leave it out. Quarter close
+      // judges its milestones against what is left for it (netReservesTracking_).
+      const full = b.name === CONFIG.RESERVES_SOURCE;
+
       // D5: a secured grant that should have spent something by now, with nothing coded
       // to it, is almost always a Xero tag that does not match the sheet name. Finished
       // quarters only, so it stays quiet while the first quarter of spend is under way;
       // a misspelt tag is caught sooner than that, by D4.
-      if (b.status === 'secured' && actual === 0 && due >= 1) {
+      if (b.status === 'secured' && !full && actual === 0 && due >= 1) {
         add('D5', withBase_(bse, { amount: Math.round(due),
           detail: Math.round(due) + ' expected by ' + dueBy + ', nothing coded to it at all' }));
       }
@@ -574,7 +588,7 @@ function buildHealth(budgets, actualLines, ctx) {
       // act on. Secured only, as D5: an application not yet won has nothing to underspend.
       // Spend so far this quarter counts, so a source that has since caught up is not
       // flagged for last quarter's lag.
-      if (b.status === 'secured' && cost > 0 && due >= 1) {
+      if (b.status === 'secured' && !full && cost > 0 && due >= 1) {
         const dueShare = due / cost, spentShare = actual / cost;
         if (dueShare >= (CONFIG.UNDERSPEND_MIN_DUE || 0.5) &&
             (dueShare - spentShare) >= (CONFIG.UNDERSPEND_GAP || 0.25)) {
@@ -605,13 +619,19 @@ function buildHealth(budgets, actualLines, ctx) {
     // E4: the same description budgeted in two sources over overlapping dates. The
     // undeclared twin of an Exclusivity group: G3 reports duplication you declared, this
     // reports duplication you did not.
+    // Reserves' General lines and the lines paying them share milestones by design, and a
+    // shared description too is no duplication: what is paid comes off Reserves.
+    const reserves = byName[CONFIG.RESERVES_SOURCE];
+    const reservesNames = reservesMilestones_(reserves);
+    const nets = l => isGeneralLine_(l) && !!reservesNames[milestoneKey_(l.milestone)];
     const byDesc = {};
     live.forEach(b => {
       (b.lines || []).forEach(l => {
         const d = clean_(l.description || '').toLowerCase();
         if (!d || !l.start || !l.end) return;
         (byDesc[d] = byDesc[d] || []).push({ source: b.name, start: l.start, end: l.end,
-          cost: l.cost || 0, group: clean_((b.metadata || {})[CONFIG.META.exclusivityGroup] || '') });
+          cost: l.cost || 0, group: clean_((b.metadata || {})[CONFIG.META.exclusivityGroup] || ''),
+          nets: nets(l) });
       });
     });
     Object.keys(byDesc).forEach(d => {
@@ -621,6 +641,7 @@ function buildHealth(budgets, actualLines, ctx) {
           if (rows[i].source === rows[j].source) continue;
           // Already declared as alternatives, so G3 covers it. Not a finding twice.
           if (rows[i].group && rows[i].group === rows[j].group) continue;
+          if (rows[i].nets && rows[j].nets) continue;
           if (rows[i].start <= rows[j].end && rows[j].start <= rows[i].end) {
             add('E4', { amount: Math.round(Math.min(rows[i].cost, rows[j].cost)),
               detail: '"' + d + '" is budgeted in both ' + rows[i].source + ' and ' +
@@ -629,6 +650,39 @@ function buildHealth(budgets, actualLines, ctx) {
           }
         }
       }
+    });
+
+    if (!reserves) return;
+    const resBase = { fundingSource: reserves.name, project: CONFIG.GENERAL_PROJECT,
+      owner: (reserves.metadata || {})['owner'] || '', link: reserves.sheetUrl || '' };
+
+    // H1: other sheets pay more of a Reserves milestone in a month than its full cost, every
+    // proposal counted as won. Reserves then goes negative and General's cost is understated.
+    (ctx.reservesOverPaid || []).forEach(o => {
+      add('H1', withBase_(resBase, {
+        amount: o.months.reduce((t, m) => t + m.paid - m.full, 0),
+        detail: '"' + o.milestone + '": ' + o.by.join(' and ') + ' pay more than its full cost ' +
+          'in ' + o.months.map(m => m.month + ' (' + m.paid + ' against ' + m.full + ')')
+          .join(', ') }));
+    });
+
+    // H2: General work on another sheet, on a milestone Reserves has no line for. It counts
+    // on top of Reserves, which is right for work Reserves does not hold, and double for a
+    // cost Reserves holds under another name.
+    live.forEach(b => {
+      if (b === reserves) return;
+      const odd = {};
+      (b.lines || []).forEach(l => {
+        if (!isGeneralLine_(l) || nets(l)) return;
+        const mile = l.milestone || '(unassigned)';
+        odd[mile] = (odd[mile] || 0) + (Number(l.cost) || 0);
+      });
+      Object.keys(odd).sort().forEach(mile => {
+        add('H2', { fundingSource: b.name, project: CONFIG.GENERAL_PROJECT,
+          owner: (b.metadata || {})['owner'] || '', link: b.sheetUrl || '',
+          amount: Math.round(odd[mile]),
+          detail: '"' + mile + '" is General work, and Reserves has no milestone of that name' });
+      });
     });
   })();
 
