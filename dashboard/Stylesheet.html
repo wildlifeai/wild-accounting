@@ -194,6 +194,18 @@
   .coverage { font-size: 13px; color: var(--muted); margin: 0 0 16px; display: flex;
     flex-wrap: wrap; gap: 8px 18px; }
 
+  /* Board: one table per year, a heading row per project, its lines under it. */
+  .board-h { margin: 0; }
+  .bd-h3 { font-size: 13px; font-weight: 600; color: var(--text); margin: 16px 0 8px; }
+  #view-board .table-wrap { overflow-x: auto; margin-bottom: 8px; }
+  .bd-table td, .bd-table th { padding: 6px 12px; }
+  .bd-table td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .bd-table tr.bd-project th { background: var(--bg2); color: var(--text); font-weight: 600; }
+  .bd-table tr.bd-sum td { font-weight: 600; }
+  .bd-table tr.bd-margin td { color: var(--muted); }
+  .bd-table td.bd-lbl { padding-left: 24px; }
+  .bd-table tbody tr:not(.bd-project) { border-top: none; }
+
   /* Each tab's controls as a ribbon: groups side by side, each named underneath, a
      hairline between them, wrapping on a narrow screen. */
   .ribbon { display: flex; flex-wrap: wrap; align-items: stretch; background: var(--bg);

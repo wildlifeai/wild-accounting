@@ -1,6 +1,6 @@
 /**
  * Config.js
- * Central configuration for the Funding Cockpit dashboard.
+ * Central configuration for the Finance and Performance Cockpit dashboard.
  *
  * Secrets (Xero client id/secret, tenant id) are NOT stored here. They live in
  * Script Properties so they never end up in source control. Set them once via the
@@ -181,6 +181,18 @@ const CONFIG = {
     RECEIVABLE_ACCOUNT: 'Accounts Receivable',
     PAYABLE_ACCOUNT: 'Accounts Payable',
     IN_ADVANCE_ACCOUNT: 'Unused Donations and Grants with Conditions'
+  },
+
+  // ---- Board ----------------------------------------------------------------
+  // The Board tab (Board.js), for people with full access only. Its budget is a tab of the
+  // Cockpit Settings spreadsheet: income and cost per project per financial year as the board
+  // approved them, and on the TOTAL_ROW row the reserves that budget expected at year end.
+  BOARD: {
+    TAB: 'Board budget',
+    HEADER: ['Financial year', 'Project', 'Income', 'Cost', 'Reserves at year end', 'Notes'],
+    TOTAL_ROW: 'Organisation',
+    // The order the board's updates have used. A project not listed follows them.
+    PROJECTS: ['Wildlife Watcher', 'Spyfish Aotearoa', 'Wild About AI', 'General']
   },
 
   // ---- Financial year -----------------------------------------------------

@@ -8,7 +8,7 @@
 function doGet() {
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
-    .setTitle('Wildlife.ai Funding Cockpit')
+    .setTitle('Wildlife.ai Finance and Performance Cockpit')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
@@ -196,6 +196,23 @@ function apiGetProjectTracking(projects) {
   const snap = getFilteredSnapshot_();
   const currentQi = quarterSortNum(snap.currentQuarter || currentQuarterLabel());
   return composeProjectTracking(snap.tracking, snap.timeline, projects, currentQi);
+}
+
+/**
+ * Client API: the Board tab, for people with full access only, as the runway is: finance by
+ * project against the board's budget (boardFinance_). The budget is read on each call, so a
+ * correction to its tab shows without a refresh.
+ */
+function apiGetBoard() {
+  const allowed = getUserPermissions(getCurrentUserEmail_());
+  if (!(allowed.length === 1 && allowed[0] === '*')) {
+    throw new Error('The Board tab is for people with full access.');
+  }
+  const snap = getSnapshot();
+  if (!snap || !snap.runway) return null;
+  const year = fyBounds_(new Date()).startYear;
+  return { generatedAt: snap.generatedAt,
+    finance: boardFinance_(snap.runway, year, readBoardBudget_()) };
 }
 
 /** Add values from source map into target map (mutates target). */
