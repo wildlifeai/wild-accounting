@@ -1314,6 +1314,20 @@ function runTests() {
     Math.abs(lossAg.budgetByKey['Wildlife Watcher||XXX_27_R||M6'].income - 900) < 1e-6 &&
     Math.abs(lossAg.budgetByKey['General||XXX_27_R||' + marginMilestone_('XXX_27_R')].income +
       900) < 1e-6 && Math.abs(lossAg.projects['General'].securedIncome + 900) < 1e-6);
+  // A source over two years, its project work in the first and General's in the second:
+  // this FY's cost and margin are the first year's own, not a share of both years.
+  var twoYear = agSrc('XXX_27_S', 'secured', { 'contribution policy': 'none' }, [
+    agLine('Wildlife Watcher', 'M7', 'XXX_27_S_001', 1000, 0),
+    { project: 'General', milestone: 'GM', item: 'XXX_28_S_001 - GM', start: d(2027, 4, 1),
+      end: d(2028, 3, 31), cost: 3000, income: 0 }]);
+  var twoAg = aggregateBudgets_([twoYear], fyBounds_(d(2026, 9, 26)), {});
+  check('rollup: this FY\'s cost by project is each line\'s own cost this FY',
+    Math.abs(twoAg.projects['Wildlife Watcher'].proposedBudgetFY - 1000) < 1e-6 &&
+    Math.abs(twoAg.projects['General'].proposedBudgetFY) < 1e-6 &&
+    Math.abs(twoAg.projects['Wildlife Watcher'].proposedBudget - 1000) < 1e-6);
+  check('rollup: this FY\'s margin moves with this FY\'s cost',
+    Math.abs(twoAg.projects['Wildlife Watcher'].securedIncomeFY - 1000) < 1e-6 &&
+    Math.abs(twoAg.projects['General'].securedIncomeFY + 1000) < 1e-6);
 
   // The timeline: General's margin is one row per source with one, running the months it
   // lands in, with that source's status.
