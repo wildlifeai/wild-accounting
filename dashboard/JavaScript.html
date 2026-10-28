@@ -1019,6 +1019,64 @@
     if (!b || !b.finance) { el.innerHTML = '<div class="health-info">No snapshot yet.</div>'; return; }
     var f = b.finance;
     el.innerHTML = boardYear(f.years[0], f) + boardDraft(f.years[1]);
+    renderPerformance(b.performance);
+  }
+
+  // The KPIs by pou (performanceView_): a table per pou, then the ones not measured yet,
+  // then what changed this year.
+  function kpiValue(v, unit) {
+    if (v === null || v === undefined) return '';
+    var n = Number(v).toLocaleString('en-NZ', { maximumFractionDigits: 1 });
+    return unit === '%' ? n + '%' : n;
+  }
+  function renderPerformance(p) {
+    var el = document.getElementById('board-performance');
+    if (!p) { el.innerHTML = ''; return; }
+    var sheet = p.url ? ' <a class="health-link" target="_blank" rel="noopener" href="' +
+      esc(p.url) + '">Performance sheet</a>' : '';
+    if (p.issue) {
+      el.innerHTML = '<div class="health-info">The Performance sheet could not be read: ' +
+        esc(p.issue) + '.' + sheet + '</div>';
+      return;
+    }
+    var qs = p.quarters.map(function (q) { return q.replace(p.fy + ' ', ''); });
+    var html = p.pous.map(function (g) {
+      var rows = g.kpis.map(function (k) {
+        return '<tr><td>' + esc(k.name) + (k.note ? ' <span class="kpi-note">' + esc(k.note) +
+          '</span>' : '') + '</td>' +
+          p.quarters.map(function (q) {
+            return '<td class="num">' + kpiValue(k.values[q], k.unit) + '</td>';
+          }).join('') +
+          '<td class="num bd-ytd">' + kpiValue(k.ytd, k.unit) + '</td><td class="num">' +
+          kpiValue(k.comparative, k.unit) + '</td><td>' + esc(k.unit) + '</td><td>' +
+          esc(k.reportedTo) + '</td><td>' + esc(k.owner) + '</td></tr>';
+      }).join('');
+      var table = g.kpis.length
+        ? '<div class="table-wrap"><table class="bd-table kpi-table"><thead><tr><th>KPI</th>' +
+          qs.map(function (q) { return '<th class="num">' + esc(q) + '</th>'; }).join('') +
+          '<th class="num">' + esc(p.fy) + ' to date</th><th class="num">' + esc(p.comparative) +
+          '</th><th>Unit</th><th>Reported to</th><th>Owner</th></tr></thead><tbody>' + rows +
+          '</tbody></table></div>'
+        : '';
+      var not = g.notMeasured.length
+        ? '<div class="coverage"><span>Not measured yet: ' + g.notMeasured.map(function (k) {
+            return esc(k.name);
+          }).join('; ') + '.</span></div>'
+        : '';
+      return '<h3 class="bd-h3">' + esc(g.pou) + '</h3>' + table + not;
+    }).join('');
+    var changed = p.changed.length
+      ? '<h3 class="bd-h3">What changed this year</h3><ul class="kpi-changed">' +
+        p.changed.map(function (k) {
+          var what = k.status === 'changed' && k.replaces ? 'replaces ' + esc(k.replaces)
+            : k.status === 'carried' ? 'carried for the Statement of Service Performance'
+            : k.status === 'retired' ? 'retired' + (k.retired ? ' ' + esc(k.retired) : '')
+            : esc(k.status);
+          return '<li><b>' + esc(k.name) + '</b>: ' + what + '</li>';
+        }).join('') + '</ul>'
+      : '';
+    el.innerHTML = '<div class="coverage"><span>Values as at the last refresh.' + sheet +
+      '</span></div>' + html + changed;
   }
 
   // This year: budget, actual to last month, forecast and the difference, per project.

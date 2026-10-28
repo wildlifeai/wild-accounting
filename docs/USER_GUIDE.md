@@ -270,6 +270,23 @@ income General receives (see [General and Reserves](#general-and-reserves)), and
 those margins on its own line, **Margins from projects**. That is how the board's updates have
 set out each project's surplus.
 
+**Performance** shows the strategy's KPIs by pou: each quarter of this financial year, the year
+to date and last year's figure from the Statement of Service Performance, with who each is
+reported to and who owns it. A KPI with no value yet is listed under its pou as not measured,
+and **What changed this year** lists the KPIs added, changed, carried for the Statement of
+Service Performance, or retired. Three are worked out by the cockpit: **earned income share**
+(income on the sales and services accounts in Xero over all income), **income concentration**
+(the largest funder's share of income, by each sheet's `Funder`) and **months of runway** (the
+secured line's, as at the last refresh).
+
+The values come from the **Performance** sheet in the Budgets folder, read at each refresh. Its
+`KPIs` tab has one row per KPI: its pou, unit, cadence, who it is reported to (`Board`, `SSP`
+or funding source codes), status, owner, whether the cockpit works it out, and whether its year
+to date adds up the quarters (`sum`) or takes the latest (`latest`). Its `Values` tab has one
+row per KPI per period: `26/27 Q2` for a quarter, `26/27` for a whole year, with the value and
+a link to the evidence. After each quarter, health check P1 lists each owner's quarterly KPIs
+with no value for it.
+
 **GM:** the budget the board approved lives on the `Board budget` tab of **Cockpit Settings**:
 one row per financial year (`26/27`) and project, with its income and cost, and on a row named
 `Organisation` the reserves the budget expected at year end. The tab reads it each time it

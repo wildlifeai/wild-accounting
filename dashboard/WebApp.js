@@ -99,6 +99,8 @@ function filterSnapshotForProjects_(snap, allowedProjects) {
   // Runway is the whole organisation's position, secured money against all spend. A
   // project lead's own numbers are theirs to see; the organisation's balance is not.
   delete filteredSnap.runway;
+  // The KPIs and the Performance sheet's link are the Board tab's, which is full access only.
+  delete filteredSnap.performance;
 
   if (filteredSnap.projects) {
     filteredSnap.projects = filteredSnap.projects.filter(r => allowedProjects.includes(r.project));
@@ -200,8 +202,9 @@ function apiGetProjectTracking(projects) {
 
 /**
  * Client API: the Board tab, for people with full access only, as the runway is: finance by
- * project against the board's budget (boardFinance_). The budget is read on each call, so a
- * correction to its tab shows without a refresh.
+ * project against the board's budget (boardFinance_), and the KPIs (performanceView_). The
+ * budget is read on each call, so a correction to its tab shows without a refresh; the KPIs
+ * are the snapshot's, read at refresh.
  */
 function apiGetBoard() {
   const allowed = getUserPermissions(getCurrentUserEmail_());
@@ -212,7 +215,8 @@ function apiGetBoard() {
   if (!snap || !snap.runway) return null;
   const year = fyBounds_(new Date()).startYear;
   return { generatedAt: snap.generatedAt,
-    finance: boardFinance_(snap.runway, year, readBoardBudget_()) };
+    finance: boardFinance_(snap.runway, year, readBoardBudget_()),
+    performance: performanceView_(snap.performance, year) };
 }
 
 /** Add values from source map into target map (mutates target). */

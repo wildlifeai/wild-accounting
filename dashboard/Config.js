@@ -195,6 +195,20 @@ const CONFIG = {
     PROJECTS: ['Wildlife Watcher', 'Spyfish Aotearoa', 'Wild About AI', 'General']
   },
 
+  // ---- Performance ---------------------------------------------------------------
+  // The Performance sheet (Performance.js), in the Budgets root folder: the strategy's KPIs on
+  // its KPIs tab and their values, one row per KPI per period, on its Values tab. Found by
+  // name the first time, then by the id kept in this Script Property.
+  PERFORMANCE: {
+    FILE_NAME: 'Performance',
+    PROPERTY_KEY: 'PERFORMANCE_SHEET_ID',
+    KPIS_TAB: 'KPIs',
+    VALUES_TAB: 'Values',
+    // Earned income for KPI T1: the income accounts, by code, that sales and services post
+    // to. Sales (200) until the bookkeeper confirms which others count.
+    EARNED_INCOME_ACCOUNTS: ['200']
+  },
+
   // ---- Financial year -----------------------------------------------------
   // Quarters in the tracking screen follow this financial year. 4 = April start
   // (Apr-Mar), so Q1 = Apr-Jun, Q2 = Jul-Sep, Q3 = Oct-Dec, Q4 = Jan-Mar.

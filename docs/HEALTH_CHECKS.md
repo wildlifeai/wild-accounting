@@ -159,6 +159,16 @@ Complements **E4**: that one detects duplication nobody declared, these handle d
 | G2 | info | A `proposed` source with no `Probability` in `Funding_info` | That ask is left out of expected income entirely rather than guessed at. "Unknown" is deliberately not "zero". |
 | G3 | info | Cost suppressed because a competing application in the same `Exclusivity group` carries it | Expected, and reported so the suppression is never invisible arithmetic. Remove the group value if these are genuinely separate work. |
 
+### P. Performance, aimed at the KPI owners
+
+The strategy's KPIs and their values live on the Performance sheet in the Budgets folder; the
+Board tab shows them (see the [user guide](USER_GUIDE.md#the-board-tab)).
+
+| id | Sev | Check | Action shown |
+|---|---|---|---|
+| P1 | info | A quarterly KPI, not retired and not worked out by the cockpit, has no value for the last finished quarter | One finding per owner, naming their KPIs. Add a row per KPI to the `Values` tab with the quarter as its period and a link to the evidence. A KPI never measured shows as not measured in the board pack. |
+| P2 | warning | The Performance sheet could not be read: not found by name in the Budgets folder, a missing `KPIs` or `Values` tab, or an error opening it | The Board tab's Performance section is empty until it can. |
+
 ### F. System health, aimed at the GM and maintainer
 
 | id | Sev | Check | Action shown |

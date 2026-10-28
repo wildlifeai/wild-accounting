@@ -253,6 +253,17 @@ Ranked by how badly they hurt the persona who depends on them:
   updates set out a project's surplus; General shows the margins on their own line. Full
   access only, as the runway is: the pack is the organisation's position. The cockpit is now
   the Finance and Performance Cockpit, at the same address, since it reports both.
+- **2026-10-29: performance reports from a Performance sheet, beside the money.** The
+  strategy's KPIs were reported from scattered sheets and the annual report, so the board saw
+  them once a year. A Performance sheet holds the register (one row per KPI, with its pou, who
+  it is reported to and its owner) and the values (one row per KPI per period, with evidence),
+  and the Board tab lays them out by pou with last year's Statement of Service Performance as
+  the comparative. A sheet rather than the cockpit's own settings, so KPI owners can be given it
+  without the permissions beside it. Read at refresh, so a value ages with the money, and P1
+  asks each owner for the quarter's values, so finance and performance close together. Three
+  KPIs the cockpit can work out (earned income share, income concentration, runway) are never
+  typed. Earned income is a list of Xero income accounts in `Config.js`, Sales alone until the
+  bookkeeper confirms which others carry sales and services.
 
 ## History
 

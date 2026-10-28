@@ -2084,6 +2084,76 @@ function runTests() {
   check('board: next year holds only its own months',
     bdRow(1, 'General').figures.secured.cost === 2000 && bd.years[1].label === '27/28');
 
+  // ---- Performance: the strategy's KPIs by pou ------------------------------------------
+  var pfKpis = kpiRows_([
+    ['KPI id', 'KPI', 'Pou', 'Unit', 'Cadence', 'Reported to', 'Status', 'Since', 'Replaces',
+      'Retired', 'How measured', 'Owner', 'Computed', 'Year to date'],
+    ['R5', 'Event reach', 'Whanaungatanga', 'people', 'quarterly', 'Board, SSP', 'carried', '',
+      '', '', '', 'Comms', '', 'sum'],
+    ['R7', 'LinkedIn followers', 'Whanaungatanga', 'followers', 'quarterly', 'Board, SSP',
+      'carried', '', '', '', '', 'Comms', '', 'latest'],
+    ['W3', 'Kaiako delivering without us', 'Wānanga', 'count', 'quarterly', 'Board', 'new',
+      '', '', '', '', 'Tash', '', 'latest'],
+    ['T1', 'Earned income share', 'Toitūtanga', '%', 'quarterly', 'Board', 'current', '',
+      '', '', '', 'Cockpit', 'yes', 'sum'],
+    ['X9', 'Old measure', 'Whanaungatanga', 'count', 'quarterly', 'Board', 'retired', '', '',
+      '01/Jul/26', '', 'Victor', '', 'sum'],
+    ['', 'A row with no id', 'Whanaungatanga', '', '', '', '', '', '', '', '', '', '', '']]);
+  var pfValues = kpiValueRows_([['Period', 'KPI id', 'Project', 'Value', 'Evidence', 'Note'],
+    ['25/26', 'R5', '', '750', '', ''], ['26/27 Q1', 'R5', 'Spyfish', '50', '', ''],
+    ['26/27 Q1', 'R5', 'WW', '30', '', ''], ['26/27 Q2', 'R5', '', '350', '', ''],
+    ['26/27 Q1', 'R7', '', '1,150', '', ''], ['26/27 Q2', 'R7', '', '1,190', '', ''],
+    ['26/27 Q2', 'W3', '', '', '', '']]);
+  var pfComputed = computedKpis_([
+    { kind: 'income', amount: 300, account: 'Sales (200)', project: 'Wildlife Watcher',
+      fundingSource: 'XXX_26_SALES', date: d(2026, 8, 10) },
+    { kind: 'income', amount: 700, account: 'Grants (210)', project: 'General',
+      fundingSource: 'XXX_27_TOI', date: d(2026, 8, 20) },
+    { kind: 'expense', amount: 900, account: 'Wages (477)', project: 'General',
+      fundingSource: 'XXX_27_TOI', date: d(2026, 8, 20) },
+    { kind: 'income', amount: 500, account: 'Sales (200)', project: 'General',
+      fundingSource: 'XXX_27_TOI', date: d(2025, 8, 20) }],
+    [{ name: 'XXX_27_TOI', metadata: { funder: 'Toi Foundation' } }],
+    { monthsOfRunway: { secured: 17 } }, 2026, d(2026, 10, 29));
+  var pf = performanceView_({ url: 'u', kpis: pfKpis, values: pfValues, computed: pfComputed },
+    2026);
+  var pfKpi = function (id) {
+    var hit = null;
+    pf.pous.forEach(function (g) { g.kpis.forEach(function (k) { if (k.id === id) hit = k; }); });
+    return hit;
+  };
+  check('performance: the KPIs tab gives a row per KPI with an id, read by its headers',
+    pfKpis.length === 5 && pfKpis[3].computed === true && pfKpis[1].ytd === 'latest' &&
+    pfKpis[0].ytd === 'sum');
+  check('performance: pous in the order the KPIs tab names them, a retired KPI left out',
+    pf.pous.map(function (g) { return g.pou; }).join() ===
+      'Whanaungatanga,Wānanga,Toitūtanga' && !pfKpi('X9'));
+  check('performance: one period\'s rows add up, the year to date sums, last year compares',
+    pfKpi('R5').values['26/27 Q1'] === 80 && pfKpi('R5').values['26/27 Q2'] === 350 &&
+    pfKpi('R5').ytd === 430 && pfKpi('R5').comparative === 750);
+  check('performance: a "latest" KPI\'s year to date is its latest quarter',
+    pfKpi('R7').ytd === 1190 && pfKpi('R7').comparative === null);
+  check('performance: a KPI with no value yet is listed as not measured',
+    !pfKpi('W3') && pf.pous[1].notMeasured.map(function (k) { return k.id; }).join() === 'W3');
+  check('performance: earned income share is sales over all income, this year only',
+    pfKpi('T1').values['26/27 Q2'] === 30 && pfKpi('T1').ytd === 30);
+  check('performance: income concentration names the largest funder; runway sits in this quarter',
+    pfComputed.T2.byQ['26/27 Q2'] === 70 && pfComputed.T2.funder === 'Toi Foundation' &&
+    pfComputed.T3.byQ['26/27 Q3'] === 17);
+  check('performance: what changed lists every KPI not current',
+    pf.changed.map(function (k) { return k.id + ':' + k.status; }).join() ===
+      'R5:carried,R7:carried,W3:new,X9:retired');
+  var pfPerf = { url: 'u', kpis: pfKpis, values: pfValues };
+  var pfHealth = buildHealth([], [], { performance: performanceHealth_(pfPerf, '26/27 Q2') });
+  var pfP1 = pfHealth.filter(function (f) { return f.id === 'P1'; });
+  check('performance: P1 names, per owner, the quarterly KPIs with no value for the quarter',
+    pfP1.length === 1 && pfP1[0].owner === 'Tash' && /W3/.test(pfP1[0].detail) &&
+    /26\/27 Q2/.test(pfP1[0].detail));
+  check('performance: P2 when the sheet cannot be read, and P1 is then quiet',
+    buildHealth([], [], { performance: performanceHealth_({ issue: 'gone' }, '26/27 Q2') })
+      .map(function (f) { return f.id; }).filter(function (id) { return id[0] === 'P'; })
+      .join() === 'P2');
+
   Logger.log(results.join('\n'));
   return results;
 }
