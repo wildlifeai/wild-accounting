@@ -98,9 +98,11 @@ Ranked by how badly they hurt the persona who depends on them:
   mid-quarter it understates that column and annual Expected with it. Whether it should be actual
   plus the rest of the forecast is undecided.
 - **Two income attributions.** The project rollup behind the organisation totals splits a source's
-  income by each project's share of its cost, while the Overview's cards and runway credit each
-  line's own income. They agree for most sheets and can differ slightly for one whose lines are not
-  priced in proportion to their cost. Only the line attribution is on screen.
+  income by each project's share of its cost (a year's figures by that year's cost, so a source
+  over two years with different work in each splits each year by its own), while the Overview's
+  cards and runway credit each line's own income. They agree for most sheets and can differ
+  slightly for one whose lines are not priced in proportion to their cost. Only the line
+  attribution is on screen.
 - **Granular Xero scopes by September 2027.** Xero retires the broad `accounting.transactions`
   and `accounting.reports.read` scopes then for apps created before 2 March 2026, which this one
   is. Moving means naming the granular scopes for bank transactions, invoices, manual journals

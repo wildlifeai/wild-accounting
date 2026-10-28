@@ -662,6 +662,9 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
 
     const expenseFY = sumMonthsInFY_(fc.expenseByMonth, fy);
     const incomeFY = sumMonthsInFY_(fc.incomeByMonth, fy);
+    // This FY's figures split by this FY's cost, not the whole life's: a source running two
+    // years can spend on one project in the first and another in the second.
+    const sharesFY = expenseFY ? projectExpenseShares_(src.lines, fy) : shares;
 
     // This source's margin, which is General's: see marginRule_.
     const rule = marginRule_(src);
@@ -690,16 +693,19 @@ function aggregateBudgets_(budgets, fy, exclusivityReps) {
     // Project-level rollups, for the org totals and a project lead's totals. Income
     // follows the cost share, and the margin moves from the other projects to General, each
     // giving up its part by its share of the cost off General.
-    const otherShare = Object.keys(shares).reduce((t, pName) =>
-      pName === CONFIG.GENERAL_PROJECT ? t : t + shares[pName], 0);
+    const otherOf = s => Object.keys(s).reduce((t, pName) =>
+      pName === CONFIG.GENERAL_PROJECT ? t : t + s[pName], 0);
+    const otherShare = otherOf(shares), otherShareFY = otherOf(sharesFY);
     Object.keys(shares).forEach(pName => {
-      const share = shares[pName];
+      const share = shares[pName], shareFY = sharesFY[pName] || 0;
       const p = project_(pName);
       const out = pName === CONFIG.GENERAL_PROJECT || !otherShare ? 0 : share / otherShare;
+      const outFY = pName === CONFIG.GENERAL_PROJECT ? 0 :
+        otherShareFY ? shareFY / otherShareFY : out;
       p.proposedBudget += fc.totalBudgetExpense * share * costFactor;
-      p.proposedBudgetFY += expenseFY * share * costFactor;
+      p.proposedBudgetFY += expenseFY * shareFY * costFactor;
       creditIncome(p, fc.totalBudgetIncome * share - marginTotal * out,
-        incomeFY * share - marginFY * out);
+        incomeFY * shareFY - marginFY * outFY);
     });
     if (marginTotal || marginFY) {
       creditIncome(project_(CONFIG.GENERAL_PROJECT), marginTotal, marginFY);
@@ -1424,12 +1430,14 @@ function roundMap_(map) {
 
 // ---- helpers ---------------------------------------------------------------
 
-function projectExpenseShares_(lines) {
+function projectExpenseShares_(lines, fy) {
   const totals = {};
   let grand = 0;
   lines.forEach(l => {
-    totals[l.project] = (totals[l.project] || 0) + l.cost;
-    grand += l.cost;
+    // With `fy`, the part of the line's cost that falls in that financial year.
+    const cost = fy ? sumMonthsInFY_(distributeByMonth_([l], 'cost'), fy) : l.cost;
+    totals[l.project] = (totals[l.project] || 0) + cost;
+    grand += cost;
   });
   const shares = {};
   if (grand === 0) { // no operating expense — attribute evenly to seen projects
