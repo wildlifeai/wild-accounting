@@ -16,8 +16,11 @@
              Overview where it was unavoidable; behind a tab, nothing would tell you there
              were fourteen errors unless the tab says so. -->
         <button class="tab" data-view="health">Health <span id="health-badge" class="badge hidden"></span></button>
+        <!-- Full access only, as the runway is: shown by render() for them alone, and the
+             server refuses anyone else (apiGetBoard). -->
+        <button class="tab hidden" id="tab-board" data-view="board">Board</button>
       </nav>
-      <div class="title"><span class="dot"></span> Wild Funding Cockpit</div>
+      <div class="title"><span class="dot"></span> Wild Finance and Performance Cockpit</div>
       <div class="sync">
         <button id="refresh">Refresh now</button>
         <span id="sync-label">loading…</span>
@@ -41,15 +44,22 @@
 
     <div id="view-overview">
       <div class="overview-section">
-        <!-- The controls as a ribbon: three groups, each named underneath. Filter (the year,
-             filled by buildFySelector, applies to the cards only since runway always runs
-             from today; projects and sources apply to everything), Group by (the chart
-             only: Status draws the three scenario lines, any other choice one expected-case
-             line per group) and Show (everything on the tab). -->
+        <!-- The controls as a ribbon: three groups, each named underneath. Filter (the
+             financial years, filled by buildFyFilter, the projects and the sources, all
+             applying to the cards and the chart), Group by (the chart only: Status draws the
+             three scenario lines, any other choice one expected-case line per group) and
+             Show (everything on the tab). -->
         <div class="ribbon">
           <div class="ribbon-group">
             <div class="ribbon-items">
-              <span id="fy-slot"></span>
+              <details class="bd-dd">
+                <summary id="filter-fys-sum">Financial years</summary>
+                <div class="bd-dd-panel">
+                  <div class="bd-dd-actions"><a data-target="filter-fys" data-act="all">all</a>
+                    <a data-target="filter-fys" data-act="none">none</a></div>
+                  <div class="bd-dd-list" id="filter-fys"></div>
+                </div>
+              </details>
               <details class="bd-dd">
                 <summary id="filter-projects-sum">Projects</summary>
                 <div class="bd-dd-panel">
@@ -109,9 +119,9 @@
               <b>budget</b> from this month on. With every project and source shown, grouped by
               status, the lines start from the reserves on the Cockpit Settings sheet, so
               Secured only is the organisation's actual runway; any narrower view is funded
-              money only. It follows Show and Filter, not the year. Each line's label says the
-              month it goes short, or that it stays above zero to the last budgeted month,
-              which only means the budgets stop there. Grouped by project, funding source or
+              money only. It draws the months of the years chosen. Each line's label says the
+              month it goes short, even after those months, or that it stays above zero to the
+              last budgeted month, which only means the budgets stop there. Grouped by project, funding source or
               milestone, each line is one group's expected case: applications at their
               probability, or secured money only when Proposed is unticked.
             </div>
@@ -265,6 +275,32 @@
       </div>
       <div class="track-grid-wrap" id="tr-grid"></div>
       <div id="tr-totals" class="track-totals"></div>
+    </div>
+
+    <div id="view-board" class="hidden">
+      <div class="overview-section">
+        <div class="grid-title-row">
+          <h2 class="board-h">Finance</h2>
+          <div class="title-tools">
+            <span id="bd-status" class="track-status"></span>
+            <span class="help">
+              <button type="button" class="help-btn" aria-expanded="false"
+                aria-controls="board-help" aria-label="What this tab shows">?</button>
+              <div class="help-pop hidden" id="board-help">
+                The board pack's figures by project. This year: Xero <b>actuals</b> to the
+                end of last month, then the <b>forecast</b> (each application at its
+                probability) to 31 March, against the budget the board approved, typed on the
+                <em>Board budget</em> tab of Cockpit Settings. Next year: the draft budget on
+                secured money only, expected, and with every application won. A project shows
+                its income as its funders give it; its <b>margin to General</b> is the part of
+                that income General receives, so General shows the margins it receives on
+                their own line.
+              </div>
+            </span>
+          </div>
+        </div>
+        <div id="board-finance"></div>
+      </div>
     </div>
   </div>
 

@@ -357,6 +357,9 @@ function remainingPlan_(planned, actualLines, nowKey) {
     future(all).forEach(k => { o[k] = all[k]; });
     return o;
   };
+  // Reserves holds General's full cost, so other sheets' spend so far on its milestones is
+  // spent of it too, or what is left of it would count that spend again.
+  const covered = coveredToDate_(planned, actualLines, nowKey);
 
   return (planned || []).map(src => {
     const original = src.budgetLines || src.lines || [];
@@ -401,6 +404,12 @@ function remainingPlan_(planned, actualLines, nowKey) {
         : { description: '(unassigned)', milestone: '(unassigned)', item: '' };
       out.push(monthLine(base, e.mk, e.cost, e.income, e.project));
     });
+    if (src.name === CONFIG.RESERVES_SOURCE) {
+      Object.keys(covered).forEach(code => {
+        const t = toDate[code] || (toDate[code] = { cost: 0, income: 0 });
+        t.cost += covered[code];
+      });
+    }
 
     // What is left, per milestone, line by line.
     const plans = [];
@@ -474,6 +483,43 @@ function remainingPlan_(planned, actualLines, nowKey) {
     });
     return Object.assign({}, src, { lines: out });
   });
+}
+
+/**
+ * Other sheets' spend before `nowKey` on Reserves' milestones (reservesOffsets_), by the
+ * Reserves item code whose lines run over its date, out to whole quarters as reservesSpans_:
+ * { code: amount }. Spend dated outside every Reserves line of its milestone is no part of
+ * Reserves' cost, so it counts nowhere.
+ */
+function coveredToDate_(planned, actualLines, nowKey) {
+  const reserves = (planned || []).filter(b => b.name === CONFIG.RESERVES_SOURCE)[0];
+  if (!reserves) return {};
+  const spans = {}; // milestone key -> [{ code, start, end }]
+  (reserves.budgetLines || reserves.lines || []).forEach(l => {
+    const code = itemCode_(l.item);
+    if (!code || !isGeneralLine_(l) || !l.start || !l.end) return;
+    const k = milestoneKey_(l.milestone);
+    (spans[k] = spans[k] || []).push({ code: code, start: quarterBounds_(qiOfDate_(l.start)).start,
+      end: quarterBounds_(qiOfDate_(l.end)).end });
+  });
+  const paying = {}; // 'source||item code' -> milestone key
+  planned.forEach(src => {
+    if (src.name === reserves.name) return;
+    (src.budgetLines || src.lines || []).forEach(l => {
+      const code = itemCode_(l.item), k = milestoneKey_(l.milestone);
+      if (code && isGeneralLine_(l) && spans[k]) paying[src.name + '||' + code] = k;
+    });
+  });
+  const out = {};
+  (actualLines || []).forEach(l => {
+    if (l.kind !== 'expense') return;
+    const k = paying[clean_(l.fundingSource || '') + '||' + itemCode_(l.item)];
+    const date = new Date(l.date);
+    if (!k || DateMath.monthKey(date) >= nowKey) return;
+    const span = spans[k].filter(s => date >= s.start && date <= s.end)[0];
+    if (span) out[span.code] = (out[span.code] || 0) + (Number(l.amount) || 0);
+  });
+  return out;
 }
 
 /**

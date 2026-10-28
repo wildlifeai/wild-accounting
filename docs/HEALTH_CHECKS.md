@@ -131,8 +131,22 @@ is in the totals whatever its date and its fix is usually in Drive.
 | E1 | warning | Actuals exceed budget for a funding source | Re-budget or explain to the funder. |
 | E2 | warning | A secured source has spent well below what was expected by the end of the last finished quarter, by the same rule as D5 | Funders care about underspend as much as overspend. Fires once at least half the budget was due (`UNDERSPEND_MIN_DUE`) and the shortfall is a quarter of the budget or more (`UNDERSPEND_GAP`). Spend so far this quarter counts toward catching up. If the work has slipped, move it to later quarters on the `Forecast` tab. |
 | E3 | error | Same item code in two funding sources | One cost billed twice. |
-| E4 | warning | Same `Description` in two sources with overlapping dates | Double-funding signal, for example the same FTE in two grants. |
+| E4 | warning | Same `Description` in two sources with overlapping dates | Double-funding signal, for example the same FTE in two grants. Quiet when both are General lines on a milestone `Reserves` holds: what is paid there comes off `Reserves` by design. |
 | E5 | warning | A secured grant with both General lines and project lines, and no share for General in its `Contribution policy`, has spent more on its project lines than they budget, by more than `CONTRIBUTION_TOLERANCE` (10%) | The grant's total can still be within budget, which is why E1 is quiet: the money moved from its General lines. The detail gives both sides. Explain it in the funder's report, or agree a new split with the funder and then update the `Budget` tab. |
+
+D5 and E2 leave out `Reserves`: it holds the full cost of General's work and other sheets pay part
+of it, so its own spend cannot be judged against its lines. Quarter close's accrual candidates
+judge its milestones against what is left for it instead.
+
+### H. Reserves, aimed at the GM
+
+`Reserves` holds the full cost of General's work; a General line on any other sheet, on a milestone
+of the same name, comes off it (see the [user guide](USER_GUIDE.md#general-and-reserves)).
+
+| id | Sev | Check | Action shown |
+|---|---|---|---|
+| H1 | warning | In a month to come, other sheets pay more of a `Reserves` milestone than `Reserves` holds for it, every application counted as won | `Reserves` goes negative there and General's cost is understated. Raise its line for those months. The detail names the milestone, the months, what is paid against the full cost, and who pays. |
+| H2 | info | A General line on another sheet, on a milestone `Reserves` has no line of that name for | It counts on top of `Reserves`, which is right for work `Reserves` does not hold. If it pays a cost `Reserves` holds under another name, give both lines the same `Milestone` so it comes off instead. |
 
 ### G. Funding pipeline
 

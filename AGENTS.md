@@ -1,6 +1,6 @@
 # Wild Accounting: developer guide
 
-This repository holds the Google Apps Script code of the **Funding Cockpit**, the dashboard that
+This repository holds the Google Apps Script code of the **Finance and Performance Cockpit**, the dashboard that
 joins Wildlife.ai's budgets (Google Sheets in Drive) to its actuals (Xero), and the checks that
 keep it honest. Staff using the cockpit want the [README](README.md); this file is for changing it.
 
@@ -99,14 +99,15 @@ snapshot that the dashboard reads instantly. The data model it relies on is in `
 | `BudgetReader.js` | Walk Drive, parse each sheet's `Funding_info`, `Budget` and `Forecast` tabs |
 | `ForecastEngine.js` | Pure forecasting maths and quarter helpers, unit-testable |
 | `Aggregator.js` | Join budgets and actuals into the snapshot: breakdown rows, contribution, tracking, timeline, runway |
-| `Permissions.js` | The Cockpit Settings sheet: its Permissions tab (which projects each person may see) and its Reserves tab (the money the runway starts from) |
+| `Permissions.js` | The Cockpit Settings sheet: its Permissions tab (which projects each person may see), its Reserves tab (the money the runway starts from) and its Board budget tab (the budget the board approved) |
 | `TrackingBuilder.js` | One project's sources and milestones by quarter, budget, actual and forecast, for both views of Project tracking |
+| `Board.js` | The Board tab's finance: income, cost and surplus by project against the board's budget, and next year's draft, from the runway parts |
 | `HealthCheck.js` | Turns silent wrongness into named findings. Pure, so it runs offline |
 | `Snapshot.js` | The cache in Drive, the refresh trigger, and refresh progress |
 | `WebApp.js` | `doGet`, the client API (`google.script.run`), per-person filtering |
 | `Index/Stylesheet/JavaScript.html` | The dashboard UI |
 | `Tests.js` | `runTests()`: the checks above, with no Drive or Xero |
-| `Probe.js` | Read-only diagnostics run by hand from the editor, currently the contribution dry run. Never on a trigger |
+| `Probe.js` | Read-only diagnostics run by hand from the editor, currently the margin dry run. Never on a trigger |
 
 ## Deploying a change
 
@@ -130,7 +131,7 @@ Only needed to stand up a new copy of the cockpit.
 1. **Prerequisites.** A `wildlife.ai` Google account with access to the Budgets Drive, and a Xero
    app from <https://developer.xero.com/app/manage> (New app, Web app), which gives a Client ID
    and Client Secret.
-2. **Create the project.** From `dashboard/`, `clasp create --type webapp --title "Funding Cockpit"`
+2. **Create the project.** From `dashboard/`, `clasp create --type webapp --title "Finance and Performance Cockpit"`
    then `clasp push`. Copy `.clasp.json.example` instead if you already have a script id.
 3. **Config.** In `Config.js`, set `BUDGETS_ROOT_FOLDER_ID` to the id of the top-level Budgets
    folder. The **Cockpit Settings** sheet is created in that folder on first use, with its
@@ -217,7 +218,7 @@ rather than three that drift.
 
 | Project | Script ID | Deployment ID | Kind |
 |---|---|---|---|
-| Funding Cockpit | `1L4ilqypO-LyLmY4Vyv6TwxjsUwH3d8x0cr54hIgkyU1bch7pQ4xAurVW` | `AKfycbxCjtIS-xnIdySCtFF7vibrW0qhhnMcnzFs0GCPK0SXrzFzV5-WZtNnpkyTWfbLdAqs` | standalone web app, access limited to wildlife.ai |
+| Finance and Performance Cockpit | `1L4ilqypO-LyLmY4Vyv6TwxjsUwH3d8x0cr54hIgkyU1bch7pQ4xAurVW` | `AKfycbxCjtIS-xnIdySCtFF7vibrW0qhhnMcnzFs0GCPK0SXrzFzV5-WZtNnpkyTWfbLdAqs` | standalone web app, access limited to wildlife.ai |
 
 It is the only one. Earlier tools and the projects they ran in were retired; see the history in
 [`docs/DESIGN.md`](docs/DESIGN.md).

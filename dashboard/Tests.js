@@ -255,9 +255,9 @@ function runTests() {
   check('several projects: each bar keeps its own project\'s segments',
     pt2.sources[0].milestones[0].from === '25/26 Q3' &&
     pt2.sources[0].milestones[1].from === '26/27 Q2');
-  // General's contribution from a project shown beside it is already in that project's
-  // rows, so it is not counted again; one from a project not shown still is.
-  var ctrk = [{ source: 'XXX_27_C', status: 'secured', contributionRate: 0.4, milestones: [
+  // General's margin from a project shown beside it is already in that project's rows, so
+  // it is not counted again; one from a project not shown still is.
+  var ctrk = [{ source: 'XXX_27_C', status: 'secured', margin: { rate: 0.4 }, milestones: [
     { item: 'XXX_27_C_001', milestone: 'Build', project: 'Wildlife Watcher',
       baseline: { '26/27 Q2': 100 }, actual: {}, costForecast: {},
       incomeBaseline: { '26/27 Q2': 1000 }, incomeActual: {}, incomeForecast: {} }] }];
@@ -265,8 +265,8 @@ function runTests() {
     return composeProjectTracking(ctrk, [], projects, quarterSortNum('26/27 Q1')).sources
       .map(function (s) { return s.source; }).join('|');
   };
-  check('General alone gathers the contribution; with its project shown it is not doubled',
-    heads('General') === CONTRIBUTIONS_HEADING &&
+  check('General alone gathers the margin; with its project shown it is not doubled',
+    heads('General') === MARGINS_HEADING &&
     heads(['General', 'Wildlife Watcher']) === 'XXX_27_C');
 
   // A source's tracking starts where the source does. The General option was renamed
@@ -959,8 +959,9 @@ function runTests() {
     !/\b(round_|monthsUntil_|addInto_|scaleMap_|distributeByMonth_|CONFIG|DateMath|clean_)\b/
       .test(runwayWalk_.toString()));
 
-  // Parts split income the way the cards do: a 40% policy moves 40% of a non-General
-  // line's income to a "(contribution)" part under General, budget and actual alike.
+  // Parts split income the way the cards do: the source's whole margin, half its income
+  // here whatever its 40% policy says, moves from a non-General line to a "(margin)" part
+  // under General, budget and actual alike.
   var rwParts = runwayParts_([
     mSrc('S', 'secured', { 'contribution policy': 'percent_of_income:40' },
       [mLine(2026, 6, 500, 1000)])
@@ -968,16 +969,29 @@ function runTests() {
         project: 'P', fundingSource: 'S', item: '' }], {}, {});
   var rwOwn = rwParts.filter(function (p) { return p.project === 'P'; })[0];
   var rwGen = rwParts.filter(function (p) { return p.project === CONFIG.GENERAL_PROJECT; })[0];
-  check('runway parts: the project keeps its share of budget income',
-    Math.abs(rwOwn.income['2026-06'] - 600) < 0.01 && rwOwn.cost['2026-06'] === 500);
-  check('runway parts: General gets the policy share, under the contribution milestone',
-    Math.abs(rwGen.income['2026-06'] - 400) < 0.01 && rwGen.milestone === 'S (contribution)');
+  check('runway parts: the project keeps its income less the margin',
+    Math.abs(rwOwn.income['2026-06'] - 500) < 0.01 && rwOwn.cost['2026-06'] === 500);
+  check('runway parts: General gets the whole margin, under the margin milestone',
+    Math.abs(rwGen.income['2026-06'] - 500) < 0.01 && rwGen.milestone === 'S (margin)');
   // The actual carries no item code, so it sits on the project's "(unassigned)" part.
   var rwOwnActual = rwParts.filter(function (p) {
     return p.project === 'P' && p.milestone === '(unassigned)'; })[0];
   check('runway parts: actual income splits the same way',
-    Math.abs(rwOwnActual.actualIncome['2026-05'] - 120) < 0.01 &&
-    Math.abs(rwGen.actualIncome['2026-05'] - 80) < 0.01);
+    Math.abs(rwOwnActual.actualIncome['2026-05'] - 100) < 0.01 &&
+    Math.abs(rwGen.actualIncome['2026-05'] - 100) < 0.01);
+  // A source with no income on its project lines: General carries their cost, planned and
+  // spent, so the project nets to zero.
+  var rwLoss = runwayParts_([mSrc('R', 'secured', {}, [mLine(2026, 6, 300, 0)])],
+    [{ date: new Date(2026, 4, 10), amount: 50, kind: 'expense', project: 'P',
+       fundingSource: 'R', item: '' }], {}, {});
+  var rwLossOwn = rwLoss.filter(function (p) { return p.project === 'P' && p.milestone === 'M'; })[0];
+  var rwLossActual = rwLoss.filter(function (p) {
+    return p.project === 'P' && p.milestone === '(unassigned)'; })[0];
+  var rwLossGen = rwLoss.filter(function (p) { return p.project === CONFIG.GENERAL_PROJECT; })[0];
+  check('runway parts: with no income, General takes the cost as a negative margin',
+    Math.abs(rwLossOwn.income['2026-06'] - 300) < 0.01 &&
+    Math.abs(rwLossGen.income['2026-06'] + 300) < 0.01 &&
+    rwLossActual.actualIncome['2026-05'] === 50 && rwLossGen.actualIncome['2026-05'] === -50);
 
   // Lines per group must add up to the organisation's line, or grouping the chart would
   // change the total it is a breakdown of.
@@ -1135,7 +1149,7 @@ function runTests() {
     policyOk('percent_of_income:100') && policyOk('percent_of_income:0') &&
     policyOk('percent_of_income:150') === false);
 
-  // ---- contribution: which share of a source's income funds General ------------
+  // ---- contribution policy: the margin G1 expects of a source --------------------
   function cSrc(policy, status, lines) {
     return { name: 'XXX_27_C', status: status || 'secured', projectFolder: 'Spyfish Aotearoa',
       metadata: policy === undefined ? {} : { 'contribution policy': policy },
@@ -1145,32 +1159,54 @@ function runTests() {
     contributionRate_(cSrc('percent_of_income:40')) === 0.4);
   check('contribution: read through the same normalising as C6',
     contributionRate_(cSrc('Percent of income: 12.5')) === 0.125);
-  // per_line lines are already on General through the Project column; deriving on top
-  // would count them twice.
-  check('contribution: none and per_line derive nothing',
+  check('contribution: none and per_line state no rate',
     contributionRate_(cSrc('none')) === 0 && contributionRate_(cSrc('per_line')) === 0);
-  check('contribution: a missing or unreadable policy derives nothing',
+  check('contribution: a missing or unreadable policy states none',
     contributionRate_(cSrc(undefined)) === 0 && contributionRate_(cSrc('40%')) === 0 &&
     contributionRate_(cSrc('percent_of_income:150')) === 0);
-  check('contribution: a line already on General owes nothing',
-    lineContribution_({ project: 'General', income: 1000 }, 0.4) === 0 &&
-    lineContribution_({ project: 'Spyfish Aotearoa', income: 1000 }, 0.4) === 400 &&
-    lineContribution_({ project: 'Spyfish Aotearoa', income: 1000 }, 0) === 0);
 
-  var cMoves = contributionMoves_([
-    cSrc('percent_of_income:40', 'secured', [
-      { project: 'Spyfish Aotearoa', income: 10000, cost: 6000 },
-      { project: 'General', income: 2000, cost: 2000 }]),
-    cSrc('percent_of_income:40', 'proposed', [
-      { project: 'Wildlife Watcher', income: 5000, cost: 3000 }]),
-    cSrc('per_line', 'secured', [{ project: 'General', income: 3000, cost: 3000 }])
-  ]).moves;
-  check('contribution: secured income moves from the project to General',
-    cMoves['secured||Spyfish Aotearoa'] === -4000 && cMoves['secured||General'] === 4000);
-  check('contribution: an application moves as proposed, not secured',
-    cMoves['proposed||Wildlife Watcher'] === -2000 && cMoves['proposed||General'] === 2000);
-  check('contribution: organisation totals do not move',
-    Object.keys(cMoves).reduce(function (t, k) { return t + cMoves[k]; }, 0) === 0);
+  // ---- margin: all of a source's margin is General's ------------------------------
+  function cLine(project, income, cost) {
+    return { project: project, income: income, cost: cost,
+      start: d(2026, 6, 1), end: d(2026, 6, 30) };
+  }
+  check('margin: the rate is the margin on the lines not already General\'s',
+    marginRule_(cSrc('none', 'secured', [cLine('Spyfish Aotearoa', 10000, 6000),
+      cLine('General', 2000, 500)])).rate === 0.4);
+  check('margin: the policy does not change it',
+    marginRule_(cSrc('percent_of_income:10', 'secured',
+      [cLine('Spyfish Aotearoa', 10000, 6000)])).rate === 0.4);
+  check('margin: an overrun is a negative margin',
+    Math.abs(marginRule_(cSrc('none', 'secured', [cLine('Spyfish Aotearoa', 1000, 1250)])).rate +
+      0.25) < 1e-9);
+  check('margin: none when income meets cost, or on General\'s own lines alone',
+    marginRule_(cSrc('none', 'secured', [cLine('Spyfish Aotearoa', 500, 500)])) === null &&
+    marginRule_(cSrc('none', 'secured', [cLine('General', 500, 100)])) === null);
+  check('margin: with no income on its own lines, a source passes on their cost',
+    marginRule_(cSrc('none', 'secured', [cLine('Wildlife Watcher', 0, 900)])).byCost === true);
+  check('margin: a line\'s margin lands with its income; a General line owes none',
+    Math.abs(lineMargin_(cLine('Spyfish Aotearoa', 1000, 600), { rate: 0.4 })['2026-06'] - 400) <
+      1e-6 && Object.keys(lineMargin_(cLine('General', 1000, 600), { rate: 0.4 })).length === 0);
+  check('margin: with no income to ride on, the loss lands with the cost',
+    Math.abs(lineMargin_(cLine('Spyfish Aotearoa', 0, 600), { byCost: true })['2026-06'] + 600) <
+      1e-6);
+
+  var cDry = marginMoves_([
+    cSrc('percent_of_income:20', 'secured', [cLine('Spyfish Aotearoa', 10000, 6000),
+      cLine('General', 2000, 2000)]),
+    cSrc('percent_of_income:40', 'proposed', [cLine('Wildlife Watcher', 5000, 3000)]),
+    cSrc('per_line', 'secured', [cLine('General', 3000, 3000)])
+  ]);
+  var cMoves = cDry.moves;
+  var near = function (a, b) { return Math.abs(a - b) < 0.01; };
+  check('margin dry run: secured income moves from the project to General',
+    near(cMoves['secured||Spyfish Aotearoa'], -4000) && near(cMoves['secured||General'], 4000));
+  check('margin dry run: an application moves as proposed, not secured',
+    near(cMoves['proposed||Wildlife Watcher'], -2000) && near(cMoves['proposed||General'], 2000));
+  check('margin dry run: organisation totals do not move',
+    near(Object.keys(cMoves).reduce(function (t, k) { return t + cMoves[k]; }, 0), 0));
+  check('margin dry run: says what the policy expected beside it',
+    near(cDry.sources[0].policyShare, 2000) && near(cDry.sources[0].toGeneral, 4000));
 
   // ---- aggregateBudgets_: the budget side of the Overview, reachable by a test ----
   // It ran inline in buildSnapshot, behind Drive and Xero, so nothing could test which
@@ -1197,8 +1233,11 @@ function runTests() {
   function agSum(map) {
     return Object.keys(map || {}).reduce(function (t, k) { return t + map[k]; }, 0);
   }
+  // Less the margin, which is General's whatever the policy (none here): see margins below.
   check('aggregate: income is credited to each line\'s own project',
-    ag.budgetByKey['Spyfish Aotearoa||XXX_27_A||M1'].income === 10000 &&
+    Math.abs(ag.budgetByKey['Spyfish Aotearoa||XXX_27_A||M1'].income - 6000) < 1e-6 &&
+    Math.abs(ag.budgetByKey['General||XXX_27_A||' + marginMilestone_('XXX_27_A')].income -
+      4000) < 1e-6 &&
     ag.budgetByKey['General||XXX_27_A||GM'].income === 2000);
   check('aggregate: item codes map to their milestone',
     ag.itemToMilestone['XXX_27_A||XXX_27_A_001'] === 'M1');
@@ -1208,7 +1247,9 @@ function runTests() {
     ag.budgetByKey['Spyfish Aotearoa||' + agLoser + '||M2'].income > 0 &&
     ag.costSuppressed[agLoser].countedIn === agReps.G);
   check('aggregate: expected income weights a proposal by its probability',
-    Math.abs(agSum(ag.budgetByKey['Spyfish Aotearoa||XXX_28_B||M2'].weightedByQ) - 4000) < 1);
+    Math.abs(agSum(ag.budgetByKey['Spyfish Aotearoa||XXX_28_B||M2'].weightedByQ) +
+      agSum(ag.budgetByKey['General||XXX_28_B||' + marginMilestone_('XXX_28_B')].weightedByQ) -
+      4000) < 1);
   check('aggregate: the project rollup totals what the entries total',
     Math.abs(Object.keys(ag.projects).reduce(function (t, p) {
       return t + ag.projects[p].securedIncome; }, 0) - 12000) < 1);
@@ -1230,9 +1271,9 @@ function runTests() {
     !costIfFunded_({ status: 'secured', metadata: { 'goes ahead': 'only if funded' } }) &&
     !buildBreakdownRows_(ag.budgetByKey, {}, {}, {}, {})[0].ifFunded);
 
-  // ---- deriving contribution: General's income comes from the policy ----------
+  // ---- margins: General's income is each source's whole margin, whatever its policy ----
   var cBudgets = [
-    agSrc('XXX_27_P', 'secured', { 'contribution policy': 'percent_of_income:40' }, [
+    agSrc('XXX_27_P', 'secured', { 'contribution policy': 'percent_of_income:20' }, [
       agLine('Spyfish Aotearoa', 'M1', 'XXX_27_P_001', 6000, 10000),
       agLine('General', 'GM', 'XXX_27_P_002', 2000, 2000)]),
     agSrc('XXX_28_Q', 'proposed', { 'contribution policy': 'percent_of_income:40',
@@ -1242,71 +1283,98 @@ function runTests() {
   ];
   var cg = aggregateBudgets_(cBudgets, fyBounds_(d(2026, 9, 26)),
     chooseExclusivityReps_(cBudgets));
-  var cRow = cg.budgetByKey['General||XXX_27_P||' + contributionMilestone_('XXX_27_P')];
-  var qRow = cg.budgetByKey['General||XXX_28_Q||' + contributionMilestone_('XXX_28_Q')];
-  check('derive: the project keeps what its policy leaves it',
+  var cRow = cg.budgetByKey['General||XXX_27_P||' + marginMilestone_('XXX_27_P')];
+  var qRow = cg.budgetByKey['General||XXX_28_Q||' + marginMilestone_('XXX_28_Q')];
+  check('margins: the project keeps what its work costs',
     Math.abs(cg.budgetByKey['Spyfish Aotearoa||XXX_27_P||M1'].income - 6000) < 1e-6);
-  check('derive: General receives the rest as this source\'s contribution, as income',
+  check('margins: General receives the whole margin as income, not the policy\'s 20%',
     cRow && Math.abs(cRow.income - 4000) < 1e-6 && cRow.budget === 0 &&
     cRow.status === 'secured');
-  check('derive: a line already on General is not charged overhead',
+  check('margins: a line already on General is not charged',
     cg.budgetByKey['General||XXX_27_P||GM'].income === 2000);
-  check('derive: the contribution follows the line quarter by quarter',
+  check('margins: the margin follows the line quarter by quarter',
     !!cRow && Math.abs(agSum(cRow.incomeByQ) - 4000) < 1 &&
     Object.keys(cRow.incomeByQ).length === 4);
-  check('derive: a source still totals exactly what its funder gives',
+  check('margins: a source still totals exactly what its funder gives',
     !!cRow && Math.abs(cg.budgetByKey['Spyfish Aotearoa||XXX_27_P||M1'].income +
       cg.budgetByKey['General||XXX_27_P||GM'].income + cRow.income - 12000) < 1e-6);
-  check('derive: an application contributes as proposed, at its probability',
+  check('margins: an application\'s margin is proposed, at its probability',
     qRow && qRow.status === 'proposed' && Math.abs(agSum(qRow.weightedByQ) - 1000) < 1);
-  check('derive: per_line and none add no contribution row',
-    !cg.budgetByKey['General||XXX_27_N||' + contributionMilestone_('XXX_27_N')]);
+  check('margins: a source whose income meets its cost adds no margin row',
+    !cg.budgetByKey['General||XXX_27_N||' + marginMilestone_('XXX_27_N')]);
   // The rollup splits a source's income by cost share, 75/25 here, and then moves the
-  // policy's share of the non-General part.
-  check('derive: the project rollup moves the same way, and totals do not',
-    Math.abs(cg.projects['General'].securedIncome - 6600) < 1e-6 &&
-    Math.abs(cg.projects['Spyfish Aotearoa'].securedIncome - 9400) < 1e-6);
+  // margin out of the non-General part.
+  check('margins: the project rollup moves the same way, and totals do not',
+    Math.abs(cg.projects['General'].securedIncome - 7000) < 1e-6 &&
+    Math.abs(cg.projects['Spyfish Aotearoa'].securedIncome - 9000) < 1e-6);
+  // A source with no income on its project lines: General pays for them.
+  var lossAg = aggregateBudgets_([agSrc('XXX_27_R', 'secured', { 'contribution policy': 'none' },
+    [agLine('Wildlife Watcher', 'M6', 'XXX_27_R_001', 900, 0)])], fyBounds_(d(2026, 9, 26)), {});
+  check('margins: with no income, the project is paid its cost by General',
+    Math.abs(lossAg.budgetByKey['Wildlife Watcher||XXX_27_R||M6'].income - 900) < 1e-6 &&
+    Math.abs(lossAg.budgetByKey['General||XXX_27_R||' + marginMilestone_('XXX_27_R')].income +
+      900) < 1e-6 && Math.abs(lossAg.projects['General'].securedIncome + 900) < 1e-6);
+  // A source over two years, its project work in the first and General's in the second:
+  // this FY's cost and margin are the first year's own, not a share of both years.
+  var twoYear = agSrc('XXX_27_S', 'secured', { 'contribution policy': 'none' }, [
+    agLine('Wildlife Watcher', 'M7', 'XXX_27_S_001', 1000, 0),
+    { project: 'General', milestone: 'GM', item: 'XXX_28_S_001 - GM', start: d(2027, 4, 1),
+      end: d(2028, 3, 31), cost: 3000, income: 0 }]);
+  var twoAg = aggregateBudgets_([twoYear], fyBounds_(d(2026, 9, 26)), {});
+  check('rollup: this FY\'s cost by project is each line\'s own cost this FY',
+    Math.abs(twoAg.projects['Wildlife Watcher'].proposedBudgetFY - 1000) < 1e-6 &&
+    Math.abs(twoAg.projects['General'].proposedBudgetFY) < 1e-6 &&
+    Math.abs(twoAg.projects['Wildlife Watcher'].proposedBudget - 1000) < 1e-6);
+  check('rollup: this FY\'s margin moves with this FY\'s cost',
+    Math.abs(twoAg.projects['Wildlife Watcher'].securedIncomeFY - 1000) < 1e-6 &&
+    Math.abs(twoAg.projects['General'].securedIncomeFY + 1000) < 1e-6);
 
-  // The timeline: General's contribution is one row per contributing source, running the
-  // months the policy's share of its income falls in, with that source's status.
+  // The timeline: General's margin is one row per source with one, running the months it
+  // lands in, with that source's status.
   var tl = buildTimeline_(cBudgets);
   var tlRow = tl.filter(function (r) {
-    return r.milestone === contributionMilestone_('XXX_27_P'); })[0];
+    return r.milestone === marginMilestone_('XXX_27_P'); })[0];
   var m1 = cBudgets[0].lines[0];
-  check('timeline: a contribution row runs the months of the lines it comes from',
+  check('timeline: a margin row runs the months of the lines it comes from',
     tlRow && tlRow.project === 'General' && tlRow.segments.length === 1 &&
     tlRow.segments[0].source === 'XXX_27_P' && tlRow.segments[0].status === 'secured' &&
     tlRow.segments[0].start === DateMath.monthKey(m1.start) &&
     tlRow.segments[0].end === DateMath.monthKey(m1.end));
   check('timeline: a segment carries only its source, status, start and end',
     Object.keys(tlRow.segments[0]).sort().join(',') === 'end,source,start,status');
-  check('timeline: only a percent policy gets a contribution row',
+  check('timeline: a source with no margin gets no row',
     tl.filter(function (r) {
-      return r.milestone === contributionMilestone_('XXX_27_N'); }).length === 0);
+      return r.milestone === marginMilestone_('XXX_27_N'); }).length === 0);
 
   // General's tracking view: income layers only, by each milestone's own forecast rule.
-  var tm = contributionMilestones_([
-    { source: 'XXX_27_P', contributionRate: 0.4, milestones: [
+  var tm = marginMilestones_([
+    { source: 'XXX_27_P', margin: { rate: 0.4 }, milestones: [
       { project: 'Spyfish Aotearoa', incomeBaseline: { '26/27 Q1': 1000, '26/27 Q2': 1000 },
         incomeActual: { '26/27 Q1': 900 }, incomeForecast: { '26/27 Q2': 500 } },
       { project: 'Spyfish Aotearoa', incomeBaseline: { '26/27 Q2': 2000 },
         incomeActual: {}, incomeForecast: {} },
       { project: 'General', incomeBaseline: { '26/27 Q1': 9999 }, incomeActual: {},
         incomeForecast: {} }] },
-    { source: 'XXX_27_N', contributionRate: 0, milestones: [
+    { source: 'XXX_27_N', margin: null, milestones: [
       { project: 'Spyfish Aotearoa', incomeBaseline: { '26/27 Q1': 5000 } }] }
   ]);
-  check('tracking: one contribution row per contributing source',
-    tm.length === 1 && tm[0].milestone === contributionMilestone_('XXX_27_P'));
+  check('tracking: one margin row per source with a margin',
+    tm.length === 1 && tm[0].milestone === marginMilestone_('XXX_27_P'));
   check('tracking: no cost layers, so General\'s spend is not counted twice',
     !!tm[0] && Object.keys(tm[0].baseline).length === 0 &&
     Object.keys(tm[0].actual).length === 0 && Object.keys(tm[0].costForecast).length === 0);
-  check('tracking: the policy share of income on non-General milestones',
+  check('tracking: the margin rate\'s share of income on non-General milestones',
     !!tm[0] && tm[0].incomeBaseline['26/27 Q1'] === 400 &&
     tm[0].incomeBaseline['26/27 Q2'] === 1200 && tm[0].incomeActual['26/27 Q1'] === 360);
   // One milestone's forecast must not erase another's budget in the same quarter.
   check('tracking: forecasts fall back per milestone before they are summed',
     !!tm[0] && tm[0].incomeForecast['26/27 Q2'] === 1000);
+  var tmLoss = marginMilestones_([{ source: 'XXX_27_R', margin: { byCost: true }, milestones: [
+    { project: 'Wildlife Watcher', baseline: { '26/27 Q3': 900 }, actual: { '26/27 Q2': 300 },
+      costForecast: {}, incomeBaseline: {}, incomeActual: {}, incomeForecast: {} }] }]);
+  check('tracking: with no income, General\'s row is the cost as a loss',
+    tmLoss.length === 1 && tmLoss[0].incomeBaseline['26/27 Q3'] === -900 &&
+    tmLoss[0].incomeActual['26/27 Q2'] === -300);
 
   // G1: overhead within ten points of the policy is fine, either side.
   function g1Line(cost, income, end) {
@@ -1807,6 +1875,214 @@ function runTests() {
   check('D3: a journal\'s expense line is not asked for a Product/Service',
     !eHealth([], [{ kind: 'expense', amount: 10, item: '', journal: true, fundingSource: '',
       project: 'P', date: d(2025, 9, 1) }]).some(function (f) { return f.id === 'D3'; }));
+
+  // ---- Reserves holds General's full cost; what other sheets pay comes off it ----------
+  function resLine(source, mile, code, project, y1, m1, y2, m2, cost, desc) {
+    return { description: desc || mile, milestone: mile, item: source + '_' + code + ' - ' + mile,
+      project: project, start: d(y1, m1, 1), end: new Date(y2, m2, 0), cost: cost, income: 0 };
+  }
+  function resSrc(name, status, meta, lines) {
+    return { name: name, status: status, projectFolder: 'General', metadata: meta || {},
+      forecast: { cost: {}, income: {}, comments: {} }, lines: lines, budgetLines: lines };
+  }
+  var resBudgets = [
+    resSrc(CONFIG.RESERVES_SOURCE, 'secured', { owner: 'someone@wildlife.ai' }, [
+      resLine('XXX_27_CORE', 'General management', '004', 'General', 2026, 10, 2026, 12, 9000,
+        'General manager')]),
+    resSrc('XXX_27_GRANT', 'secured', {}, [
+      resLine('XXX_27_GRANT', 'General management', '005', 'General', 2026, 10, 2026, 11, 4000,
+        'General manager'),
+      resLine('XXX_27_GRANT', 'Maintenance', '006', 'General', 2026, 10, 2026, 12, 600),
+      resLine('XXX_27_GRANT', 'Build', '001', 'Wildlife Watcher', 2026, 10, 2026, 12, 3000)]),
+    // Matched whatever its spacing and case. Goes ahead only if funded, at 50%.
+    resSrc('XXX_28_ASK', 'proposed', { probability: '50', 'goes ahead': 'only if funded' }, [
+      resLine('XXX_28_ASK', ' general Management', '001', 'General', 2026, 12, 2026, 12, 1000)])
+  ];
+  var resOffsets = reservesOffsets_(resBudgets, {}, null);
+  check('reserves: one offset per paying sheet, named Reserves, keeping that sheet\'s status',
+    resOffsets.length === 2 && resOffsets.every(function (o) {
+      return o.name === CONFIG.RESERVES_SOURCE; }) &&
+    resOffsets[0].offsetFor === 'XXX_27_GRANT' && resOffsets[0].status === 'secured' &&
+    resOffsets[1].offsetFor === 'XXX_28_ASK' && resOffsets[1].status === 'proposed' &&
+    resOffsets[1].metadata['goes ahead'] === 'only if funded');
+  check('reserves: an offset is the paying line\'s cost, negative, month by month',
+    Math.abs(rSum(resOffsets[0].lines, 'cost') + 4000) < 0.01 &&
+    resOffsets[0].lines.length === 2 && Math.abs(rSum(resOffsets[1].lines, 'cost') + 1000) < 0.01);
+  check('reserves: lines on no Reserves milestone, or not General\'s, take nothing off',
+    resOffsets[0].lines.every(function (l) { return l.milestone === 'General management'; }));
+  check('reserves: an offset takes Reserves\' spelling of the milestone, to group with it',
+    resOffsets[1].lines[0].milestone === 'General management');
+  check('reserves: from the month the plan turns, months gone keep their actuals',
+    reservesOffsets_(resBudgets, {}, '2026-11')[0].lines.length === 1 &&
+    reservesOffsets_(resBudgets, {}, '2026-11')[1].lines.length === 1);
+  check('reserves: nothing comes off a source not named Reserves',
+    reservesOffsets_(resBudgets.slice(1), {}, null).length === 0);
+  // Outside the months Reserves holds a milestone over, it holds nothing of it to net.
+  var resEarly = reservesOffsets_([resBudgets[0], resSrc('XXX_26_OLD', 'secured', {}, [
+    resLine('XXX_26_OLD', 'General management', '002', 'General', 2026, 7, 2026, 11, 5000)])],
+    {}, null);
+  check('reserves: only the months Reserves holds the milestone over come off',
+    resEarly.length === 1 && resEarly[0].lines.map(function (l) {
+      return DateMath.monthKey(l.start); }).join() === '2026-10,2026-11');
+  // A line from mid-quarter holds the whole quarter: a payer's quarter entry spreads over it.
+  var resMid = resLine('XXX_27_CORE', 'Communications', '007', 'General', 2026, 11, 2027, 3, 5000);
+  resMid.start = d(2026, 11, 16);
+  var resLate = reservesOffsets_([resSrc(CONFIG.RESERVES_SOURCE, 'secured', {}, [resMid]),
+    resSrc('XXX_27_GRANT', 'secured', {}, [resLine('XXX_27_GRANT', 'Communications', '002',
+      'General', 2026, 10, 2026, 12, 3000)])], {}, null);
+  check('reserves: a line from mid-quarter takes the whole quarter\'s payment off',
+    resLate.length === 1 && Math.abs(rSum(resLate[0].lines, 'cost') + 3000) < 0.01 &&
+    DateMath.monthKey(resLate[0].lines[0].start) === '2026-10');
+
+  // Every runway line costs General's work at Reserves' full cost: what is paid elsewhere
+  // moves who pays it, not what it costs, whether the ask lands or not.
+  var resCounted = resBudgets.concat(resOffsets);
+  var resParts = runwayParts_(resCounted, [], {}, {});
+  var resGeneral = resParts.filter(function (p) { return p.project === 'General' &&
+    /general management/i.test(p.milestone); });
+  var resWalk = runwayWalk_(resGeneral, '2026-09').months.slice(-1)[0];
+  check('reserves: General management costs its full cost on every runway line',
+    Math.abs(resWalk.secured - resWalk.spend + 9000) < 1 &&
+    Math.abs(resWalk.weighted - resWalk.spend + 9000) < 1 &&
+    Math.abs(resWalk.proposed - resWalk.spend + 9000) < 1);
+  var resReservesOnly = runwayWalk_(resGeneral.filter(function (p) {
+    return p.fundingSource === CONFIG.RESERVES_SOURCE; }), '2026-09').months.slice(-1)[0];
+  check('reserves: Reserves alone is what is left for it, the ask weighted',
+    Math.abs(resReservesOnly.secured - resReservesOnly.spend + 5000) < 1 &&
+    Math.abs(resReservesOnly.weighted - resReservesOnly.spend + 4500) < 1 &&
+    Math.abs(resReservesOnly.proposed - resReservesOnly.spend + 4000) < 1);
+  var resAg = aggregateBudgets_(resCounted, fyBounds_(d(2026, 9, 26)), {});
+  var resRows = buildBreakdownRows_(resAg.budgetByKey, {}, {}, {}, resAg.sourceStatus);
+  check('reserves: the offsets are Reserves rows with the paying sheet\'s status',
+    resRows.filter(function (r) { return r.fundingSource === CONFIG.RESERVES_SOURCE; })
+      .map(function (r) { return r.status + ':' + r.budget; }).sort().join('|') ===
+      'proposed:-1000|secured:-4000|secured:9000' &&
+    resAg.sourceStatus[CONFIG.RESERVES_SOURCE] === 'secured' &&
+    resAg.fundingSources.filter(function (f) {
+      return f.name === CONFIG.RESERVES_SOURCE; }).length === 1);
+
+  // H1: more paid than Reserves holds in a month, every ask counted as won.
+  var overBudgets = [
+    resSrc(CONFIG.RESERVES_SOURCE, 'secured', {}, [resLine('XXX_27_CORE', 'General management',
+      '004', 'General', 2026, 11, 2026, 11, 3000)]),
+    resSrc('XXX_27_GRANT', 'secured', {}, [resLine('XXX_27_GRANT', 'General management', '005',
+      'General', 2026, 11, 2026, 11, 3500)])];
+  var over = reservesOverPaid_(overBudgets, reservesOffsets_(overBudgets, {}, null));
+  check('reserves: H1 names the milestone, the month, and who pays',
+    over.length === 1 && over[0].milestone === 'General management' &&
+    over[0].months.length === 1 && over[0].months[0].month === '2026-11' &&
+    over[0].months[0].paid === 3500 && over[0].months[0].full === 3000 &&
+    over[0].by.join() === 'XXX_27_GRANT');
+  var resHealth = buildHealth(resBudgets, [], { reservesOverPaid: over });
+  var resIds = function (id) { return resHealth.filter(function (f) { return f.id === id; }); };
+  check('reserves: H1 raised on Reserves, for the excess',
+    resIds('H1').length === 1 && resIds('H1')[0].amount === 500 &&
+    resIds('H1')[0].fundingSource === CONFIG.RESERVES_SOURCE);
+  check('reserves: H2 names General work on a milestone Reserves lacks',
+    resIds('H2').length === 1 && resIds('H2')[0].fundingSource === 'XXX_27_GRANT' &&
+    /Maintenance/.test(resIds('H2')[0].detail));
+  check('reserves: the line that pays and Reserves\' own share a description, and E4 is quiet',
+    resIds('E4').length === 0);
+  check('reserves: no H2 for a sheet whose General work is all on Reserves\' milestones',
+    !resIds('H2').some(function (f) { return f.fundingSource === 'XXX_28_ASK'; }));
+
+  // Project tracking: Reserves' rows are what is left for it, secured payers only.
+  var resTrk = [
+    { source: CONFIG.RESERVES_SOURCE, status: 'secured', milestones: [
+      { item: 'XXX_27_CORE_004', milestone: 'General management', project: 'General',
+        baseline: { '26/27 Q3': 9000 }, actual: {}, costForecast: {}, incomeBaseline: {},
+        incomeActual: {}, incomeForecast: {} },
+      { item: 'XXX_28_CORE_004', milestone: 'General management', project: 'General',
+        baseline: { '26/27 Q4': 9000 }, actual: {}, costForecast: {}, incomeBaseline: {},
+        incomeActual: {}, incomeForecast: {} }] },
+    { source: 'XXX_27_GRANT', status: 'secured', milestones: [
+      { item: 'XXX_27_GRANT_005', milestone: 'General management', project: 'General',
+        baseline: { '26/27 Q2': 3000, '26/27 Q3': 4000, '26/27 Q4': 1000 }, actual: {},
+        costForecast: { '26/27 Q3': 5000 }, incomeBaseline: {}, incomeActual: {},
+        incomeForecast: {} }] },
+    { source: 'XXX_28_ASK', status: 'proposed', milestones: [
+      { item: 'XXX_28_ASK_001', milestone: 'General management', project: 'General',
+        baseline: { '26/27 Q4': 2000 }, actual: {}, costForecast: {}, incomeBaseline: {},
+        incomeActual: {}, incomeForecast: {} }] }
+  ];
+  var resNet = netReservesTracking_(resTrk)[0].milestones;
+  check('reserves tracking: each quarter\'s budget less what secured sheets budget',
+    resNet[0].baseline['26/27 Q3'] === 5000 && resNet[1].baseline['26/27 Q4'] === 8000);
+  check('reserves tracking: a quarter before Reserves holds the milestone is left alone',
+    resNet[0].baseline['26/27 Q2'] === undefined && !resNet[0].cover['26/27 Q2']);
+  check('reserves tracking: a payer\'s forecast comes off as a forecast',
+    resNet[0].costForecast['26/27 Q3'] === 4000 && resNet[1].costForecast['26/27 Q4'] === undefined);
+  check('reserves tracking: each row keeps its full cost and who pays, a proposal not',
+    resNet[0].cover['26/27 Q3'].full === 9000 &&
+    resNet[0].cover['26/27 Q3'].by.map(function (b) { return b.source + ':' + b.amount; })
+      .join() === 'XXX_27_GRANT:5000' && resNet[1].cover['26/27 Q4'].by.length === 1);
+  check('reserves tracking: the paying sheets\' own rows are untouched',
+    netReservesTracking_(resTrk)[1].milestones[0].baseline['26/27 Q3'] === 4000 &&
+    resTrk[0].milestones[0].baseline['26/27 Q3'] === 9000);
+  var resPt = composeProjectTracking(netReservesTracking_(resTrk), [], 'General',
+    quarterSortNum('26/27 Q3'));
+  check('reserves tracking: the cell carries what to hover',
+    resPt.sources[0].milestones[0].byQ['26/27 Q3'].cost.cover.full === 9000);
+
+  // The plan from today: other sheets' spend so far on a Reserves milestone is spent of it.
+  var resPlanBudgets = [
+    resSrc(CONFIG.RESERVES_SOURCE, 'secured', {}, [resLine('XXX_27_CORE', 'General management',
+      '004', 'General', 2026, 10, 2027, 3, 12000)]),
+    resSrc('XXX_27_GRANT', 'secured', {}, [resLine('XXX_27_GRANT', 'General management', '005',
+      'General', 2026, 10, 2027, 3, 6000)])
+  ];
+  var resPlan = remainingPlan_(resPlanBudgets, [{ date: d(2026, 10, 15), kind: 'expense',
+    amount: 1000, fundingSource: 'XXX_27_GRANT', project: 'General', item: 'XXX_27_GRANT_005' },
+    { date: d(2026, 3, 15), kind: 'expense', amount: 700, fundingSource: 'XXX_27_GRANT',
+      project: 'General', item: 'XXX_27_GRANT_005' }], '2026-11');
+  // The paying sheet's own plan is its budget less all of its own spend, as before.
+  check('reserves plan: what is left is its full cost less every sheet\'s spend in its span',
+    Math.abs(rSum(resPlan[0].lines, 'cost', '2026-11') - 11000) < 0.01 &&
+    Math.abs(rSum(resPlan[1].lines, 'cost', '2026-11') - 4300) < 0.01);
+
+  // ---- Board tab: finance by project against the board's budget -----------------------
+  function bdPart(project, source, milestone, status, probability, maps) {
+    return Object.assign({ project: project, fundingSource: source, milestone: milestone,
+      status: status, probability: probability, cost: {}, income: {}, actualCost: {},
+      actualIncome: {} }, maps);
+  }
+  var bdRunway = { nowKey: '2026-10', reserves: { amount: 5000, month: '2026-09' }, parts: [
+    bdPart('Spyfish Aotearoa', 'XXX_27_P', 'M1', 'secured', 1, { cost: { '2026-11': 600 },
+      income: { '2026-11': 600 }, actualCost: { '2026-08': 400 }, actualIncome: { '2026-08': 400 } }),
+    bdPart('General', 'XXX_27_P', marginMilestone_('XXX_27_P'), 'secured', 1,
+      { income: { '2026-11': 400 }, actualIncome: { '2026-08': 100 } }),
+    bdPart('General', 'XXX_27_G', 'GM', 'secured', 1,
+      { cost: { '2026-12': 1000, '2027-05': 2000 }, income: { '2026-12': 500 } }),
+    bdPart('Wild About AI', 'XXX_28_A', 'Classes', 'proposed', 0.5,
+      { ifFunded: true, cost: { '2027-02': 800 }, income: { '2027-02': 1000 } })] };
+  var bdBudget = boardBudgetRows_([['26/27', 'Spyfish Aotearoa', '$2,000', '1,500', '', ''],
+    ['26/27', 'Organisation', '', '', '4,000', ''], ['', 'General', '1', '1', '', ''],
+    ['26/27', '', '1', '1', '', '']]);
+  var bd = boardFinance_(bdRunway, 2026, bdBudget);
+  var bdRow = function (y, p) {
+    return bd.years[y].rows.filter(function (r) { return r.project === p; })[0];
+  };
+  check('board: the budget tab gives a row per year and project, with its amounts',
+    bdBudget.length === 2 && bdBudget[0].income === 2000 && bdBudget[0].cost === 1500 &&
+    bdBudget[1].reserves === 4000);
+  var bdSpy = bdRow(0, 'Spyfish Aotearoa').figures.expected;
+  check('board: a project shows its funders\' income and the margin it passes to General',
+    bdSpy.income === 1500 && bdSpy.margin === -500 && bdSpy.cost === 1000 && bdSpy.surplus === 500);
+  check('board: General shows the margins it receives on their own line',
+    bdRow(0, 'General').figures.expected.margin === 500 &&
+    bdRow(0, 'General').figures.expected.income === 500);
+  check('board: actual runs to the end of last month',
+    bd.actualTo === '2026-09' && bdRow(0, 'Spyfish Aotearoa').figures.actual.income === 500 &&
+    bdRow(0, 'Spyfish Aotearoa').figures.actual.cost === 400);
+  var bdWai = bdRow(0, 'Wild About AI').figures;
+  check('board: work that goes ahead only if funded counts at its weight, never as secured',
+    bdWai.secured.cost === 0 && bdWai.secured.income === 0 && bdWai.expected.cost === 400 &&
+    bdWai.expected.income === 500 && bdWai.full.cost === 800 && bdWai.full.income === 1000);
+  check('board: the organisation totals every project, and its budget the project rows',
+    bdRow(0, 'All').figures.expected.income === 2500 && bdRow(0, 'All').figures.expected.cost === 2400 &&
+    bdRow(0, 'All').budget.income === 2000 && bd.years[0].reserves.budget === 4000);
+  check('board: next year holds only its own months',
+    bdRow(1, 'General').figures.secured.cost === 2000 && bd.years[1].label === '27/28');
 
   Logger.log(results.join('\n'));
   return results;

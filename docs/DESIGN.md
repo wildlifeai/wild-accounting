@@ -67,7 +67,7 @@ means "does it answer these".
 | # | What | Freq | Persona | Source of truth | Today |
 |---|---|---|---|---|---|
 | 1 | Forecast reported to Board | Q | Board | Cockpit: secured + weighted pipeline, frozen | Runway on the Overview on secured, weighted and all-proposed money, and a gap after pipeline. **Freezing does not exist**: the snapshot is overwritten every 6 hours, so August's figure is gone by November |
-| 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | Exists. General's overhead is derived from each sheet's `Contribution policy`, the same way in every view |
+| 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | Exists. General takes each source's whole margin, the same way in every view |
 | 3 | P&L (income and expenses) | Q | Board | Xero | Approved bank transactions, invoices and bills, and posted manual journals, counted as Xero's P&L counts them. Payroll posts as Xero Payroll bills and reaches the cockpit; milestone grain depends on each line carrying an item code, which D3 reports |
 | 4 | Working capital balance and forecast | Q | Board, Treasurer | Xero balance sheet + deferred grants | **Absent.** Needs a Xero scope the cockpit does not hold |
 | 5 | Bill payments | M | Bookkeeper | Xero | Native Xero. Deliberately out of scope |
@@ -98,9 +98,11 @@ Ranked by how badly they hurt the persona who depends on them:
   mid-quarter it understates that column and annual Expected with it. Whether it should be actual
   plus the rest of the forecast is undecided.
 - **Two income attributions.** The project rollup behind the organisation totals splits a source's
-  income by each project's share of its cost, while the Overview's cards and runway credit each
-  line's own income. They agree for most sheets and can differ slightly for one whose lines are not
-  priced in proportion to their cost. Only the line attribution is on screen.
+  income by each project's share of its cost (a year's figures by that year's cost, so a source
+  over two years with different work in each splits each year by its own), while the Overview's
+  cards and runway credit each line's own income. They agree for most sheets and can differ
+  slightly for one whose lines are not priced in proportion to their cost. Only the line
+  attribution is on screen.
 - **Granular Xero scopes by September 2027.** Xero retires the broad `accounting.transactions`
   and `accounting.reports.read` scopes then for apps created before 2 March 2026, which this one
   is. Moving means naming the granular scopes for bank transactions, invoices, manual journals
@@ -202,12 +204,55 @@ Ranked by how badly they hurt the persona who depends on them:
   grant pays now sit in one sheet and one Xero option, both named `Reserves`, with a line
   per cost per year; the board approves each year's lines. It needs no code: budgets and
   actuals join on the name, as for any source. It is not the Cockpit Settings `Reserves`
-  tab, which holds the money in hand that this source draws down.
+  tab, which holds the money in hand that this source draws down. From 2026-10-25 it holds
+  the full cost, below.
 - **2026-10-22: the runway chart names what it shows.** The Overview title names the year,
   but the chart does not follow the year, so a screenshot of it pasted into a board paper
   said nothing about its months or selections. The chart now opens with them: the months it
   runs, the grouping, and what Show and Filter picked. The Project tracking title also names
   the funding sources picked, and the timeline's columns.
+- **2026-10-25: the financial years are a multi-choice filter, and the chart follows them.**
+  With 26/27 picked, the chart still ran from before the year to the last budgeted month, so
+  it did not show the span the cards beside it totalled. The year selector is now a list of
+  ticks like Projects and Funding sources, the current year ticked by default, and the
+  chart draws the months from the start of the first year ticked to the end of the last.
+  The walk still runs from the first budgeted month, so each line opens at its true position
+  and its label still names the month it goes short, even after the years shown. The
+  combined-years option went with the selector.
+- **2026-10-25: General takes each source's whole margin.** Taking the policy's share of
+  income left the rest of a margin, or an overrun, on the project, so what General had
+  depended on how each sheet was priced against its policy, and a cost General carries for a
+  project sat on that project with nothing paying it. Now the income on a source's lines not
+  already General's, less their cost, is General's: from the plan, actuals so far and what is
+  left, and landing with the income at the source's margin rate, so a project still shows its
+  spend running ahead of a tranche. A source with no such income passes its cost instead.
+  Every project nets to zero over a source's life, and General is the one pot. The policy is
+  the margin G1 expects. Published figures move: General gains where a margin beats its
+  policy and loses where it falls short; organisation totals and runway do not.
+- **2026-10-25: Reserves holds General's full cost, and what other sheets pay comes off it.**
+  Holding only the part no grant pays meant working out each remainder by hand and retyping it
+  whenever a grant's plan moved. `Reserves` now holds every General cost in full; a General line
+  on any other sheet, on a milestone of the same name, comes off it month by month inside the
+  quarters `Reserves` holds that milestone in: whole quarters, since a Forecast entry spreads
+  over its quarter and a line starting mid-quarter would otherwise leave the payer's first
+  month counted twice. The name is the match, so funder sheets gain no column and their
+  `Budget` tabs stay as submitted. In the views that count money the
+  difference is an offset with the paying sheet's status and probability, so the cost counts
+  once at `Reserves`' figure on every runway line, and an application comes off only where its
+  money counts. Project tracking nets secured sheets only, having no expected case. More paid
+  than `Reserves` holds leaves it negative and raises H1, rather than being floored, so the
+  arithmetic stays the same on every line; General work on a milestone `Reserves` lacks counts
+  on top and raises H2. Nothing changes until a source named `Reserves` exists.
+- **2026-10-29: the Board tab builds the board pack's finance, and the cockpit is renamed.**
+  The board's updates were assembled by hand from the cockpit's numbers, so the pack and the
+  cockpit could disagree, and each update took a day. The Board tab works the figures out from
+  the runway's parts (`boardFinance_`), so it shows the same money as the runway chart, against
+  the budget the board approved, typed once on a `Board budget` tab of Cockpit Settings rather
+  than coded, since a budget is an amount and amounts stay out of this repository. A project
+  shows the income its funders give and, beside it, its margin to General, as the board's
+  updates set out a project's surplus; General shows the margins on their own line. Full
+  access only, as the runway is: the pack is the organisation's position. The cockpit is now
+  the Finance and Performance Cockpit, at the same address, since it reports both.
 
 ## History
 
