@@ -16,8 +16,11 @@
              Overview where it was unavoidable; behind a tab, nothing would tell you there
              were fourteen errors unless the tab says so. -->
         <button class="tab" data-view="health">Health <span id="health-badge" class="badge hidden"></span></button>
+        <!-- Full access only, as the runway is: shown by render() for them alone, and the
+             server refuses anyone else (apiGetBoard). -->
+        <button class="tab hidden" id="tab-board" data-view="board">Board</button>
       </nav>
-      <div class="title"><span class="dot"></span> Wild Funding Cockpit</div>
+      <div class="title"><span class="dot"></span> Wild Finance and Performance Cockpit</div>
       <div class="sync">
         <button id="refresh">Refresh now</button>
         <span id="sync-label">loading…</span>
@@ -272,6 +275,32 @@
       </div>
       <div class="track-grid-wrap" id="tr-grid"></div>
       <div id="tr-totals" class="track-totals"></div>
+    </div>
+
+    <div id="view-board" class="hidden">
+      <div class="overview-section">
+        <div class="grid-title-row">
+          <h2 class="board-h">Finance</h2>
+          <div class="title-tools">
+            <span id="bd-status" class="track-status"></span>
+            <span class="help">
+              <button type="button" class="help-btn" aria-expanded="false"
+                aria-controls="board-help" aria-label="What this tab shows">?</button>
+              <div class="help-pop hidden" id="board-help">
+                The board pack's figures by project. This year: Xero <b>actuals</b> to the
+                end of last month, then the <b>forecast</b> (each application at its
+                probability) to 31 March, against the budget the board approved, typed on the
+                <em>Board budget</em> tab of Cockpit Settings. Next year: the draft budget on
+                secured money only, expected, and with every application won. A project shows
+                its income as its funders give it; its <b>margin to General</b> is the part of
+                that income General receives, so General shows the margins it receives on
+                their own line.
+              </div>
+            </span>
+          </div>
+        </div>
+        <div id="board-finance"></div>
+      </div>
     </div>
   </div>
 

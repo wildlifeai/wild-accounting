@@ -2,13 +2,13 @@
 name: wild-accounting-agent
 description: >
   Invariants and hard-won traps for any agent or developer working on Wild Accounting, the
-  Funding Cockpit that joins Wildlife.ai's budgets in Google Sheets to actuals in Xero. Read and
+  Finance and Performance Cockpit that joins Wildlife.ai's budgets in Google Sheets to actuals in Xero. Read and
   follow this before editing any script, deploying to Apps Script, or touching Xero or budget data.
 ---
 
 # Wild Accounting: rules for agents and developers
 
-This repository holds the Apps Script code of the **Funding Cockpit**, which joins **budgets**
+This repository holds the Apps Script code of the **Finance and Performance Cockpit**, which joins **budgets**
 (Google Sheets in Drive) to **actuals** (Xero) so one set of numbers serves the board, the GM,
 project leads and funders. This file holds the rules and the traps behind them; the reasoning,
 open questions and history are in [`docs/DESIGN.md`](../../docs/DESIGN.md).

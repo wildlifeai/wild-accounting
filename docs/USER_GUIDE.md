@@ -1,4 +1,4 @@
-# Using the Funding Cockpit
+# Using the Finance and Performance Cockpit
 
 A plain-English guide to the dashboard: what it shows, where the numbers come from, and how to
 change a budget or a Xero transaction so the dashboard reflects it. It is written for anyone
@@ -23,7 +23,7 @@ data was last pulled. It refreshes itself roughly every 6 hours; click the butto
 latest immediately. A refresh takes about a minute, and a progress bar shows which phase it is
 in (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
 
-## Three tabs
+## Four tabs
 
 - **Overview**: the organisation-wide picture, with a runway chart you can regroup and filter
   (below).
@@ -35,6 +35,8 @@ in (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
   clean. Each finding says what is wrong, where, the amount at stake and what to do, with a
   link to the sheet. [Health checks](HEALTH_CHECKS.md) explains every one. Under the findings,
   [Quarter close](#quarter-close) gives the accountant what to post for a finished quarter.
+- **Board**: the board pack's figures, for people with full access only. See
+  [The Board tab](#the-board-tab).
 
 Each tab's controls sit in a ribbon of dropdown boxes, grouped and named underneath. The title
 under the ribbon names what was chosen, so a screenshot says what it is, and the **?** at its
@@ -245,6 +247,33 @@ bills, receipts and pay runs are in Xero, so both tables read the closed quarter
   none), with the `Forecast` comment. Accrue the ones where the work was done and the bill has
   not arrived; for work that slipped, move the amount to a later quarter on the `Forecast` tab.
   The comment is where a project lead tells the accountant which it is.
+
+## The Board tab
+
+Only people with `*` on the `Permissions` tab see it. It builds the board pack's figures from
+the same money as the runway chart, so the two always agree.
+
+**Finance** has two tables, each a block per project (Wildlife Watcher, Spyfish Aotearoa, Wild
+About AI, General) and one for the organisation:
+
+- **This financial year against the board's budget**: the **Budget** the board approved,
+  **Actual** from Xero to the end of last month, the **Forecast** to 31 March (actuals so far,
+  then the plan with each application at its probability), and the forecast less the budget.
+  Under the organisation, **Reserves** at 31 March against the working capital the budget
+  expected, and a line with the reserves and the runway on secured money only.
+- **Next financial year's draft budget**: income, cost and surplus on **Secured** money only,
+  **Expected**, and **Full** (every application won), with the reserves each would leave at 31
+  March. The board adopts Expected; expected income above secured is the fundraising target.
+
+A project shows its income as its funders give it. **Margin to General** is the part of that
+income General receives (see [General and Reserves](#general-and-reserves)), and General shows
+those margins on its own line, **Margins from projects**. That is how the board's updates have
+set out each project's surplus.
+
+**GM:** the budget the board approved lives on the `Board budget` tab of **Cockpit Settings**:
+one row per financial year (`26/27`) and project, with its income and cost, and on a row named
+`Organisation` the reserves the budget expected at year end. The tab reads it each time it
+opens, so a correction shows without a refresh.
 
 ## Coding transactions in Xero
 

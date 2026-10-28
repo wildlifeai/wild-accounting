@@ -215,3 +215,38 @@ function reservesMonth_(d, now) {
   var cap = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   return DateMath.monthKey(m < cap ? m : cap);
 }
+
+// ---- Board budget ----
+
+/**
+ * The budget the board approved, from the Board budget tab: see boardBudgetRows_. Read when
+ * the Board tab opens, so a typed correction shows without a refresh. The tab is created with
+ * its header the first time.
+ */
+function readBoardBudget_() {
+  var ss = openOrCreateSettingsSpreadsheet_();
+  var sheet = ss.getSheetByName(CONFIG.BOARD.TAB);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.BOARD.TAB);
+    sheet.appendRow(CONFIG.BOARD.HEADER);
+    sheet.setFrozenRows(1);
+  }
+  return boardBudgetRows_(sheet.getDataRange().getDisplayValues().slice(1));
+}
+
+/**
+ * Board budget rows, header gone, as { fy, project, income, cost, reserves }. A financial
+ * year is written as the cockpit labels it ("26/27"); a row without one, or without a
+ * project, is skipped. Read as displayed text, so "26/27" cannot arrive as a date.
+ */
+function boardBudgetRows_(values) {
+  var out = [];
+  (values || []).forEach(function (r) {
+    var fy = String(r[0] || '').trim(), project = String(r[1] || '').trim();
+    if (!/^\d{2}\/\d{2}$/.test(fy) || !project) return;
+    var reserves = String(r[4] || '').trim();
+    out.push({ fy: fy, project: project, income: parseAmount_(r[2]), cost: parseAmount_(r[3]),
+      reserves: reserves === '' ? null : parseAmount_(reserves) });
+  });
+  return out;
+}

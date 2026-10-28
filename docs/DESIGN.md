@@ -243,6 +243,16 @@ Ranked by how badly they hurt the persona who depends on them:
   than `Reserves` holds leaves it negative and raises H1, rather than being floored, so the
   arithmetic stays the same on every line; General work on a milestone `Reserves` lacks counts
   on top and raises H2. Nothing changes until a source named `Reserves` exists.
+- **2026-10-29: the Board tab builds the board pack's finance, and the cockpit is renamed.**
+  The board's updates were assembled by hand from the cockpit's numbers, so the pack and the
+  cockpit could disagree, and each update took a day. The Board tab works the figures out from
+  the runway's parts (`boardFinance_`), so it shows the same money as the runway chart, against
+  the budget the board approved, typed once on a `Board budget` tab of Cockpit Settings rather
+  than coded, since a budget is an amount and amounts stay out of this repository. A project
+  shows the income its funders give and, beside it, its margin to General, as the board's
+  updates set out a project's surplus; General shows the margins on their own line. Full
+  access only, as the runway is: the pack is the organisation's position. The cockpit is now
+  the Finance and Performance Cockpit, at the same address, since it reports both.
 
 ## History
 

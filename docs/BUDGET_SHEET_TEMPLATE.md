@@ -57,7 +57,7 @@ header row. There is no `Status` row: the folder is the status.
   which would relabel a header each quarter while the figure beneath it stayed put. For more than
   four quarters, copy a header cell sideways and add 3 to both `EOMONTH` offsets.
 
-**Checking your work.** Open the Funding Cockpit and look at the **Health** tab, which names the
+**Checking your work.** Open the cockpit and look at the **Health** tab, which names the
 sheet, the row and what to do. The template imported unaltered produces no findings, so anything
 reported afterwards is your own data. If a new sheet does not appear at all, the usual causes are a
 tab not named `Budget`, a missing `Start`, `End` or `Cost` column, or a file name that does not

@@ -2040,6 +2040,50 @@ function runTests() {
     Math.abs(rSum(resPlan[0].lines, 'cost', '2026-11') - 11000) < 0.01 &&
     Math.abs(rSum(resPlan[1].lines, 'cost', '2026-11') - 4300) < 0.01);
 
+  // ---- Board tab: finance by project against the board's budget -----------------------
+  function bdPart(project, source, milestone, status, probability, maps) {
+    return Object.assign({ project: project, fundingSource: source, milestone: milestone,
+      status: status, probability: probability, cost: {}, income: {}, actualCost: {},
+      actualIncome: {} }, maps);
+  }
+  var bdRunway = { nowKey: '2026-10', reserves: { amount: 5000, month: '2026-09' }, parts: [
+    bdPart('Spyfish Aotearoa', 'XXX_27_P', 'M1', 'secured', 1, { cost: { '2026-11': 600 },
+      income: { '2026-11': 600 }, actualCost: { '2026-08': 400 }, actualIncome: { '2026-08': 400 } }),
+    bdPart('General', 'XXX_27_P', marginMilestone_('XXX_27_P'), 'secured', 1,
+      { income: { '2026-11': 400 }, actualIncome: { '2026-08': 100 } }),
+    bdPart('General', 'XXX_27_G', 'GM', 'secured', 1,
+      { cost: { '2026-12': 1000, '2027-05': 2000 }, income: { '2026-12': 500 } }),
+    bdPart('Wild About AI', 'XXX_28_A', 'Classes', 'proposed', 0.5,
+      { ifFunded: true, cost: { '2027-02': 800 }, income: { '2027-02': 1000 } })] };
+  var bdBudget = boardBudgetRows_([['26/27', 'Spyfish Aotearoa', '$2,000', '1,500', '', ''],
+    ['26/27', 'Organisation', '', '', '4,000', ''], ['', 'General', '1', '1', '', ''],
+    ['26/27', '', '1', '1', '', '']]);
+  var bd = boardFinance_(bdRunway, 2026, bdBudget);
+  var bdRow = function (y, p) {
+    return bd.years[y].rows.filter(function (r) { return r.project === p; })[0];
+  };
+  check('board: the budget tab gives a row per year and project, with its amounts',
+    bdBudget.length === 2 && bdBudget[0].income === 2000 && bdBudget[0].cost === 1500 &&
+    bdBudget[1].reserves === 4000);
+  var bdSpy = bdRow(0, 'Spyfish Aotearoa').figures.expected;
+  check('board: a project shows its funders\' income and the margin it passes to General',
+    bdSpy.income === 1500 && bdSpy.margin === -500 && bdSpy.cost === 1000 && bdSpy.surplus === 500);
+  check('board: General shows the margins it receives on their own line',
+    bdRow(0, 'General').figures.expected.margin === 500 &&
+    bdRow(0, 'General').figures.expected.income === 500);
+  check('board: actual runs to the end of last month',
+    bd.actualTo === '2026-09' && bdRow(0, 'Spyfish Aotearoa').figures.actual.income === 500 &&
+    bdRow(0, 'Spyfish Aotearoa').figures.actual.cost === 400);
+  var bdWai = bdRow(0, 'Wild About AI').figures;
+  check('board: work that goes ahead only if funded counts at its weight, never as secured',
+    bdWai.secured.cost === 0 && bdWai.secured.income === 0 && bdWai.expected.cost === 400 &&
+    bdWai.expected.income === 500 && bdWai.full.cost === 800 && bdWai.full.income === 1000);
+  check('board: the organisation totals every project, and its budget the project rows',
+    bdRow(0, 'All').figures.expected.income === 2500 && bdRow(0, 'All').figures.expected.cost === 2400 &&
+    bdRow(0, 'All').budget.income === 2000 && bd.years[0].reserves.budget === 4000);
+  check('board: next year holds only its own months',
+    bdRow(1, 'General').figures.secured.cost === 2000 && bd.years[1].label === '27/28');
+
   Logger.log(results.join('\n'));
   return results;
 }
