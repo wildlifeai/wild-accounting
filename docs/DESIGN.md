@@ -231,8 +231,10 @@ Ranked by how badly they hurt the persona who depends on them:
   Holding only the part no grant pays meant working out each remainder by hand and retyping it
   whenever a grant's plan moved. `Reserves` now holds every General cost in full; a General line
   on any other sheet, on a milestone of the same name, comes off it month by month inside the
-  months `Reserves` holds that milestone over. The name is the match, so funder sheets gain no
-  column and their `Budget` tabs stay as submitted. In the views that count money the
+  quarters `Reserves` holds that milestone in: whole quarters, since a Forecast entry spreads
+  over its quarter and a line starting mid-quarter would otherwise leave the payer's first
+  month counted twice. The name is the match, so funder sheets gain no column and their
+  `Budget` tabs stay as submitted. In the views that count money the
   difference is an offset with the paying sheet's status and probability, so the cost counts
   once at `Reserves`' figure on every runway line, and an application comes off only where its
   money counts. Project tracking nets secured sheets only, having no expected case. More paid

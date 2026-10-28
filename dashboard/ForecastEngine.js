@@ -487,8 +487,9 @@ function remainingPlan_(planned, actualLines, nowKey) {
 
 /**
  * Other sheets' spend before `nowKey` on Reserves' milestones (reservesOffsets_), by the
- * Reserves item code whose lines run over its date: { code: amount }. Spend dated outside
- * every Reserves line of its milestone is no part of Reserves' cost, so it counts nowhere.
+ * Reserves item code whose lines run over its date, out to whole quarters as reservesSpans_:
+ * { code: amount }. Spend dated outside every Reserves line of its milestone is no part of
+ * Reserves' cost, so it counts nowhere.
  */
 function coveredToDate_(planned, actualLines, nowKey) {
   const reserves = (planned || []).filter(b => b.name === CONFIG.RESERVES_SOURCE)[0];
@@ -498,7 +499,8 @@ function coveredToDate_(planned, actualLines, nowKey) {
     const code = itemCode_(l.item);
     if (!code || !isGeneralLine_(l) || !l.start || !l.end) return;
     const k = milestoneKey_(l.milestone);
-    (spans[k] = spans[k] || []).push({ code: code, start: l.start, end: l.end });
+    (spans[k] = spans[k] || []).push({ code: code, start: quarterBounds_(qiOfDate_(l.start)).start,
+      end: quarterBounds_(qiOfDate_(l.end)).end });
   });
   const paying = {}; // 'source||item code' -> milestone key
   planned.forEach(src => {

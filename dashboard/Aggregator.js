@@ -126,15 +126,18 @@ function reservesMilestones_(reserves) {
 
 /**
  * The months Reserves holds each milestone's cost over, by milestoneKey_: { from, to } as
- * 'YYYY-MM', from its Budget tab's General lines. Other sheets' lines come off Reserves only
- * inside them: outside, Reserves holds nothing of that cost, so there is nothing to net.
+ * 'YYYY-MM', from its Budget tab's General lines, out to whole quarters. Other sheets' lines
+ * come off Reserves only inside them: outside, Reserves holds nothing of that cost, so there
+ * is nothing to net. Whole quarters, because a Forecast entry spreads over its quarter: a line
+ * from 16 November still pays October's share of a payer's October to December entry.
  */
 function reservesSpans_(reserves) {
   const spans = {};
   ((reserves && (reserves.budgetLines || reserves.lines)) || []).forEach(l => {
     const k = milestoneKey_(l.milestone);
     if (!isGeneralLine_(l) || !k || !l.start || !l.end) return;
-    const from = DateMath.monthKey(l.start), to = DateMath.monthKey(l.end);
+    const from = DateMath.monthKey(quarterBounds_(qiOfDate_(l.start)).start);
+    const to = DateMath.monthKey(quarterBounds_(qiOfDate_(l.end)).end);
     const s = spans[k] || (spans[k] = { from: from, to: to });
     if (from < s.from) s.from = from;
     if (to > s.to) s.to = to;
