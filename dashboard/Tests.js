@@ -1910,6 +1910,15 @@ function runTests() {
   check('reserves: only the months Reserves holds the milestone over come off',
     resEarly.length === 1 && resEarly[0].lines.map(function (l) {
       return DateMath.monthKey(l.start); }).join() === '2026-10,2026-11');
+  // A line from mid-quarter holds the whole quarter: a payer's quarter entry spreads over it.
+  var resMid = resLine('XXX_27_CORE', 'Communications', '007', 'General', 2026, 11, 2027, 3, 5000);
+  resMid.start = d(2026, 11, 16);
+  var resLate = reservesOffsets_([resSrc(CONFIG.RESERVES_SOURCE, 'secured', {}, [resMid]),
+    resSrc('XXX_27_GRANT', 'secured', {}, [resLine('XXX_27_GRANT', 'Communications', '002',
+      'General', 2026, 10, 2026, 12, 3000)])], {}, null);
+  check('reserves: a line from mid-quarter takes the whole quarter\'s payment off',
+    resLate.length === 1 && Math.abs(rSum(resLate[0].lines, 'cost') + 3000) < 0.01 &&
+    DateMath.monthKey(resLate[0].lines[0].start) === '2026-10');
 
   // Every runway line costs General's work at Reserves' full cost: what is paid elsewhere
   // moves who pays it, not what it costs, whether the ask lands or not.

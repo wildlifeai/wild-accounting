@@ -138,9 +138,9 @@ click **Refresh now**.
 `Reserves` is General's one budget sheet, in General's `secured/` folder: the **full cost** of
 every General cost, a line per cost per year, whoever ends up paying it. A grant that pays part
 of a General cost has its line tagged `Project: General` with the **same `Milestone` name** as the
-`Reserves` line, and the cockpit takes it off `Reserves` month by month, inside the months
-`Reserves` holds that milestone over. Nothing is retyped: when the grant's plan moves, what is
-left for `Reserves` moves with it.
+`Reserves` line, and the cockpit takes it off `Reserves` month by month, inside the quarters
+`Reserves` holds that milestone in (whole quarters, as a Forecast entry spreads over its quarter).
+Nothing is retyped: when the grant's plan moves, what is left for `Reserves` moves with it.
 
 - Every view counts the cost once, at `Reserves`' full cost. An application comes off `Reserves`
   only where its money counts: not on *Secured only*, at its probability on the expected line,
