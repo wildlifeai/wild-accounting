@@ -243,27 +243,45 @@ Ranked by how badly they hurt the persona who depends on them:
   than `Reserves` holds leaves it negative and raises H1, rather than being floored, so the
   arithmetic stays the same on every line; General work on a milestone `Reserves` lacks counts
   on top and raises H2. Nothing changes until a source named `Reserves` exists.
-- **2026-10-29: the Board tab builds the board pack's finance, and the cockpit is renamed.**
+- **2026-10-29: the board pack's finance is the Overview's table, and the cockpit is renamed.**
   The board's updates were assembled by hand from the cockpit's numbers, so the pack and the
-  cockpit could disagree, and each update took a day. The Board tab works the figures out from
-  the runway's parts (`boardFinance_`), so it shows the same money as the runway chart, against
-  the budget the board approved, typed once on a `Board budget` tab of Cockpit Settings rather
-  than coded, since a budget is an amount and amounts stay out of this repository. A project
-  shows the income its funders give and, beside it, its margin to General, as the board's
-  updates set out a project's surplus; General shows the margins on their own line. Full
-  access only, as the runway is: the pack is the organisation's position. The cockpit is now
+  cockpit could disagree, and each update took a day. A table under the runway chart now works
+  the figures out from the same parts the chart walks (`financeTable_`, which the page runs as
+  it runs `runwayWalk_`), for the years, projects, sources and statuses the ribbon picks and
+  grouped as the chart is, so the two cannot disagree. This year is set against the budget the
+  board approved, typed once on a `Board budget` tab of Cockpit Settings rather than coded, since
+  a budget is an amount and amounts stay out of this repository; a later year is a draft on
+  secured money, expected and full. By project, a project shows the income its funders give
+  and, beside it, its margin to General, as the board's updates set out a project's surplus.
+  Full access only, as the runway is. A separate Board tab came first and was folded into the
+  Overview the same day, so the pack's figures and the runway sit together. The table is folded
+  under the chart as "Show as a table", replacing the month-by-month one, whose values the
+  chart's own readout gives; the summary cards went too, since the table holds their numbers
+  year by year, and stay only for project-scoped people, who get no runway. The cockpit is now
   the Finance and Performance Cockpit, at the same address, since it reports both.
 - **2026-10-29: performance reports from a Performance sheet, beside the money.** The
   strategy's KPIs were reported from scattered sheets and the annual report, so the board saw
   them once a year. A Performance sheet holds the register (one row per KPI, with its pou, who
   it is reported to and its owner) and the values (one row per KPI per period, with evidence),
-  and the Board tab lays them out by pou with last year's Statement of Service Performance as
+  and the Performance tab lays them out by pou with last year's Statement of Service Performance as
   the comparative. A sheet rather than the cockpit's own settings, so KPI owners can be given it
   without the permissions beside it. Read at refresh, so a value ages with the money, and P1
   asks each owner for the quarter's values, so finance and performance close together. Three
   KPIs the cockpit can work out (earned income share, income concentration, runway) are never
   typed. Earned income is a list of Xero income accounts in `Config.js`, Sales alone until the
   bookkeeper confirms which others carry sales and services.
+- **2026-10-29: Brought forward, a choice between the money in hand and each year alone.**
+  The table showed each year's surplus with nothing carried in, so a later year never said what
+  the organisation would hold when it began, and the chart only ever started from reserves. A
+  Brought forward box under Show, ticked by default, now carries everything before the years
+  ticked: each group's own income and margin less its cost, worked by `financeTable_` over the
+  months before the year, and for the whole organisation the reserves on top, anchored once on
+  Xero's latest quarter close as the chart is. The table opens and closes each group's year
+  with it; the organisation's Carried forward is the reserves at year end, which replaced that
+  row. Unticked, each year stands alone: the chart's lines start at $0 as the first year ticked
+  begins and say when a year's funding falls behind its spend. The budget figures are the
+  working capital on the `Board budget` tab's `Organisation` rows, the year before's brought
+  forward; projects have no budgeted position, so theirs stay blank.
 
 ## History
 

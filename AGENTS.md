@@ -101,8 +101,8 @@ snapshot that the dashboard reads instantly. The data model it relies on is in `
 | `Aggregator.js` | Join budgets and actuals into the snapshot: breakdown rows, contribution, tracking, timeline, runway |
 | `Permissions.js` | The Cockpit Settings sheet: its Permissions tab (which projects each person may see), its Reserves tab (the money the runway starts from) and its Board budget tab (the budget the board approved) |
 | `TrackingBuilder.js` | One project's sources and milestones by quarter, budget, actual and forecast, for both views of Project tracking |
-| `Board.js` | The Board tab's finance: income, cost and surplus by project against the board's budget, and next year's draft, from the runway parts |
-| `Performance.js` | The Performance sheet: the strategy's KPIs and their values, read at refresh, the three KPIs the cockpit works out, the Board tab's Performance section, and health check P1 |
+| `Board.js` | The finance table under the Overview's runway chart: income, cost and surplus by group for each year ticked, against the board's budget or by scenario (`financeTable_`, run by the page as `runwayWalk_` is) |
+| `Performance.js` | The Performance sheet: the strategy's KPIs and their values, read at refresh, the three KPIs the cockpit works out, the Performance tab, and health checks P1 and P2 |
 | `HealthCheck.js` | Turns silent wrongness into named findings. Pure, so it runs offline |
 | `Snapshot.js` | The cache in Drive, the refresh trigger, and refresh progress |
 | `WebApp.js` | `doGet`, the client API (`google.script.run`), per-person filtering |

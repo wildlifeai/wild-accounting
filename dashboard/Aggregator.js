@@ -467,7 +467,7 @@ function buildSnapshot() {
   const runway = buildRunway_(counted, actualLines, now, exclusivityReps, itemToMilestone,
     readReserves_(now, quarterClose));
 
-  // The Board tab's Performance section: the Performance sheet as it stands, and the three
+  // The Performance tab: the Performance sheet as it stands, and the three
   // KPIs worked out here, so the values age with everything else in the snapshot.
   const performance = readPerformance_();
   if (!performance.issue) {

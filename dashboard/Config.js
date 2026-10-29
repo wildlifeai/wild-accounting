@@ -184,8 +184,8 @@ const CONFIG = {
   },
 
   // ---- Board ----------------------------------------------------------------
-  // The Board tab (Board.js), for people with full access only. Its budget is a tab of the
-  // Cockpit Settings spreadsheet: income and cost per project per financial year as the board
+  // The finance table under the runway chart (Board.js), full access only. Its budget is a tab
+  // of the Cockpit Settings spreadsheet: income and cost per project per financial year as the board
   // approved them, and on the TOTAL_ROW row the reserves that budget expected at year end.
   BOARD: {
     TAB: 'Board budget',

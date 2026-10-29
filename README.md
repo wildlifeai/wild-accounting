@@ -5,7 +5,7 @@ a dashboard that puts every funding source's budget next to what Xero says was a
 received, and shows how long the money lasts. Four tabs: **Overview** (the organisation's
 figures and runway), **Project tracking** (one project's funding sources quarter by quarter, as
 actual and forecast or as a timeline), **Health** (what needs fixing in a sheet or in Xero) and,
-for full access only, **Board** (the board pack's figures).
+for full access only, **Performance** (the strategy's KPIs).
 
 ## Open the cockpit
 

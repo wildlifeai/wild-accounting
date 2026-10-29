@@ -1,6 +1,6 @@
 /**
  * Performance.js
- * The Board tab's Performance section: the strategy's KPIs by pou. Their values come from the
+ * The Performance tab: the strategy's KPIs by pou. Their values come from the
  * Performance sheet, a KPIs tab (one row per KPI) and a Values tab (one row per KPI per
  * period), except the three the cockpit works out itself from Xero and the runway
  * (computedKpis_). Read at refresh into the snapshot, so a value ages with every other number;

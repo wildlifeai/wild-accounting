@@ -174,7 +174,7 @@ const HEALTH_CATALOGUE = {
       'board pack.' },
   P2: { severity: 'warning', category: 'Performance',
     title: 'Performance sheet could not be read',
-    action: 'The Board tab\'s Performance section is empty until it can. Check the sheet is ' +
+    action: 'The Performance tab is empty until it can. Check the sheet is ' +
       'in the Budgets folder, named Performance, with KPIs and Values tabs.' },
   D1: { severity: 'error', category: 'Xero coding',
     title: 'Actual spend with no Projects tag',

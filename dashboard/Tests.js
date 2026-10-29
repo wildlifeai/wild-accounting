@@ -2040,13 +2040,13 @@ function runTests() {
     Math.abs(rSum(resPlan[0].lines, 'cost', '2026-11') - 11000) < 0.01 &&
     Math.abs(rSum(resPlan[1].lines, 'cost', '2026-11') - 4300) < 0.01);
 
-  // ---- Board tab: finance by project against the board's budget -----------------------
+  // ---- Finance table under the runway: by project, against the board's budget ------------
   function bdPart(project, source, milestone, status, probability, maps) {
     return Object.assign({ project: project, fundingSource: source, milestone: milestone,
       status: status, probability: probability, cost: {}, income: {}, actualCost: {},
       actualIncome: {} }, maps);
   }
-  var bdRunway = { nowKey: '2026-10', reserves: { amount: 5000, month: '2026-09' }, parts: [
+  var bdParts = [
     bdPart('Spyfish Aotearoa', 'XXX_27_P', 'M1', 'secured', 1, { cost: { '2026-11': 600 },
       income: { '2026-11': 600 }, actualCost: { '2026-08': 400 }, actualIncome: { '2026-08': 400 } }),
     bdPart('General', 'XXX_27_P', marginMilestone_('XXX_27_P'), 'secured', 1,
@@ -2054,35 +2054,71 @@ function runTests() {
     bdPart('General', 'XXX_27_G', 'GM', 'secured', 1,
       { cost: { '2026-12': 1000, '2027-05': 2000 }, income: { '2026-12': 500 } }),
     bdPart('Wild About AI', 'XXX_28_A', 'Classes', 'proposed', 0.5,
-      { ifFunded: true, cost: { '2027-02': 800 }, income: { '2027-02': 1000 } })] };
+      { ifFunded: true, cost: { '2027-02': 800 }, income: { '2027-02': 1000 } })];
+  var bdYears = [{ label: '26/27', from: '2026-04', to: '2027-03' },
+    { label: '27/28', from: '2027-04', to: '2028-03' }];
+  var bd = financeTable_(bdParts, '2026-10', bdYears, 'project', 'General');
+  var bdFig = function (rows, key, year, sc) {
+    return rows.filter(function (g) { return g.key === key; })[0].years[year][sc];
+  };
   var bdBudget = boardBudgetRows_([['26/27', 'Spyfish Aotearoa', '$2,000', '1,500', '', ''],
     ['26/27', 'Organisation', '', '', '4,000', ''], ['', 'General', '1', '1', '', ''],
     ['26/27', '', '1', '1', '', '']]);
-  var bd = boardFinance_(bdRunway, 2026, bdBudget);
-  var bdRow = function (y, p) {
-    return bd.years[y].rows.filter(function (r) { return r.project === p; })[0];
-  };
-  check('board: the budget tab gives a row per year and project, with its amounts',
+  check('board budget: the tab gives a row per year and project, with its amounts',
     bdBudget.length === 2 && bdBudget[0].income === 2000 && bdBudget[0].cost === 1500 &&
     bdBudget[1].reserves === 4000);
-  var bdSpy = bdRow(0, 'Spyfish Aotearoa').figures.expected;
-  check('board: a project shows its funders\' income and the margin it passes to General',
+  var bdSpy = bdFig(bd, 'Spyfish Aotearoa', '26/27', 'expected');
+  check('finance: a project shows its funders\' income and the margin it passes to General',
     bdSpy.income === 1500 && bdSpy.margin === -500 && bdSpy.cost === 1000 && bdSpy.surplus === 500);
-  check('board: General shows the margins it receives on their own line',
-    bdRow(0, 'General').figures.expected.margin === 500 &&
-    bdRow(0, 'General').figures.expected.income === 500);
-  check('board: actual runs to the end of last month',
-    bd.actualTo === '2026-09' && bdRow(0, 'Spyfish Aotearoa').figures.actual.income === 500 &&
-    bdRow(0, 'Spyfish Aotearoa').figures.actual.cost === 400);
-  var bdWai = bdRow(0, 'Wild About AI').figures;
-  check('board: work that goes ahead only if funded counts at its weight, never as secured',
-    bdWai.secured.cost === 0 && bdWai.secured.income === 0 && bdWai.expected.cost === 400 &&
-    bdWai.expected.income === 500 && bdWai.full.cost === 800 && bdWai.full.income === 1000);
-  check('board: the organisation totals every project, and its budget the project rows',
-    bdRow(0, 'All').figures.expected.income === 2500 && bdRow(0, 'All').figures.expected.cost === 2400 &&
-    bdRow(0, 'All').budget.income === 2000 && bd.years[0].reserves.budget === 4000);
-  check('board: next year holds only its own months',
-    bdRow(1, 'General').figures.secured.cost === 2000 && bd.years[1].label === '27/28');
+  check('finance: General shows the margins it receives on their own line',
+    bdFig(bd, 'General', '26/27', 'expected').margin === 500 &&
+    bdFig(bd, 'General', '26/27', 'expected').income === 500);
+  check('finance: actual is the months before this one',
+    bdFig(bd, 'Spyfish Aotearoa', '26/27', 'actual').income === 500 &&
+    bdFig(bd, 'Spyfish Aotearoa', '26/27', 'actual').cost === 400);
+  check('finance: work that goes ahead only if funded counts at its weight, never as secured',
+    bdFig(bd, 'Wild About AI', '26/27', 'secured').cost === 0 &&
+    bdFig(bd, 'Wild About AI', '26/27', 'secured').income === 0 &&
+    bdFig(bd, 'Wild About AI', '26/27', 'expected').cost === 400 &&
+    bdFig(bd, 'Wild About AI', '26/27', 'expected').income === 500 &&
+    bdFig(bd, 'Wild About AI', '26/27', 'full').cost === 800);
+  check('finance: the total takes every part once, and comes last',
+    bd[bd.length - 1].key === 'All' && bdFig(bd, 'All', '26/27', 'expected').income === 2500 &&
+    bdFig(bd, 'All', '26/27', 'expected').cost === 2400);
+  check('finance: each year holds only its own months',
+    bdFig(bd, 'General', '27/28', 'secured').cost === 2000);
+  var bdBySource = financeTable_(bdParts, '2026-10', bdYears, 'fundingSource', 'General');
+  check('finance: grouped by funding source, a source keeps its own margin',
+    bdFig(bdBySource, 'XXX_27_P', '26/27', 'expected').income === 1500 &&
+    bdFig(bdBySource, 'XXX_27_P', '26/27', 'expected').margin === 0);
+  // Brought forward: the page works everything before a year by the same function, so that
+  // plus the year's own surplus and margin is where each group stands at the year's end.
+  var bdPos = function (rows, key, year, sc) {
+    var g = rows.filter(function (r) { return r.key === key; })[0];
+    var f = g && g.years[year] ? g.years[year][sc] : null;
+    return f ? f.income + f.margin - f.cost : 0;
+  };
+  var bdBefore = financeTable_(bdParts, '2026-10', [{ label: '27/28', from: '0000-01',
+    to: '2027-03' }], 'project', 'General');
+  var bdToEnd = financeTable_(bdParts, '2026-10', [{ label: '27/28', from: '0000-01',
+    to: '2028-03' }], 'project', 'General');
+  check('finance: brought forward plus the year is where each group stands at its end',
+    bdToEnd.length === 4 && bdToEnd.every(function (g) {
+      return ['actual', 'secured', 'expected', 'full'].every(function (sc) {
+        return bdPos(bdBefore, g.key, '27/28', sc) + bdPos(bd, g.key, '27/28', sc) ===
+          bdPos(bdToEnd, g.key, '27/28', sc);
+      });
+    }));
+  var bdWalk = runwayWalk_(bdParts, '2026-10').months.filter(function (r) {
+    return r.month === '2027-02';
+  })[0];
+  check('finance: the organisation\'s position at a year\'s end meets the runway\'s expected line',
+    bdPos(bdBefore, 'All', '27/28', 'expected') === bdWalk.weighted - bdWalk.spend &&
+    bdPos(bdBefore, 'All', '27/28', 'expected') === 100);
+  var bdAlone = new Function('return ' + financeTable_.toString())();
+  check('finance: the page runs the function from its own source, needing nothing else',
+    JSON.stringify(bdAlone(bdParts, '2026-10', bdYears, 'project', 'General')) ===
+      JSON.stringify(bd));
 
   // ---- Performance: the strategy's KPIs by pou ------------------------------------------
   var pfKpis = kpiRows_([

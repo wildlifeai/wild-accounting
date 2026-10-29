@@ -220,7 +220,7 @@ function reservesMonth_(d, now) {
 
 /**
  * The budget the board approved, from the Board budget tab: see boardBudgetRows_. Read when
- * the Board tab opens, so a typed correction shows without a refresh. The tab is created with
+ * the page loads, so a typed correction shows without a refresh. The tab is created with
  * its header the first time.
  */
 function readBoardBudget_() {
