@@ -194,17 +194,27 @@
   .coverage { font-size: 13px; color: var(--muted); margin: 0 0 16px; display: flex;
     flex-wrap: wrap; gap: 8px 18px; }
 
-  /* Board: one table per year, a heading row per project, its lines under it. */
-  .board-h { margin: 0; }
+  /* The finance table under the runway chart, and the Performance tab's KPI tables: a
+     heading row per group, its lines under it. */
   .bd-h3 { font-size: 13px; font-weight: 600; color: var(--text); margin: 16px 0 8px; }
-  #view-board .table-wrap { overflow-x: auto; margin-bottom: 8px; }
+  #view-performance .table-wrap, .fin-wrap { overflow-x: auto; margin-bottom: 8px; }
+  .fin-wrap { margin-top: 14px; }
+  .fin-table th.bd-year { text-align: center; color: var(--text); font-weight: 600; }
+  .fin-table th.bd-year, .fin-table .bd-first { border-left: 1px solid var(--line); }
+  .fin-table td:nth-child(n+2) { white-space: nowrap; }
   .bd-table td, .bd-table th { padding: 6px 12px; }
   .bd-table td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .bd-table tr.bd-project th { background: var(--bg2); color: var(--text); font-weight: 600; }
   .bd-table tr.bd-sum td { font-weight: 600; }
-  .bd-table tr.bd-margin td { color: var(--muted); }
+  .bd-table tr.bd-margin td, .bd-table tr.bd-carry td { color: var(--muted); }
+  .bd-table tr.bd-cf td { border-top: 1px solid var(--line); }
   .bd-table td.bd-lbl { padding-left: 24px; }
   .bd-table tbody tr:not(.bd-project) { border-top: none; }
+  .kpi-table tbody tr { border-top: 1px solid var(--line); }
+  .kpi-table td.bd-ytd { font-weight: 600; }
+  .kpi-note { color: var(--hint); font-size: 12px; }
+  .kpi-changed { margin: 0 0 8px; padding-left: 20px; font-size: 13px; color: var(--muted); }
+  .kpi-changed li { margin-bottom: 4px; }
 
   /* Each tab's controls as a ribbon: groups side by side, each named underneath, a
      hairline between them, wrapping on a narrow screen. */

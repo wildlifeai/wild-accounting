@@ -467,6 +467,13 @@ function buildSnapshot() {
   const runway = buildRunway_(counted, actualLines, now, exclusivityReps, itemToMilestone,
     readReserves_(now, quarterClose));
 
+  // The Performance tab: the Performance sheet as it stands, and the three
+  // KPIs worked out here, so the values age with everything else in the snapshot.
+  const performance = readPerformance_();
+  if (!performance.issue) {
+    performance.computed = computedKpis_(actualLines, budgets, runway, fy.startYear, now);
+  }
+
   // Per-project rollups (feed the summary cards / org totals).
   const rows = Object.keys(projects).map(name => {
     const p = projects[name];
@@ -514,7 +521,10 @@ function buildSnapshot() {
     // So G3 can name which source had its cost suppressed and which carries it instead.
     exclusivity: { reps: exclusivityReps, suppressed: costSuppressed },
     // H1: months other sheets pay more of a Reserves milestone than its full cost.
-    reservesOverPaid: reservesOverPaid_(planned, offsets)
+    reservesOverPaid: reservesOverPaid_(planned, offsets),
+    // P1 and P2: KPIs owed a value for the last finished quarter, and an unreadable sheet.
+    performance: performanceHealth_(performance,
+      labelOfQi_(quarterSortNum(currentQuarterLabel(now)) - 1))
   });
 
   return {
@@ -541,6 +551,7 @@ function buildSnapshot() {
     timeline: timeline,
     runway: runway,
     quarterClose: quarterClose,
+    performance: performance,
     health: health,
     dataFlags: dataFlags.concat(healthToFlags(health))
   };

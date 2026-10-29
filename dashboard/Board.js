@@ -1,80 +1,84 @@
 /**
  * Board.js
- * The Board tab's Finance section: income, cost and surplus by project for the board pack,
- * this financial year against the budget the board approved, and next year's draft in three
- * scenarios. Worked out from the snapshot's runway parts, so it shows the same money as the
- * runway chart, and pure, so the same figures come out of a saved snapshot offline.
+ * The finance the board pack reports, under the Overview's runway chart: income, cost and
+ * surplus by project (or by funding source or milestone, as the chart is grouped), for each
+ * financial year ticked. This year against the budget the board approved, a later year on
+ * secured money, expected and full. Worked out from the runway's parts, so it shows the same
+ * money as the chart, by financeTable_, which the page runs as it runs runwayWalk_.
  *
- * A project shows its income as its funders give it, and beside it the margin it passes to
- * General (marginRule_). General shows its own income and, on its own row, the margins it
- * receives. That is how the board's budget was set out in March, where a project's surplus
- * was what it left for General.
+ * Grouped by project, a project shows its income as its funders give it and, on its own line,
+ * the margin it passes to General (marginRule_); General shows the margins it receives. That
+ * is how the board's updates set out a project's surplus.
  */
 
 /**
- * The finance figures for the Board tab.
+ * Income, margin, cost and surplus by group for each year in `years`
+ * ([{ label, from, to }], months as 'YYYY-MM'), from runway parts (runwayParts_):
+ * [{ key, years: { <label>: { actual, secured, expected, full } } }], each scenario
+ * { income, margin, cost, surplus }, the groups in the order first met and 'All' last.
  *
- * `runway` is the snapshot's (buildRunway_): its parts, nowKey and reserves. `fyStartYear`
- * is the year the current financial year starts in. `budgetRows` are the Board budget tab's
- * rows (readBoardBudget_): { fy, project, income, cost, reserves }.
+ * Months before nowKey are Xero actuals in every scenario, and `actual` holds them alone;
+ * from nowKey on, the plan: secured money only, expected (each application at its
+ * probability, work that goes ahead only if funded at the same weight) or full (every
+ * application won), as runwayWalk_ counts them.
  *
- * Months before nowKey are Xero actuals on every line; from nowKey on, the plan: secured
- * money only, expected (each proposal at its probability, work that goes ahead only if funded
- * at the same weight), or full (every proposal lands). As in runwayWalk_.
+ * `groupBy` is the part's field to group on. By 'project', a margin part (General's income
+ * from one source, milestone "<source> (margin)") is shown against the project it came from,
+ * the source's largest part off `general`, as that project's margin to General; by any other
+ * field it groups as any part does.
+ *
+ * Self-contained on purpose, like runwayWalk_: the page receives this function's own source
+ * (Index.html), so the table runs exactly the code the tests run here. It may not call
+ * anything outside itself.
  */
-function boardFinance_(runway, fyStartYear, budgetRows) {
-  const parts = (runway && runway.parts) || [];
-  const nowKey = runway && runway.nowKey;
-  const G = CONFIG.GENERAL_PROJECT;
-  const years = [fyStartYear, fyStartYear + 1].map(y => ({
-    label: fyLabel_(y), from: DateMath.monthKey(new Date(y, fyStartMonth_() - 1, 1)),
-    to: DateMath.monthKey(new Date(y, fyStartMonth_() + 10, 1))
-  }));
-
-  // A margin part is General's income from one source; the project whose lines it came
-  // from shows it as passed on. The project is the source's largest non-General part.
-  const size = p => sumValues_(p.cost) + sumValues_(p.actualCost) +
-    Math.abs(sumValues_(p.income)) + Math.abs(sumValues_(p.actualIncome));
-  const marginOwner = {};
-  parts.forEach(p => {
-    if (p.project === G || isMarginPart_(p)) return;
-    const o = marginOwner[p.fundingSource];
-    if (!o || size(p) > o.size) marginOwner[p.fundingSource] = { project: p.project, size: size(p) };
-  });
-
-  const projects = (CONFIG.BOARD.PROJECTS || []).slice();
-  parts.forEach(p => {
-    if (projects.indexOf(p.project) === -1 && !isMarginPart_(p)) projects.push(p.project);
-  });
-
-  function blank() { return { income: 0, margin: 0, cost: 0 }; }
-  function figures(year) {
-    const out = {};
-    projects.concat('All').forEach(pr => {
-      out[pr] = { actual: blank(), secured: blank(), expected: blank(), full: blank() };
+function financeTable_(parts, nowKey, years, groupBy, general) {
+  parts = parts || [];
+  const isMargin = p => p.project === general && p.milestone === p.fundingSource + ' (margin)';
+  const size = p => [p.cost, p.actualCost, p.income, p.actualIncome].reduce((t, m) =>
+    t + Object.keys(m || {}).reduce((s, k) => s + Math.abs(m[k] || 0), 0), 0);
+  const owner = {};
+  if (groupBy === 'project') {
+    parts.forEach(p => {
+      if (p.project === general || isMargin(p)) return;
+      const o = owner[p.fundingSource];
+      if (!o || size(p) > o.size) owner[p.fundingSource] = { key: p.project, size: size(p) };
     });
-    const inYear = k => k >= year.from && k <= year.to;
+  }
+
+  const groups = {}, order = [];
+  const blank = () => ({ income: 0, margin: 0, cost: 0 });
+  function cell(key, label) {
+    if (!groups[key]) { groups[key] = {}; order.push(key); }
+    return groups[key][label] || (groups[key][label] =
+      { actual: blank(), secured: blank(), expected: blank(), full: blank() });
+  }
+
+  (years || []).forEach(y => {
+    const inYear = k => k >= y.from && k <= y.to;
     parts.forEach(p => {
       const secured = p.status === 'secured';
       const w = secured ? 1 : (typeof p.probability === 'number' ? p.probability : 0);
       const ifFunded = !secured && !!p.ifFunded;
-      const margin = isMarginPart_(p);
-      const owner = margin && marginOwner[p.fundingSource] ? marginOwner[p.fundingSource].project : null;
-      // Income on one scenario: a margin moves from its owner to General; anything else is
-      // its own project's.
-      function income(sc, v) {
-        if (owner) {
-          out[owner][sc].income += v; out[owner][sc].margin -= v;
-          out[G][sc].margin += v;
+      const own = p[groupBy] || '(unassigned)';
+      const from = groupBy === 'project' && isMargin(p) && owner[p.fundingSource]
+        ? owner[p.fundingSource].key : null;
+      // A margin passes from the project it came from to General. The total takes every
+      // part's income once: a project's part is its income less the margin, the margin part
+      // the rest.
+      const income = (sc, v) => {
+        if (from) {
+          cell(from, y.label)[sc].income += v;
+          cell(from, y.label)[sc].margin -= v;
+          cell(own, y.label)[sc].margin += v;
         } else {
-          out[p.project][sc].income += v;
+          cell(own, y.label)[sc].income += v;
         }
-        // The organisation's income is every part's: a project's part is its income less
-        // the margin, and the margin part holds the rest.
-        out.All[sc].income += v;
-      }
-      function cost(sc, v) { out[p.project][sc].cost += v; out.All[sc].cost += v; }
-      if (!out[p.project] && !owner) return;
+        cell('All', y.label)[sc].income += v;
+      };
+      const cost = (sc, v) => {
+        cell(own, y.label)[sc].cost += v;
+        cell('All', y.label)[sc].cost += v;
+      };
       Object.keys(p.actualCost || {}).forEach(k => {
         if (k >= nowKey || !inYear(k)) return;
         ['actual', 'secured', 'expected', 'full'].forEach(sc => cost(sc, p.actualCost[k]));
@@ -97,71 +101,30 @@ function boardFinance_(runway, fyStartYear, budgetRows) {
         income('full', v);
       });
     });
-    // Whole dollars, and the surplus from them, so a row always adds up on the page.
-    Object.keys(out).forEach(pr => Object.keys(out[pr]).forEach(sc => {
-      const f = out[pr][sc];
-      f.income = Math.round(f.income); f.margin = Math.round(f.margin); f.cost = Math.round(f.cost);
-      f.surplus = f.income - f.cost;
-    }));
-    return out;
+  });
+
+  // Whole dollars, and the surplus from them, so a row always adds up on the page.
+  Object.keys(groups).forEach(g => Object.keys(groups[g]).forEach(l =>
+    Object.keys(groups[g][l]).forEach(sc => {
+      const f = groups[g][l][sc];
+      f.income = Math.round(f.income); f.margin = Math.round(f.margin);
+      f.cost = Math.round(f.cost); f.surplus = f.income - f.cost;
+    })));
+  return order.filter(k => k !== 'All').concat(groups.All ? ['All'] : [])
+    .map(k => ({ key: k, years: groups[k] }));
+}
+
+/**
+ * What the page needs beside the parts to lay the finance table out, for people with full
+ * access: the Board budget tab's rows (readBoardBudget_) and the order the board's updates
+ * list the projects in. A sheet that cannot be read leaves the budget columns out rather than
+ * failing the page.
+ */
+function boardBudgetPayload_() {
+  let budget = [];
+  try { budget = readBoardBudget_(); } catch (e) {
+    Logger.log('Board budget not read: ' + e.message);
   }
-
-  const budgetOf = (fy, project) => (budgetRows || []).filter(r =>
-    r.fy === fy && r.project === project)[0] || null;
-  const walk = runwayWalk_(parts, nowKey, undefined, runway && runway.reserves);
-  const at = k => walk.months.filter(m => m.month === k)[0] || null;
-  const reservesAt = k => {
-    const m = at(k);
-    return m ? { month: k, secured: m.secured - m.spend, expected: m.weighted - m.spend,
-      full: m.proposed - m.spend } : null;
-  };
-
-  return {
-    nowKey: nowKey,
-    // Xero actuals run to the end of the month before nowKey.
-    actualTo: previousMonthKey_(nowKey),
-    projects: projects,
-    years: years.map(y => {
-      const fig = figures(y);
-      const total = budgetOf(y.label, CONFIG.BOARD.TOTAL_ROW);
-      return {
-        label: y.label, from: y.from, to: y.to,
-        rows: projects.concat('All').map(pr => {
-          const b = pr === 'All' ? sumBudget_(budgetRows, y.label) : budgetOf(y.label, pr);
-          return { project: pr, budget: b ? { income: b.income, cost: b.cost,
-            surplus: b.income - b.cost } : null, figures: fig[pr] };
-        }).filter(r => r.budget || Object.keys(r.figures).some(sc =>
-          r.figures[sc].income || r.figures[sc].cost || r.figures[sc].margin)),
-        reserves: { budget: total && typeof total.reserves === 'number' ? total.reserves : null,
-          yearEnd: reservesAt(y.to) }
-      };
-    }),
-    reservesNow: (runway && runway.reserves) || null,
-    monthsOfRunway: walk.monthsOfRunway,
-    crossover: walk.crossover
-  };
-}
-
-/** A "(margin)" part: General's income from one source's margin (runwayParts_). */
-function isMarginPart_(p) {
-  return p.project === CONFIG.GENERAL_PROJECT && p.milestone === marginMilestone_(p.fundingSource);
-}
-
-/** Every project row of one financial year on the Board budget tab, added up. */
-function sumBudget_(rows, fy) {
-  const mine = (rows || []).filter(r => r.fy === fy && r.project !== CONFIG.BOARD.TOTAL_ROW);
-  if (!mine.length) return null;
-  return mine.reduce((t, r) => ({ income: t.income + r.income, cost: t.cost + r.cost }),
-    { income: 0, cost: 0 });
-}
-
-function sumValues_(map) {
-  return Object.keys(map || {}).reduce((t, k) => t + (map[k] || 0), 0);
-}
-
-function previousMonthKey_(key) {
-  if (!key) return null;
-  const p = key.split('-');
-  const d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 2, 1);
-  return DateMath.monthKey(d);
+  return { budget: budget, projects: CONFIG.BOARD.PROJECTS, totalRow: CONFIG.BOARD.TOTAL_ROW,
+    general: CONFIG.GENERAL_PROJECT };
 }
