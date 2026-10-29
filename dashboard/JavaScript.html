@@ -60,10 +60,10 @@
     renderHealth(s.health || []);
     renderQuarterClose(s.quarterClose);
 
-    // The Board tab is for full access only; its figures are fetched again after a refresh.
-    document.getElementById('tab-board').classList.toggle('hidden', s._accessLevel !== 'admin');
-    bdLoaded = false;
-    if (!document.getElementById('view-board').classList.contains('hidden')) loadBoard();
+    // The Performance tab is for full access only; it is fetched again after a refresh.
+    document.getElementById('tab-performance').classList.toggle('hidden', s._accessLevel !== 'admin');
+    perfLoaded = false;
+    if (!document.getElementById('view-performance').classList.contains('hidden')) loadPerformance();
   }
 
   // ---- Quarter close ----------------------------------------------------------
@@ -405,10 +405,17 @@
     // The title: the years, the statuses, and which projects and sources.
     document.getElementById('ov-title').textContent = [
       fysText(fys),
-      statusText(statuses),
+      showText(statuses),
       pickedText('filter-projects', 'projects'),
       pickedText('filter-sources', 'funding sources')
     ].join(' · ');
+
+    // The cards are for people who are not sent the runway. Everyone else has the chart, and
+    // its table holds these numbers year by year.
+    var cards = document.getElementById('totals');
+    var hasRunway = !!(snapshot.runway && snapshot.runway.parts);
+    cards.classList.toggle('hidden', hasRunway);
+    if (hasRunway) { cards.innerHTML = ''; return; }
 
     // With the plan running from today, the cost card is actual spend so far plus what is
     // left, so it is named for that rather than for the budget.
@@ -429,7 +436,16 @@
   }
   function updateStatusSummary() {
     var sum = document.getElementById('filter-status-sum');
-    if (sum) sum.textContent = statusText(selectedStatuses());
+    if (sum) sum.textContent = showText(selectedStatuses());
+  }
+  // Brought forward: each year starts from where the one before it ends (reserves, for the
+  // whole organisation) rather than standing alone from $0.
+  function carryForward() {
+    var box = document.getElementById('bf-carry');
+    return !box || box.checked;
+  }
+  function showText(statuses) {
+    return statusText(statuses) + (carryForward() ? ', brought forward' : ', each year alone');
   }
 
   // Cost minus income. A shortfall is a gap, in colour; more income than cost is a
@@ -450,6 +466,8 @@
   Array.prototype.slice.call(document.querySelectorAll('.bd-status'))
     .forEach(function (c) { c.addEventListener('change', function () {
       updateStatusSummary(); renderOverview(); renderRunway(); }); });
+  document.getElementById('bf-carry').addEventListener('change', function () {
+    updateStatusSummary(); renderOverview(); renderRunway(); });
   updateStatusSummary();
   Array.prototype.slice.call(document.querySelectorAll('.rw-group'))
     .forEach(function (c) { c.addEventListener('change', renderRunway); });
@@ -577,20 +595,21 @@
     section.classList.remove('hidden');
 
     var chart = document.getElementById('runway-chart');
-    var table = document.getElementById('runway-table');
     var statuses = selectedStatuses();
     var mode = rw.parts ? runwayGroupBy() : 'status';
+    var carry = carryForward();
     // Reserves are the organisation's money, so they start the lines only when the whole
-    // organisation is drawn: every project and every source, as the three status lines.
-    var reserves = rw.reserves && mode === 'status' && allChecked('filter-projects') &&
+    // organisation is drawn: every project and every source, as the three status lines, and
+    // only when the years are brought forward.
+    var reserves = carry && rw.reserves && mode === 'status' && allChecked('filter-projects') &&
       allChecked('filter-sources') ? rw.reserves : null;
     // A snapshot written before the parts existed still draws the organisation's lines.
     var total = rw.parts
       ? runwayWalk_(selectedRunwayParts(rw), rw.nowKey, undefined, reserves) : rw;
     var rows = total.months || [];
+    renderFinance(rw, mode);
 
     function empty(note) {
-      table.innerHTML = '';
       chart.innerHTML = '<div class="rw-note">' + note + '</div>';
     }
     if (!rows.length) return empty('Nothing matches show and filter above.');
@@ -615,11 +634,34 @@
       : groupSeries(rw, mode, rows);
 
     // The months of the years ticked, from the first one's start to the last one's end.
-    // Cropped after the walk, so the lines open at their true cumulative position, and each
-    // line's label still says when it goes short, even after those months.
+    // Cropped after the walk, so with Brought forward the lines open at their true cumulative
+    // position, and each line's label still says when it goes short, even after those months.
     var fys = selectedFys();
     if (!fys.length) return empty('No financial year is ticked in Filter above.');
     var from = fyMonths(fys[0]).from, to = fyMonths(fys[fys.length - 1]).to;
+    var net = total.openingNet || 0;
+    if (!carry) {
+      // Each year alone: every line moved to $0 at the end of the month before the first year
+      // ticked, each by its own value there, so it shows that year's funding against its
+      // spend. Falling below zero is then falling behind, not running out of money.
+      var anchor = prevMonthKey(from), ai = -1;
+      rows.forEach(function (r, i) { if (r.month === anchor) ai = i; });
+      series.forEach(function (s) {
+        var base = ai === -1 ? 0 : s.values[ai];
+        s.values = s.values.map(function (v) { return v - base; });
+        s.cross = null;
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i].month >= rw.nowKey && rows[i].month >= from && s.values[i] < 0) {
+            s.cross = rows[i].month; break;
+          }
+        }
+        if (s.horizon) {
+          s.horizon = { cls: '', text: s.cross ? 'behind from ' + fmtMonthKey(s.cross)
+            : 'ahead to ' + fmtMonthKey(last) };
+        }
+      });
+      if (ai !== -1 && rows[ai].actual) net -= rows[ai].secured - rows[ai].spend;
+    }
     var keep = rows.map(function (r) { return r.month >= from && r.month <= to; });
     if (keep.indexOf(true) === -1) return empty('Nothing is budgeted in ' + fysText(fys) + '.');
     rows = rows.filter(function (r, i) { return keep[i]; });
@@ -633,15 +675,10 @@
     var caption = [
       'Runway, ' + fmtMonthKey(rows[0].month) + ' to ' + fmtMonthKey(rows[rows.length - 1].month) +
         ' · grouped by ' + (rw.parts ? group.options[group.selectedIndex].text : 'Status').toLowerCase(),
-      statusText(statuses) + ' · ' + pickedText('filter-projects', 'projects') + ' · ' +
+      showText(statuses) + ' · ' + pickedText('filter-projects', 'projects') + ' · ' +
         pickedText('filter-sources', 'funding sources')
     ];
-    renderRunwayChart(rows, series, chart, mode === 'status', total.openingNet || 0, reserves,
-      caption);
-    table.innerHTML = runwayTable(rows, series, mode === 'status');
-    table.querySelector('details').addEventListener('toggle', function (ev) {
-      runwayTableOpen = ev.target.open;
-    });
+    renderRunwayChart(rows, series, chart, mode === 'status', net, reserves, caption);
   }
 
   // One expected-case line per group. With Proposed unticked there are no application
@@ -864,26 +901,206 @@
     };
   }
 
-  // The accessibility twin of the chart: every value it draws, reachable without hover.
-  // Kept open across redraws, so changing a control does not fold it away.
-  var runwayTableOpen = false;
-  function runwayTable(rows, series, withSpend) {
-    var h = '<details class="rw-table"' + (runwayTableOpen ? ' open' : '') +
-      '><summary>Show as a table</summary>' +
-      '<div class="table-wrap"><table><thead><tr><th>Month</th><th>Basis</th>' +
-      (withSpend ? '<th class="num">Cumulative spend</th>' : '') +
-      series.map(function (s) {
-        return '<th class="num">Net, ' + esc(withSpend ? s.label.toLowerCase() : s.label) + '</th>';
-      }).join('') + '</tr></thead><tbody>';
-    rows.forEach(function (r, i) {
-      h += '<tr><td>' + esc(fmtMonthKey(r.month)) + '</td><td>' +
-        (r.actual ? 'actual' : 'budget') + '</td>' +
-        (withSpend ? '<td class="num">' + fmtMoney(r.spend) + '</td>' : '') +
-        series.map(function (s) {
-          return '<td class="num">' + netMoney(s.values[i]) + '</td>';
-        }).join('') + '</tr>';
+  // ---- Finance table --------------------------------------------------------
+  // Under the runway chart, folded as "Show as a table": income, cost and surplus for each
+  // year ticked, from the parts the controls select (financeTable_, sent by the server as its
+  // own source), grouped as the chart is, by project when it draws the status lines. This year
+  // against the board's budget; a later year on secured money, expected and full. Negatives in
+  // brackets, as the board's updates show them. Kept open across redraws, so changing a
+  // control does not fold it away.
+  var financeOpen = false;
+  function bdMoney(n) {
+    if (n === null || n === undefined) return '';
+    return n < 0 ? '(' + fmtMoney(-n) + ')' : fmtMoney(n);
+  }
+  // `starts`: the columns that open a year, which carry its rule.
+  function bdCells(vals, starts) {
+    return vals.map(function (v, i) {
+      return '<td class="num' + (starts && starts[i] ? ' bd-first' : '') + '">' + bdMoney(v) +
+        '</td>';
+    }).join('');
+  }
+  function prevMonthKey(key) {
+    var p = key.split('-'), y = parseInt(p[0], 10), m = parseInt(p[1], 10) - 1;
+    if (m < 1) { m = 12; y -= 1; }
+    return y + '-' + ('0' + m).slice(-2);
+  }
+
+  function renderFinance(rw, mode) {
+    var host = document.getElementById('finance-table');
+    var fys = selectedFys();
+    if (!rw.parts || !fys.length) { host.innerHTML = ''; return; }
+    var board = snapshot.board || null;
+    var general = board ? board.general : 'General';
+    var group = mode === 'status' ? 'project' : mode;
+    var current = fyOf(snapshot.currentQuarter || '');
+    var actualTo = prevMonthKey(rw.nowKey);
+    var years = fys.map(function (fy) {
+      var m = fyMonths(fy);
+      return { label: fy, from: m.from, to: m.to, now: fy === current };
     });
-    return h + '</tbody></table></div></details>';
+    var parts = selectedRunwayParts(rw);
+    var groups = financeTable_(parts, rw.nowKey, years, group, general);
+    var whole = allChecked('filter-projects') && allChecked('filter-sources');
+
+    // Brought forward: where each group stands when each year begins, its income and margin
+    // less its cost from the first month the parts hold, worked by the same function over
+    // everything before the year. The whole organisation's starts from the reserves: the
+    // amount the runway walk moves every line by to meet them.
+    var carry = carryForward();
+    var before = {}, offset = 0;
+    if (carry) {
+      financeTable_(parts, rw.nowKey, years.map(function (y) {
+        return { label: y.label, from: '0000-01', to: prevMonthKey(y.from) };
+      }), group, general).forEach(function (g) { before[g.key] = g; });
+      if (whole && rw.reserves) {
+        var withRes = runwayWalk_(parts, rw.nowKey, undefined, rw.reserves).months;
+        var without = runwayWalk_(parts, rw.nowKey).months;
+        if (withRes.length && without.length) offset = withRes[0].secured - without[0].secured;
+      }
+    }
+    function bfOf(g, y, sc) {
+      var b = before[g.key] && before[g.key].years[y.label];
+      var f = b ? b[sc] : null;
+      var pos = f ? f.income + f.margin - f.cost : 0;
+      return g.key === 'All' && whole ? pos + offset : pos;
+    }
+    // The reserves the board's budget expected at a year's end, on its Organisation row.
+    function orgReserves(fy) {
+      var r = board ? board.budget.filter(function (b) {
+        return b.fy === fy && b.project === board.totalRow;
+      })[0] : null;
+      return r && r.reserves !== null && r.reserves !== undefined ? r.reserves : null;
+    }
+    function prevFy(fy) {
+      var a = parseInt(fy, 10) - 1;
+      return ('0' + a).slice(-2) + '/' + ('0' + (a + 1)).slice(-2);
+    }
+
+    // The board's budget is per project and for the whole of each, so it shows grouped by
+    // project with every funding source ticked.
+    var withBudget = !!board && group === 'project' && allChecked('filter-sources');
+    function budgetOf(fy, key) {
+      if (!withBudget) return null;
+      var rows = board.budget.filter(function (b) {
+        return b.fy === fy && b.project !== board.totalRow &&
+          (key === 'All' ? selectedValues('filter-projects').indexOf(b.project) !== -1
+            : b.project === key);
+      });
+      if (!rows.length) return null;
+      var t = rows.reduce(function (s, b) {
+        return { income: s.income + b.income, cost: s.cost + b.cost };
+      }, { income: 0, cost: 0 });
+      t.surplus = t.income - t.cost;
+      return t;
+    }
+
+    var blank = { income: 0, margin: 0, cost: 0, surplus: 0 };
+    function fig(g, y, sc) { return (g.years[y.label] || {})[sc] || blank; }
+    function size(g) {
+      return years.reduce(function (t, y) {
+        var e = fig(g, y, 'full');
+        return t + Math.abs(e.income) + Math.abs(e.cost) + Math.abs(e.margin);
+      }, 0);
+    }
+    var all = groups.filter(function (g) { return g.key === 'All'; })[0];
+    var rest = groups.filter(function (g) { return g.key !== 'All' && size(g) > 0.5; });
+    var order = group === 'project' && board ? board.projects : [];
+    rest.sort(function (a, b) {
+      var ia = order.indexOf(a.key), ib = order.indexOf(b.key);
+      if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      return size(b) - size(a);
+    });
+    if (!rest.length) { host.innerHTML = ''; return; }
+
+    // The columns: this year's four, a later year's three.
+    var cols = years.map(function (y) {
+      return y.now ? (withBudget ? ['Budget', 'Actual to ' + fmtMonthKey(actualTo), 'Forecast',
+        'Forecast less budget'] : ['Actual to ' + fmtMonthKey(actualTo), 'Forecast'])
+        : ['Secured', 'Expected', 'Full'];
+    });
+    var width = 1 + cols.reduce(function (t, c) { return t + c.length; }, 0);
+    var starts = [];
+    cols.forEach(function (c) { c.forEach(function (h, j) { starts.push(j === 0); }); });
+    // One figure: a line of the year's own (income, cost, surplus, margin), or where the group
+    // stands as the year begins (bf) and ends (cf, brought forward plus surplus and margin).
+    function val(g, y, sc, k) {
+      var f = fig(g, y, sc);
+      if (k === 'bf') return bfOf(g, y, sc);
+      if (k === 'cf') return bfOf(g, y, sc) + f.surplus + f.margin;
+      return f[k];
+    }
+    // The board budgeted reserves for the whole organisation only: the year before's
+    // Organisation row brings forward, this year's carries forward.
+    function budgetVal(g, y, k) {
+      if (k === 'margin') return null;
+      if (k === 'bf' || k === 'cf') {
+        return g.key === 'All' && whole ? orgReserves(k === 'bf' ? prevFy(y.label) : y.label) : null;
+      }
+      var b = budgetOf(y.label, g.key);
+      return b ? b[k] : null;
+    }
+    function values(g, k) {
+      return years.map(function (y) {
+        if (!y.now) return ['secured', 'expected', 'full'].map(function (sc) {
+          return val(g, y, sc, k);
+        });
+        var a = val(g, y, 'actual', k), e = val(g, y, 'expected', k);
+        if (!withBudget) return [a, e];
+        var bv = budgetVal(g, y, k);
+        return [bv, a, e, bv === null ? null : e - bv];
+      }).reduce(function (t, v) { return t.concat(v); }, []);
+    }
+    var lab = { bf: 'Brought forward', income: 'Income', cost: 'Cost', surplus: 'Surplus',
+      cf: 'Carried forward' };
+    function line(g, k, cls) {
+      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td class="bd-lbl">' + lab[k] +
+        '</td>' + bdCells(values(g, k), starts) + '</tr>';
+    }
+    function block(g, name) {
+      var rows = (carry ? [line(g, 'bf', 'bd-carry')] : []).concat(
+        ['income', 'cost', 'surplus'].map(function (k) {
+          return line(g, k, k === 'surplus' ? 'bd-sum' : '');
+        }));
+      var hasMargin = g.key !== 'All' && years.some(function (y) {
+        return ['actual', 'secured', 'expected', 'full'].some(function (sc) {
+          return Math.abs(fig(g, y, sc).margin) >= 1;
+        });
+      });
+      if (hasMargin) {
+        rows.push('<tr class="bd-margin"><td class="bd-lbl">' + (g.key === general
+          ? 'Margins from projects' : 'Margin to General') + '</td>' +
+          bdCells(values(g, 'margin'), starts) + '</tr>');
+      }
+      if (carry) rows.push(line(g, 'cf', 'bd-sum bd-cf'));
+      return '<tr class="bd-project"><th colspan="' + width + '">' + esc(name) + '</th></tr>' +
+        rows.join('');
+    }
+    var body = rest.map(function (g) { return block(g, g.key); }).join('') +
+      (all ? block(all, whole ? 'Organisation' : 'All shown') : '');
+
+    var head1 = '<tr><th></th>' + years.map(function (y, i) {
+      return '<th class="num bd-year" colspan="' + cols[i].length + '">' + esc(y.label) +
+        (y.now ? '' : ' draft') + '</th>';
+    }).join('') + '</tr>';
+    var head2 = '<tr><th></th>' + cols.map(function (c) {
+      return c.map(function (h, j) {
+        return '<th class="num' + (j === 0 ? ' bd-first' : '') + '">' + esc(h) + '</th>';
+      }).join('');
+    }).join('') + '</tr>';
+    var later = years.filter(function (y) { return !y.now; }).map(function (y) {
+      return y.label + ' fundraising target, expected income above secured: ' +
+        bdMoney(fig(all, y, 'expected').income - fig(all, y, 'secured').income);
+    });
+    host.innerHTML = '<details class="rw-table"' + (financeOpen ? ' open' : '') +
+      '><summary>Show as a table</summary>' +
+      '<div class="table-wrap fin-wrap"><table class="bd-table fin-table"><thead>' +
+      head1 + head2 + '</thead><tbody>' + body + '</tbody></table></div>' +
+      (later.length && all ? '<div class="coverage"><span>' + later.map(esc).join('. ') +
+        '.</span></div>' : '') + '</details>';
+    host.querySelector('details').addEventListener('toggle', function (ev) {
+      financeOpen = ev.target.open;
+    });
   }
 
   // ---- Refresh progress ---------------------------------------------------
@@ -976,116 +1193,88 @@
     document.querySelectorAll('.tab').forEach(function (t) {
       t.classList.toggle('active', t.dataset.view === view);
     });
-    ['overview', 'tracking', 'health', 'board'].forEach(function (v) {
+    ['overview', 'tracking', 'health', 'performance'].forEach(function (v) {
       document.getElementById('view-' + v).classList.toggle('hidden', view !== v);
     });
     // Health needs no lazy load: the findings arrive with the snapshot and renderHealth
     // has already written them.
     if (view === 'tracking' && !trLoaded) { trLoaded = true; loadTrackingProjects(); }
-    if (view === 'board' && !bdLoaded) loadBoard();
+    if (view === 'performance' && !perfLoaded) loadPerformance();
   }
 
-  // ---- Board ------------------------------------------------------------------
-  // The board pack's figures (boardFinance_), fetched when the tab opens: the server reads
-  // the Board budget tab on each call. Negatives in brackets, as the board's updates show them.
-  var bdLoaded = false;
-  function loadBoard() {
-    bdLoaded = true;
-    var st = document.getElementById('bd-status');
+  // ---- Performance --------------------------------------------------------------
+  // The strategy's KPIs (performanceView_), fetched when the tab opens, and again after a
+  // refresh if it is open.
+  var perfLoaded = false;
+  function loadPerformance() {
+    perfLoaded = true;
+    var st = document.getElementById('perf-status');
     st.textContent = 'loading…';
     google.script.run.withSuccessHandler(function (b) {
       st.textContent = '';
-      renderBoard(b);
+      renderPerformance(b && b.performance);
     }).withFailureHandler(function (e) {
-      bdLoaded = false;
+      perfLoaded = false;
       st.textContent = 'error: ' + errText(e) + '. Click the tab again to retry.';
-    }).apiGetBoard();
+    }).apiGetPerformance();
   }
 
-  function bdMoney(n) {
-    if (n === null || n === undefined) return '';
-    return n < 0 ? '(' + fmtMoney(-n) + ')' : fmtMoney(n);
+  // A table per pou, then the KPIs not measured yet, then what changed this year.
+  function kpiValue(v, unit) {
+    if (v === null || v === undefined) return '';
+    var n = Number(v).toLocaleString('en-NZ', { maximumFractionDigits: 1 });
+    return unit === '%' ? n + '%' : n;
   }
-  function bdName(p) { return p === 'All' ? 'Organisation' : p; }
-  function bdMarginLabel(p) { return p === 'General' ? 'Margins from projects' : 'Margin to General'; }
-  function bdCells(vals, cls) {
-    return vals.map(function (v) {
-      return '<td class="num' + (cls ? ' ' + cls : '') + '">' + bdMoney(v) + '</td>';
+  function renderPerformance(p) {
+    var el = document.getElementById('performance-body');
+    if (!p) { el.innerHTML = ''; return; }
+    var sheet = p.url ? ' <a class="health-link" target="_blank" rel="noopener" href="' +
+      esc(p.url) + '">Performance sheet</a>' : '';
+    if (p.issue) {
+      el.innerHTML = '<div class="health-info">The Performance sheet could not be read: ' +
+        esc(p.issue) + '.' + sheet + '</div>';
+      return;
+    }
+    var qs = p.quarters.map(function (q) { return q.replace(p.fy + ' ', ''); });
+    var html = p.pous.map(function (g) {
+      var rows = g.kpis.map(function (k) {
+        return '<tr><td>' + esc(k.name) + (k.note ? ' <span class="kpi-note">' + esc(k.note) +
+          '</span>' : '') + '</td>' +
+          p.quarters.map(function (q) {
+            return '<td class="num">' + kpiValue(k.values[q], k.unit) + '</td>';
+          }).join('') +
+          '<td class="num bd-ytd">' + kpiValue(k.ytd, k.unit) + '</td><td class="num">' +
+          kpiValue(k.comparative, k.unit) + '</td><td>' + esc(k.unit) + '</td><td>' +
+          esc(k.reportedTo) + '</td><td>' + esc(k.owner) + '</td></tr>';
+      }).join('');
+      var table = g.kpis.length
+        ? '<div class="table-wrap"><table class="bd-table kpi-table"><thead><tr><th>KPI</th>' +
+          qs.map(function (q) { return '<th class="num">' + esc(q) + '</th>'; }).join('') +
+          '<th class="num">' + esc(p.fy) + ' to date</th><th class="num">' + esc(p.comparative) +
+          '</th><th>Unit</th><th>Reported to</th><th>Owner</th></tr></thead><tbody>' + rows +
+          '</tbody></table></div>'
+        : '';
+      var not = g.notMeasured.length
+        ? '<div class="coverage"><span>Not measured yet: ' + g.notMeasured.map(function (k) {
+            return esc(k.name);
+          }).join('; ') + '.</span></div>'
+        : '';
+      return '<h3 class="bd-h3">' + esc(g.pou) + '</h3>' + table + not;
     }).join('');
+    var changed = p.changed.length
+      ? '<h3 class="bd-h3">What changed this year</h3><ul class="kpi-changed">' +
+        p.changed.map(function (k) {
+          var what = k.status === 'changed' && k.replaces ? 'replaces ' + esc(k.replaces)
+            : k.status === 'carried' ? 'carried for the Statement of Service Performance'
+            : k.status === 'retired' ? 'retired' + (k.retired ? ' ' + esc(k.retired) : '')
+            : esc(k.status);
+          return '<li><b>' + esc(k.name) + '</b>: ' + what + '</li>';
+        }).join('') + '</ul>'
+      : '';
+    el.innerHTML = '<div class="coverage"><span>Values as at the last refresh.' + sheet +
+      '</span></div>' + html + changed;
   }
 
-  function renderBoard(b) {
-    var el = document.getElementById('board-finance');
-    if (!b || !b.finance) { el.innerHTML = '<div class="health-info">No snapshot yet.</div>'; return; }
-    var f = b.finance;
-    el.innerHTML = boardYear(f.years[0], f) + boardDraft(f.years[1]);
-  }
-
-  // This year: budget, actual to last month, forecast and the difference, per project.
-  function boardYear(y, f) {
-    var lines = ['income', 'cost', 'surplus'];
-    var lab = { income: 'Income', cost: 'Cost', surplus: 'Surplus' };
-    var body = y.rows.map(function (r) {
-      var b = r.budget, a = r.figures.actual, e = r.figures.expected;
-      var rows = lines.map(function (k) {
-        var bv = b ? b[k] : null;
-        return '<tr' + (k === 'surplus' ? ' class="bd-sum"' : '') + '><td class="bd-lbl">' +
-          lab[k] + '</td>' + bdCells([bv, a[k], e[k], bv === null ? null : e[k] - bv]) + '</tr>';
-      });
-      if (r.project !== 'All' && (a.margin || e.margin)) {
-        rows.push('<tr class="bd-margin"><td class="bd-lbl">' + bdMarginLabel(r.project) + '</td>' +
-          bdCells([null, a.margin, e.margin, null]) + '</tr>');
-      }
-      return '<tr class="bd-project"><th colspan="5">' + esc(bdName(r.project)) + '</th></tr>' +
-        rows.join('');
-    }).join('');
-    var res = y.reserves || {}, ye = res.yearEnd || {};
-    body += '<tr class="bd-sum"><td class="bd-lbl">Reserves at ' + fmtMonthKey(y.to) + '</td>' +
-      bdCells([res.budget, null, ye.expected, res.budget === null ? null : ye.expected - res.budget]) +
-      '</tr>';
-    var runway = f.monthsOfRunway && f.monthsOfRunway.secured !== null
-      ? f.monthsOfRunway.secured + ' months, to ' + fmtMonthKey(f.crossover.secured)
-      : 'beyond the last budgeted month';
-    return '<h3 class="bd-h3">' + esc(y.label) + ': forecast to ' + fmtMonthKey(y.to) +
-      ' against the board\'s budget</h3>' +
-      '<div class="table-wrap"><table class="bd-table"><thead><tr><th></th>' +
-      '<th class="num">Budget</th><th class="num">Actual to ' + fmtMonthKey(f.actualTo) +
-      '</th><th class="num">Forecast</th><th class="num">Forecast less budget</th></tr></thead>' +
-      '<tbody>' + body + '</tbody></table></div>' +
-      '<div class="coverage"><span>On secured money only, reserves at ' + fmtMonthKey(y.to) +
-      ' are ' + bdMoney(ye.secured) + ', and the runway is ' + runway + '.</span></div>';
-  }
-
-  // Next year's draft: secured, expected and full, per project. The board adopts Expected;
-  // its income above Secured is the fundraising target.
-  function boardDraft(y) {
-    var lines = ['income', 'cost', 'surplus'];
-    var lab = { income: 'Income', cost: 'Cost', surplus: 'Surplus' };
-    var sc = ['secured', 'expected', 'full'];
-    var body = y.rows.map(function (r) {
-      var rows = lines.map(function (k) {
-        return '<tr' + (k === 'surplus' ? ' class="bd-sum"' : '') + '><td class="bd-lbl">' +
-          lab[k] + '</td>' + bdCells(sc.map(function (s) { return r.figures[s][k]; })) + '</tr>';
-      });
-      if (r.project !== 'All' && sc.some(function (s) { return r.figures[s].margin; })) {
-        rows.push('<tr class="bd-margin"><td class="bd-lbl">' + bdMarginLabel(r.project) + '</td>' +
-          bdCells(sc.map(function (s) { return r.figures[s].margin; })) + '</tr>');
-      }
-      return '<tr class="bd-project"><th colspan="4">' + esc(bdName(r.project)) + '</th></tr>' +
-        rows.join('');
-    }).join('');
-    var ye = (y.reserves && y.reserves.yearEnd) || {};
-    body += '<tr class="bd-sum"><td class="bd-lbl">Reserves at ' + fmtMonthKey(y.to) + '</td>' +
-      bdCells([ye.secured, ye.expected, ye.full]) + '</tr>';
-    var all = y.rows.filter(function (r) { return r.project === 'All'; })[0];
-    var target = all ? all.figures.expected.income - all.figures.secured.income : 0;
-    return '<h3 class="bd-h3">' + esc(y.label) + ': draft budget</h3>' +
-      '<div class="table-wrap"><table class="bd-table"><thead><tr><th></th>' +
-      '<th class="num">Secured</th><th class="num">Expected</th><th class="num">Full</th>' +
-      '</tr></thead><tbody>' + body + '</tbody></table></div>' +
-      '<div class="coverage"><span>Fundraising target, expected income above secured: ' +
-      bdMoney(target) + '.</span></div>';
-  }
   document.querySelectorAll('.tab').forEach(function (t) {
     t.addEventListener('click', function () { switchView(t.dataset.view); });
   });

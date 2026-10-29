@@ -184,8 +184,8 @@ const CONFIG = {
   },
 
   // ---- Board ----------------------------------------------------------------
-  // The Board tab (Board.js), for people with full access only. Its budget is a tab of the
-  // Cockpit Settings spreadsheet: income and cost per project per financial year as the board
+  // The finance table under the runway chart (Board.js), full access only. Its budget is a tab
+  // of the Cockpit Settings spreadsheet: income and cost per project per financial year as the board
   // approved them, and on the TOTAL_ROW row the reserves that budget expected at year end.
   BOARD: {
     TAB: 'Board budget',
@@ -193,6 +193,20 @@ const CONFIG = {
     TOTAL_ROW: 'Organisation',
     // The order the board's updates have used. A project not listed follows them.
     PROJECTS: ['Wildlife Watcher', 'Spyfish Aotearoa', 'Wild About AI', 'General']
+  },
+
+  // ---- Performance ---------------------------------------------------------------
+  // The Performance sheet (Performance.js), in the Budgets root folder: the strategy's KPIs on
+  // its KPIs tab and their values, one row per KPI per period, on its Values tab. Found by
+  // name the first time, then by the id kept in this Script Property.
+  PERFORMANCE: {
+    FILE_NAME: 'Performance',
+    PROPERTY_KEY: 'PERFORMANCE_SHEET_ID',
+    KPIS_TAB: 'KPIs',
+    VALUES_TAB: 'Values',
+    // Earned income for KPI T1: the income accounts, by code, that sales and services post
+    // to. Sales (200) until the bookkeeper confirms which others count.
+    EARNED_INCOME_ACCOUNTS: ['200']
   },
 
   // ---- Financial year -----------------------------------------------------

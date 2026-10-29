@@ -154,6 +154,11 @@ function name silently collide, last definition winning.
   collision was hidden only because the former was wrapped in a closure; flattening it for
   deployment exposed the clash, which is why the underscore convention is enforced.
 * Name top-level constants distinctly, so a new file cannot shadow an existing one.
+* `runwayWalk_` and `financeTable_` also run in the browser: `Index.html` sends each one's own
+  source (`fn.toString()`), so the page runs exactly the code the tests run. Each must stay
+  self-contained, calling nothing outside itself, or the page breaks while every server test
+  passes. A test runs `financeTable_` rebuilt from its source alone; extend that guard to any
+  function added the same way.
 
 ---
 

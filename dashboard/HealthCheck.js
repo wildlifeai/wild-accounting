@@ -167,6 +167,15 @@ const HEALTH_CATALOGUE = {
     title: 'General work with no milestone on Reserves',
     action: 'It counts on top of Reserves. If it pays for a cost Reserves holds, give both ' +
       'lines the same Milestone name so it comes off Reserves instead.' },
+  P1: { severity: 'info', category: 'Performance',
+    title: 'KPIs with no value for the last quarter',
+    action: 'Add a row per KPI to the Values tab of the Performance sheet, with the quarter ' +
+      'as its period and a link to the evidence. A KPI not measured yet shows as such in the ' +
+      'board pack.' },
+  P2: { severity: 'warning', category: 'Performance',
+    title: 'Performance sheet could not be read',
+    action: 'The Performance tab is empty until it can. Check the sheet is ' +
+      'in the Budgets folder, named Performance, with KPIs and Values tabs.' },
   D1: { severity: 'error', category: 'Xero coding',
     title: 'Actual spend with no Projects tag',
     action: 'Tag these in Xero. Untagged lines are dropped from every total.' },
@@ -211,7 +220,8 @@ const HEALTH_SEVERITY_RANK = { error: 0, warning: 1, info: 2 };
  * @param {Object} ctx  { now, xeroConnected, exclusion: {count,total},
  *                       unposted: {count,total}, secretsMissing: [],
  *                       reservesIssue: 'scope' | null, exclusivity: {reps, suppressed},
- *                       reservesOverPaid: reservesOverPaid_'s list }
+ *                       reservesOverPaid: reservesOverPaid_'s list,
+ *                       performance: performanceHealth_'s object }
  * @return {Array} findings, most severe first, and by value at risk within severity
  */
 function buildHealth(budgets, actualLines, ctx) {
@@ -704,6 +714,17 @@ function buildHealth(budgets, actualLines, ctx) {
       'source value, so they fall outside the quarterly tracking grid',
       amount: Math.round(sumAmount_(noSource)) }, noSource));
   }
+
+  // --- P: performance. One P1 per owner, so each sees their own list. ---
+  const perf = ctx.performance;
+  if (perf && perf.issue) {
+    add('P2', { detail: 'the Performance sheet: ' + perf.issue, link: perf.url || '' });
+  }
+  ((perf && perf.missing) || []).forEach(m => {
+    add('P1', { owner: m.owner, link: perf.url || '', detail: perf.quarter + ': ' +
+      m.kpis.length + ' KPI(s) owned by ' + m.owner + ' have no value, ' +
+      m.kpis.map(k => k.name + ' (' + k.id + ')').join(', ') });
+  });
 
   // --- F: system ---
   if (ctx.xeroConnected === false) {

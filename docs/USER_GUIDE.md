@@ -35,8 +35,8 @@ in (`Reading WW_25_TOI (6 of 9)`, `Fetching Xero Invoices, page 2`).
   clean. Each finding says what is wrong, where, the amount at stake and what to do, with a
   link to the sheet. [Health checks](HEALTH_CHECKS.md) explains every one. Under the findings,
   [Quarter close](#quarter-close) gives the accountant what to post for a finished quarter.
-- **Board**: the board pack's figures, for people with full access only. See
-  [The Board tab](#the-board-tab).
+- **Performance**: the strategy's KPIs, for people with full access only. See
+  [The Performance tab](#the-performance-tab).
 
 Each tab's controls sit in a ribbon of dropdown boxes, grouped and named underneath. The title
 under the ribbon names what was chosen, so a screenshot says what it is, and the **?** at its
@@ -45,17 +45,19 @@ right opens a short reminder of what is on screen; this guide has the rest.
 ## What you're looking at (Overview)
 
 The ribbon at the top has three groups. **Filter** (financial years, projects, funding
-sources) and **Show** (secured, proposed) apply to everything on the tab, the cards and the
-runway. **Group by** changes the runway chart only. The title under the ribbon names what was
-chosen, and the **?** at its right explains the cards and the chart. Under the line come the
-cards, then the chart.
+sources) and **Show** (secured, proposed, brought forward) apply to everything on the tab, the
+chart and its table. **Group by** changes the chart's lines and the table's rows. The title under the ribbon
+names what was chosen, and the **?** at its right explains the chart and the table. Under the
+line come the chart, then **Show as a table**, folded until you open it.
 
-1. **Summary cards**: totals for the financial years ticked, the current one by default
-   (finished years are left out): **expected cost** (actual spend for the months gone, plus the plan for the rest),
-   secured funding, actual spent, the **unsecured gap** (expected cost not yet covered by secured
-   funding) and the **gap after pipeline** (what is still uncovered once applications are counted
-   at their probability). When income covers the cost, the card shows the **surplus** instead.
-2. **Runway**: income minus spend, walked month by month, Xero actuals to last month and the
+A person who sees only some projects is not shown the runway, which is the whole
+organisation's position, so their Overview has cards instead: totals for the years ticked of
+**expected cost** (actual spend for the months gone, plus the plan for the rest), secured
+funding, actual spent, the **unsecured gap** (expected cost not yet covered by secured funding)
+and the **gap after pipeline** (what is still uncovered once applications are counted at their
+probability), or the **surplus** where income covers the cost.
+
+1. **Runway**: income minus spend, walked month by month, Xero actuals to last month and the
    plan from this month on. The chart draws the months from the start of the first year
    ticked to the end of the last; each line's label still says when it goes short, even after
    them. Its first two lines name the months it runs, the grouping, and what Show and Filter
@@ -79,24 +81,57 @@ cards, then the chart.
    releases are posted, the liability still holds money already spent. Its column C shows each
    part, to check against Xero. To correct a figure, type your own row for the same date: the
    refresh never overwrites a row it did not write. The latest row is used: with every project
-   and source shown and grouped by status, all three lines start from it, so **Secured only**
-   is reserves plus secured funding against the plan, and the label at today reads "position
-   ..., from reserves at" its date. Any narrower view, filtered or grouped, is funded money
-   only, because reserves belong to no one project. With no row, every view is funded money
-   only.
+   and source shown, grouped by status and **Brought forward** ticked, all three lines start
+   from it, so **Secured only** is reserves plus secured funding against the plan, and the label
+   at today reads "position ..., from reserves at" its date. Any narrower view, filtered or
+   grouped, is funded money only, because reserves belong to no one project. With no row, every
+   view is funded money only.
+
+   **Brought forward**, the last box under Show, is ticked to begin with: each line carries
+   everything before the years ticked, so the chart opens where the money stands. Untick it to
+   see each year alone: every line starts at $0 as the first year ticked begins, so it shows
+   that year's funding against its spend, and its label says "behind from" the month spend
+   overtakes funding, or "ahead to" the last month.
 
    **Work that goes ahead only if funded**, such as a new role or a next stage, is a proposed
    sheet marked `Goes ahead: only if funded`. Its cost counts only where its funding does: not
    on **Secured only** or in the unsecured gap, at its probability in expected cost, the gap
    after pipeline and the weighted line, and in full on the line where every application
    lands. Every other sheet's cost counts on every line, as work planned whatever lands, so
-   *cumulative spend* in the chart's table is that work alone.
+   the chart's *cumulative spend* is that work alone.
 
-   **Group by** changes the chart only. **Status** draws the three lines above. **Project**,
+   **Group by** changes the chart and the table's rows. **Status** draws the three lines above. **Project**,
    **Funding source** or **Milestone** draws one line per group, counting applications at their
    probability (secured money only if *Proposed* is unticked); the lines add up to the
-   organisation's. The largest groups are named and the rest share an "Other" line. **Show as a
-   table** lists every value the chart draws.
+   organisation's. The largest groups are named and the rest share an "Other" line. Hover a
+   month, or move along the chart with the arrow keys, for every line's value in it.
+2. **Show as a table**, under the chart: income, cost and surplus for each financial year
+   ticked, from exactly what the ribbon picks, so it agrees with the chart. Its rows follow
+   **Group by**: by project when grouped by status or by project, otherwise by funding source or
+   milestone, then the total, named **Organisation** when every project and source is shown.
+   The current year has four columns: the **Budget** the board approved, **Actual** from Xero to
+   the end of last month, the **Forecast** to 31 March (actuals so far, then the plan with each
+   application at its probability) and the forecast less the budget. A later year is a draft on
+   **Secured** money, **Expected** and **Full** (every application won), and the line under the
+   table gives its fundraising target, expected income above secured. With **Brought forward**
+   ticked, each group opens a year with **Brought forward**, where it stands as the year begins
+   (its income and margin less its cost, from the first month the plan holds), and closes with
+   **Carried forward**, that plus the year's surplus and margin. The organisation's starts from
+   the reserves, so its Carried forward is the reserves at the year's end, and its budget
+   columns are the working capital the board's budget expected at the end of the year before
+   and of this one.
+
+   By project, a project shows its income as its funders give it; **Margin to General** is the
+   part of that income General receives (see [General and Reserves](#general-and-reserves)),
+   and General shows those margins as **Margins from projects**, as the board's updates set out
+   each project's surplus. The budget columns show only by project with every funding source
+   ticked, since the board's budget is for whole projects.
+
+   **GM:** the budget the board approved lives on the `Board budget` tab of **Cockpit
+   Settings**: one row per financial year (`26/27`) and project, with its income and cost, and
+   on a row named `Organisation` the reserves the budget expected at year end. Keep the year
+   before's `Organisation` row too: it is this year's Brought forward budget. The page reads the
+   tab each time it loads, so a correction shows without a refresh.
 
 Grouped by project, General's line includes every project's margin: the income its funding
 sources pay for its work, less what the work costs, which is what pays for General. A project's
@@ -248,32 +283,24 @@ bills, receipts and pay runs are in Xero, so both tables read the closed quarter
   not arrived; for work that slipped, move the amount to a later quarter on the `Forecast` tab.
   The comment is where a project lead tells the accountant which it is.
 
-## The Board tab
+## The Performance tab
 
-Only people with `*` on the `Permissions` tab see it. It builds the board pack's figures from
-the same money as the runway chart, so the two always agree.
+Only people with `*` on the `Permissions` tab see it. It shows the strategy's KPIs by pou: each
+quarter of this financial year, the year to date and last year's figure from the Statement of
+Service Performance, with who each is reported to and who owns it. A KPI with no value yet is listed under its pou as not measured,
+and **What changed this year** lists the KPIs added, changed, carried for the Statement of
+Service Performance, or retired. Three are worked out by the cockpit: **earned income share**
+(income on the sales and services accounts in Xero over all income), **income concentration**
+(the largest funder's share of income, by each sheet's `Funder`) and **months of runway** (the
+secured line's, as at the last refresh).
 
-**Finance** has two tables, each a block per project (Wildlife Watcher, Spyfish Aotearoa, Wild
-About AI, General) and one for the organisation:
-
-- **This financial year against the board's budget**: the **Budget** the board approved,
-  **Actual** from Xero to the end of last month, the **Forecast** to 31 March (actuals so far,
-  then the plan with each application at its probability), and the forecast less the budget.
-  Under the organisation, **Reserves** at 31 March against the working capital the budget
-  expected, and a line with the reserves and the runway on secured money only.
-- **Next financial year's draft budget**: income, cost and surplus on **Secured** money only,
-  **Expected**, and **Full** (every application won), with the reserves each would leave at 31
-  March. The board adopts Expected; expected income above secured is the fundraising target.
-
-A project shows its income as its funders give it. **Margin to General** is the part of that
-income General receives (see [General and Reserves](#general-and-reserves)), and General shows
-those margins on its own line, **Margins from projects**. That is how the board's updates have
-set out each project's surplus.
-
-**GM:** the budget the board approved lives on the `Board budget` tab of **Cockpit Settings**:
-one row per financial year (`26/27`) and project, with its income and cost, and on a row named
-`Organisation` the reserves the budget expected at year end. The tab reads it each time it
-opens, so a correction shows without a refresh.
+The values come from the **Performance** sheet in the Budgets folder, read at each refresh. Its
+`KPIs` tab has one row per KPI: its pou, unit, cadence, who it is reported to (`Board`, `SSP`
+or funding source codes), status, owner, whether the cockpit works it out, and whether its year
+to date adds up the quarters (`sum`) or takes the latest (`latest`). Its `Values` tab has one
+row per KPI per period: `26/27 Q2` for a quarter, `26/27` for a whole year, with the value and
+a link to the evidence. After each quarter, health check P1 lists each owner's quarterly KPIs
+with no value for it.
 
 ## Coding transactions in Xero
 

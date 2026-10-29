@@ -2040,13 +2040,13 @@ function runTests() {
     Math.abs(rSum(resPlan[0].lines, 'cost', '2026-11') - 11000) < 0.01 &&
     Math.abs(rSum(resPlan[1].lines, 'cost', '2026-11') - 4300) < 0.01);
 
-  // ---- Board tab: finance by project against the board's budget -----------------------
+  // ---- Finance table under the runway: by project, against the board's budget ------------
   function bdPart(project, source, milestone, status, probability, maps) {
     return Object.assign({ project: project, fundingSource: source, milestone: milestone,
       status: status, probability: probability, cost: {}, income: {}, actualCost: {},
       actualIncome: {} }, maps);
   }
-  var bdRunway = { nowKey: '2026-10', reserves: { amount: 5000, month: '2026-09' }, parts: [
+  var bdParts = [
     bdPart('Spyfish Aotearoa', 'XXX_27_P', 'M1', 'secured', 1, { cost: { '2026-11': 600 },
       income: { '2026-11': 600 }, actualCost: { '2026-08': 400 }, actualIncome: { '2026-08': 400 } }),
     bdPart('General', 'XXX_27_P', marginMilestone_('XXX_27_P'), 'secured', 1,
@@ -2054,35 +2054,141 @@ function runTests() {
     bdPart('General', 'XXX_27_G', 'GM', 'secured', 1,
       { cost: { '2026-12': 1000, '2027-05': 2000 }, income: { '2026-12': 500 } }),
     bdPart('Wild About AI', 'XXX_28_A', 'Classes', 'proposed', 0.5,
-      { ifFunded: true, cost: { '2027-02': 800 }, income: { '2027-02': 1000 } })] };
+      { ifFunded: true, cost: { '2027-02': 800 }, income: { '2027-02': 1000 } })];
+  var bdYears = [{ label: '26/27', from: '2026-04', to: '2027-03' },
+    { label: '27/28', from: '2027-04', to: '2028-03' }];
+  var bd = financeTable_(bdParts, '2026-10', bdYears, 'project', 'General');
+  var bdFig = function (rows, key, year, sc) {
+    return rows.filter(function (g) { return g.key === key; })[0].years[year][sc];
+  };
   var bdBudget = boardBudgetRows_([['26/27', 'Spyfish Aotearoa', '$2,000', '1,500', '', ''],
     ['26/27', 'Organisation', '', '', '4,000', ''], ['', 'General', '1', '1', '', ''],
     ['26/27', '', '1', '1', '', '']]);
-  var bd = boardFinance_(bdRunway, 2026, bdBudget);
-  var bdRow = function (y, p) {
-    return bd.years[y].rows.filter(function (r) { return r.project === p; })[0];
-  };
-  check('board: the budget tab gives a row per year and project, with its amounts',
+  check('board budget: the tab gives a row per year and project, with its amounts',
     bdBudget.length === 2 && bdBudget[0].income === 2000 && bdBudget[0].cost === 1500 &&
     bdBudget[1].reserves === 4000);
-  var bdSpy = bdRow(0, 'Spyfish Aotearoa').figures.expected;
-  check('board: a project shows its funders\' income and the margin it passes to General',
+  var bdSpy = bdFig(bd, 'Spyfish Aotearoa', '26/27', 'expected');
+  check('finance: a project shows its funders\' income and the margin it passes to General',
     bdSpy.income === 1500 && bdSpy.margin === -500 && bdSpy.cost === 1000 && bdSpy.surplus === 500);
-  check('board: General shows the margins it receives on their own line',
-    bdRow(0, 'General').figures.expected.margin === 500 &&
-    bdRow(0, 'General').figures.expected.income === 500);
-  check('board: actual runs to the end of last month',
-    bd.actualTo === '2026-09' && bdRow(0, 'Spyfish Aotearoa').figures.actual.income === 500 &&
-    bdRow(0, 'Spyfish Aotearoa').figures.actual.cost === 400);
-  var bdWai = bdRow(0, 'Wild About AI').figures;
-  check('board: work that goes ahead only if funded counts at its weight, never as secured',
-    bdWai.secured.cost === 0 && bdWai.secured.income === 0 && bdWai.expected.cost === 400 &&
-    bdWai.expected.income === 500 && bdWai.full.cost === 800 && bdWai.full.income === 1000);
-  check('board: the organisation totals every project, and its budget the project rows',
-    bdRow(0, 'All').figures.expected.income === 2500 && bdRow(0, 'All').figures.expected.cost === 2400 &&
-    bdRow(0, 'All').budget.income === 2000 && bd.years[0].reserves.budget === 4000);
-  check('board: next year holds only its own months',
-    bdRow(1, 'General').figures.secured.cost === 2000 && bd.years[1].label === '27/28');
+  check('finance: General shows the margins it receives on their own line',
+    bdFig(bd, 'General', '26/27', 'expected').margin === 500 &&
+    bdFig(bd, 'General', '26/27', 'expected').income === 500);
+  check('finance: actual is the months before this one',
+    bdFig(bd, 'Spyfish Aotearoa', '26/27', 'actual').income === 500 &&
+    bdFig(bd, 'Spyfish Aotearoa', '26/27', 'actual').cost === 400);
+  check('finance: work that goes ahead only if funded counts at its weight, never as secured',
+    bdFig(bd, 'Wild About AI', '26/27', 'secured').cost === 0 &&
+    bdFig(bd, 'Wild About AI', '26/27', 'secured').income === 0 &&
+    bdFig(bd, 'Wild About AI', '26/27', 'expected').cost === 400 &&
+    bdFig(bd, 'Wild About AI', '26/27', 'expected').income === 500 &&
+    bdFig(bd, 'Wild About AI', '26/27', 'full').cost === 800);
+  check('finance: the total takes every part once, and comes last',
+    bd[bd.length - 1].key === 'All' && bdFig(bd, 'All', '26/27', 'expected').income === 2500 &&
+    bdFig(bd, 'All', '26/27', 'expected').cost === 2400);
+  check('finance: each year holds only its own months',
+    bdFig(bd, 'General', '27/28', 'secured').cost === 2000);
+  var bdBySource = financeTable_(bdParts, '2026-10', bdYears, 'fundingSource', 'General');
+  check('finance: grouped by funding source, a source keeps its own margin',
+    bdFig(bdBySource, 'XXX_27_P', '26/27', 'expected').income === 1500 &&
+    bdFig(bdBySource, 'XXX_27_P', '26/27', 'expected').margin === 0);
+  // Brought forward: the page works everything before a year by the same function, so that
+  // plus the year's own surplus and margin is where each group stands at the year's end.
+  var bdPos = function (rows, key, year, sc) {
+    var g = rows.filter(function (r) { return r.key === key; })[0];
+    var f = g && g.years[year] ? g.years[year][sc] : null;
+    return f ? f.income + f.margin - f.cost : 0;
+  };
+  var bdBefore = financeTable_(bdParts, '2026-10', [{ label: '27/28', from: '0000-01',
+    to: '2027-03' }], 'project', 'General');
+  var bdToEnd = financeTable_(bdParts, '2026-10', [{ label: '27/28', from: '0000-01',
+    to: '2028-03' }], 'project', 'General');
+  check('finance: brought forward plus the year is where each group stands at its end',
+    bdToEnd.length === 4 && bdToEnd.every(function (g) {
+      return ['actual', 'secured', 'expected', 'full'].every(function (sc) {
+        return bdPos(bdBefore, g.key, '27/28', sc) + bdPos(bd, g.key, '27/28', sc) ===
+          bdPos(bdToEnd, g.key, '27/28', sc);
+      });
+    }));
+  var bdWalk = runwayWalk_(bdParts, '2026-10').months.filter(function (r) {
+    return r.month === '2027-02';
+  })[0];
+  check('finance: the organisation\'s position at a year\'s end meets the runway\'s expected line',
+    bdPos(bdBefore, 'All', '27/28', 'expected') === bdWalk.weighted - bdWalk.spend &&
+    bdPos(bdBefore, 'All', '27/28', 'expected') === 100);
+  var bdAlone = new Function('return ' + financeTable_.toString())();
+  check('finance: the page runs the function from its own source, needing nothing else',
+    JSON.stringify(bdAlone(bdParts, '2026-10', bdYears, 'project', 'General')) ===
+      JSON.stringify(bd));
+
+  // ---- Performance: the strategy's KPIs by pou ------------------------------------------
+  var pfKpis = kpiRows_([
+    ['KPI id', 'KPI', 'Pou', 'Unit', 'Cadence', 'Reported to', 'Status', 'Since', 'Replaces',
+      'Retired', 'How measured', 'Owner', 'Computed', 'Year to date'],
+    ['R5', 'Event reach', 'Whanaungatanga', 'people', 'quarterly', 'Board, SSP', 'carried', '',
+      '', '', '', 'Comms', '', 'sum'],
+    ['R7', 'LinkedIn followers', 'Whanaungatanga', 'followers', 'quarterly', 'Board, SSP',
+      'carried', '', '', '', '', 'Comms', '', 'latest'],
+    ['W3', 'Kaiako delivering without us', 'Wānanga', 'count', 'quarterly', 'Board', 'new',
+      '', '', '', '', 'Tash', '', 'latest'],
+    ['T1', 'Earned income share', 'Toitūtanga', '%', 'quarterly', 'Board', 'current', '',
+      '', '', '', 'Cockpit', 'yes', 'sum'],
+    ['X9', 'Old measure', 'Whanaungatanga', 'count', 'quarterly', 'Board', 'retired', '', '',
+      '01/Jul/26', '', 'Victor', '', 'sum'],
+    ['', 'A row with no id', 'Whanaungatanga', '', '', '', '', '', '', '', '', '', '', '']]);
+  var pfValues = kpiValueRows_([['Period', 'KPI id', 'Project', 'Value', 'Evidence', 'Note'],
+    ['25/26', 'R5', '', '750', '', ''], ['26/27 Q1', 'R5', 'Spyfish', '50', '', ''],
+    ['26/27 Q1', 'R5', 'WW', '30', '', ''], ['26/27 Q2', 'R5', '', '350', '', ''],
+    ['26/27 Q1', 'R7', '', '1,150', '', ''], ['26/27 Q2', 'R7', '', '1,190', '', ''],
+    ['26/27 Q2', 'W3', '', '', '', '']]);
+  var pfComputed = computedKpis_([
+    { kind: 'income', amount: 300, account: 'Sales (200)', project: 'Wildlife Watcher',
+      fundingSource: 'XXX_26_SALES', date: d(2026, 8, 10) },
+    { kind: 'income', amount: 700, account: 'Grants (210)', project: 'General',
+      fundingSource: 'XXX_27_TOI', date: d(2026, 8, 20) },
+    { kind: 'expense', amount: 900, account: 'Wages (477)', project: 'General',
+      fundingSource: 'XXX_27_TOI', date: d(2026, 8, 20) },
+    { kind: 'income', amount: 500, account: 'Sales (200)', project: 'General',
+      fundingSource: 'XXX_27_TOI', date: d(2025, 8, 20) }],
+    [{ name: 'XXX_27_TOI', metadata: { funder: 'Toi Foundation' } }],
+    { monthsOfRunway: { secured: 17 } }, 2026, d(2026, 10, 29));
+  var pf = performanceView_({ url: 'u', kpis: pfKpis, values: pfValues, computed: pfComputed },
+    2026);
+  var pfKpi = function (id) {
+    var hit = null;
+    pf.pous.forEach(function (g) { g.kpis.forEach(function (k) { if (k.id === id) hit = k; }); });
+    return hit;
+  };
+  check('performance: the KPIs tab gives a row per KPI with an id, read by its headers',
+    pfKpis.length === 5 && pfKpis[3].computed === true && pfKpis[1].ytd === 'latest' &&
+    pfKpis[0].ytd === 'sum');
+  check('performance: pous in the order the KPIs tab names them, a retired KPI left out',
+    pf.pous.map(function (g) { return g.pou; }).join() ===
+      'Whanaungatanga,Wānanga,Toitūtanga' && !pfKpi('X9'));
+  check('performance: one period\'s rows add up, the year to date sums, last year compares',
+    pfKpi('R5').values['26/27 Q1'] === 80 && pfKpi('R5').values['26/27 Q2'] === 350 &&
+    pfKpi('R5').ytd === 430 && pfKpi('R5').comparative === 750);
+  check('performance: a "latest" KPI\'s year to date is its latest quarter',
+    pfKpi('R7').ytd === 1190 && pfKpi('R7').comparative === null);
+  check('performance: a KPI with no value yet is listed as not measured',
+    !pfKpi('W3') && pf.pous[1].notMeasured.map(function (k) { return k.id; }).join() === 'W3');
+  check('performance: earned income share is sales over all income, this year only',
+    pfKpi('T1').values['26/27 Q2'] === 30 && pfKpi('T1').ytd === 30);
+  check('performance: income concentration names the largest funder; runway sits in this quarter',
+    pfComputed.T2.byQ['26/27 Q2'] === 70 && pfComputed.T2.funder === 'Toi Foundation' &&
+    pfComputed.T3.byQ['26/27 Q3'] === 17);
+  check('performance: what changed lists every KPI not current',
+    pf.changed.map(function (k) { return k.id + ':' + k.status; }).join() ===
+      'R5:carried,R7:carried,W3:new,X9:retired');
+  var pfPerf = { url: 'u', kpis: pfKpis, values: pfValues };
+  var pfHealth = buildHealth([], [], { performance: performanceHealth_(pfPerf, '26/27 Q2') });
+  var pfP1 = pfHealth.filter(function (f) { return f.id === 'P1'; });
+  check('performance: P1 names, per owner, the quarterly KPIs with no value for the quarter',
+    pfP1.length === 1 && pfP1[0].owner === 'Tash' && /W3/.test(pfP1[0].detail) &&
+    /26\/27 Q2/.test(pfP1[0].detail));
+  check('performance: P2 when the sheet cannot be read, and P1 is then quiet',
+    buildHealth([], [], { performance: performanceHealth_({ issue: 'gone' }, '26/27 Q2') })
+      .map(function (f) { return f.id; }).filter(function (id) { return id[0] === 'P'; })
+      .join() === 'P2');
 
   Logger.log(results.join('\n'));
   return results;
