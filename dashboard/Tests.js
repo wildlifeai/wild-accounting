@@ -407,7 +407,7 @@ function runTests() {
     d3.lines[0].date === '2026-07-01' && d3.lines[0].document === 'Bill INV-7' &&
     d3.lines[0].contact === 'Acme Ltd' && d3.lines[0].description === 'Refund of deposit' &&
     d3.lines[0].fundingSource === 'XXX_27_GOOD');
-  // Archived spend is out of every total and grid, so coding it better changes nothing.
+  // No grid tracks archived spend, so an item code on it would change nothing.
   check('D3 leaves out archived spend, by source or by project',
     idsFor([sheet_()], [
       spend_(900, '2026-07-01', { item: '', fundingSource: CONFIG.ARCHIVE_PREFIX + 'General' }),
@@ -432,9 +432,11 @@ function runTests() {
       [spend_(500, '2026-02-01')]).indexOf('D6') === -1 &&
     idsFor([sheet_({ metadata: { 'funding end': '31/Dec/25' } })],
       [spend_(500, '2026-05-01')]).indexOf('D6') !== -1);
-  check('D1 leaves out archived spend too',
+  // An archived source's spend counts in its year, so a line of it with no project is
+  // dropped from a total it would otherwise be in.
+  check('D1 names an archived source\'s spend with no project',
     idsFor([sheet_()], [spend_(900, '2026-07-01',
-      { project: '', fundingSource: CONFIG.ARCHIVE_PREFIX + 'General' })]).indexOf('D1') === -1);
+      { project: '', fundingSource: CONFIG.ARCHIVE_PREFIX + 'General' })]).indexOf('D1') !== -1);
   var d1 = hOf(buildHealth([sheet_()], [spend_(900, '2026-07-01', { project: '' })],
     { now: NOW, xeroConnected: true }), 'D1');
   check('D1 lists its lines', d1 && d1.lines.length === 1 && d1.lines[0].amount === 900);
@@ -1018,14 +1020,48 @@ function runTests() {
   check('archived: an empty tag is not archived, it is unassigned',
     isArchivedSource_('') === false && isArchivedSource_(null) === false);
 
+  // Archiving takes the sheet away, not the money: what an archived source spent or earned
+  // counts in the month and year it fell in.
   var rwArchName = buildRunway_([
     mSrc('A', 'secured', {}, [mLine(2026, 6, 4000, 0)])
   ], [
     { date: new Date(2026, 4, 10), amount: 7777, kind: 'expense',
       project: 'P', fundingSource: 'WW_25_OLD', item: '' }
   ], rwNow, {});
-  check('archived: spend on an archived source stays out of runway',
-    rwArchName.openingNet === 0);
+  check('archived: spend on an archived source counts in runway, in the month it fell in',
+    rwArchName.openingNet === -7777);
+
+  var archLines = [
+    { date: new Date(2026, 4, 10), amount: 7777, kind: 'expense',
+      project: 'P', fundingSource: 'WW_25_OLD', item: '' },
+    { date: new Date(2026, 4, 20), amount: 1000, kind: 'income',
+      project: 'P', fundingSource: 'WW_25_OLD', item: '' },
+    { date: new Date(2026, 5, 2), amount: 50, kind: 'expense',
+      project: 'P', fundingSource: CONFIG.ARCHIVE_PREFIX + 'WW_25_OLD', item: '' },
+    { date: new Date(2026, 4, 10), amount: 300, kind: 'expense',
+      project: 'P', fundingSource: 'WW_25_TOI', item: '' },
+    { date: new Date(2026, 4, 10), amount: 400, kind: 'expense',
+      project: CONFIG.ARCHIVE_PREFIX + 'Old', fundingSource: 'WW_25_OLD', item: '' }
+  ];
+  var archPlan = archivedPlan_(archLines);
+  var archOld = archPlan.filter(function (s) { return s.name === 'WW_25_OLD'; })[0];
+  check('archived plan: a secured source per archived tag, none for a live one',
+    archPlan.length === 2 && !!archOld && archOld.status === 'secured' &&
+    archPlan.every(function (s) { return s.name !== 'WW_25_TOI'; }));
+  check('archived plan: its actuals by project and month are its lines',
+    archOld.lines.length === 1 && archOld.lines[0].cost === 7777 &&
+    archOld.lines[0].income === 1000 && archOld.lines[0].project === 'P');
+  check('archived plan: spend on an archived project counts nowhere',
+    archPlan.every(function (s) {
+      return s.lines.every(function (l) { return l.project === 'P'; });
+    }));
+  check('archived plan: a name with a live sheet is left to that sheet',
+    archivedPlan_(archLines, [{ name: 'WW_25_OLD' }]).every(function (s) {
+      return s.name !== 'WW_25_OLD';
+    }));
+  var archAgg = aggregateBudgets_(archPlan, fyBounds_(rwNow), {});
+  check('archived plan: its plan equals its spend, so it never reads as unbudgeted',
+    archAgg.budgetByKey['P||WW_25_OLD||(unassigned)'].budget === 7777);
   setArchivedSourceNames_({}); // shared global: leave it as it was found
 
   // Only a funding-source name in archived/ hides a Xero tag. An old budget called

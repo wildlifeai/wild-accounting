@@ -220,7 +220,7 @@ Budgets/
     proposed/           -> status 'proposed'
     archived/           not read; each sheet named like a funding source, with or without
                         Z_ARCH_ or Z_ARCHIVED_, marks that Xero tag as archived
-                        (archivedSourceName_), so its actuals leave the totals too
+                        (archivedSourceName_), so its actuals count as its own plan
 ```
 
 Rules that follow from this:
@@ -228,9 +228,11 @@ Rules that follow from this:
 * A funding-source sheet is **named exactly as its Xero *Funding source* tracking value**.
 * Status comes from the folder. *Secured* means `secured/` only; *proposed* means secured plus
   proposed.
-* An archived source is archived everywhere: `isArchivedSource_` is the one definition, and it
-  drops the source's actuals as well as its sheet, even though Xero keeps the tracking value's
-  original name forever.
+* `isArchivedSource_` is the one definition of an archived source, matching the bare name too,
+  because Xero keeps the tracking value's original name forever. Archiving drops the sheet, not
+  the money: `archivedPlan_` makes the source's actuals its secured plan for the months they fall
+  in, so they count in that financial year's totals, the runway and the board's finance.
+  Project tracking, the timeline and the health checks (D1 aside) leave it out.
 * A funding source can span projects: the per-line `Project` column overrides the parent folder.
 * Xero transactions must carry **both** tracking categories plus the item code. A line with no
   `Projects` value is dropped from project and organisation totals (D1); a line with no `Funding

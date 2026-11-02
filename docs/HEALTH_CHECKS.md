@@ -117,8 +117,11 @@ row has any entry, its blank cells count as 0 for every quarter the tab has a co
 | D6 | error | Actuals against a funding source whose `Funding end` has passed | Almost always a stale recurring journal or template. |
 | D8 | warning | Xero moves a source's income by manual journal (the accountant's deferral and release), but its sheet is not marked `Income recognition: as spent` | If the grant is released as it is spent, mark it; otherwise its income follows the releases, which lag by up to a quarter. |
 
-D1 to D4 and D6 leave out spend on an archived funding source or project: no total or grid
-includes it, so coding it better would change nothing.
+D2 to D4 and D6 leave out spend on an archived funding source or project. An archived source's
+spend counts as it stands, as its own plan in the year it fell in, and no grid tracks it; an
+archived project's spend counts nowhere. Either way, coding it better would change nothing. D1
+still names an archived source's lines with no `Projects` tag, because tagging them brings them
+into the totals.
 
 D1, D2, D3, D6 and F6 look only at transactions dated in the current financial year: they ask for
 a change in Xero, and earlier years' books are closed. D4 looks at every year, because its spend
