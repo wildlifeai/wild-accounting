@@ -332,14 +332,17 @@ since earlier years' books are closed.
 ## Archiving a funding source
 
 When a grant has finished and been reported, rename its sheet with the `Z_ARCH_` prefix and move
-it to the project's `archived/` folder. It leaves the dashboard at the next refresh, and so does
-its spend, so organisation totals never show spend with no budget beside it. Keep its item codes
-unchanged in Xero, so historical actuals still reconcile.
+it to the project's `archived/` folder, whenever in the year it ends. At the next refresh its sheet
+leaves Project tracking, the timeline and the Health tab, but its money stays in the financial year
+it was spent or earned in: the cockpit takes the source's Xero actuals as its plan for those
+months, so the year's totals, the runway and the board's finance still include it, and it never
+shows as spend with no budget beside it. It counts under its own name, as secured. Keep its item
+codes unchanged in Xero, so historical actuals still reconcile.
 
-**Keep only archived funding-source sheets in `archived/`.** The cockpit drops Xero money tagged
+**Keep only archived funding-source sheets in `archived/`.** The cockpit treats Xero money tagged
 with the name of a sheet there that is shaped like a funding source (`WW_25_TOI`, with or without
-`Z_ARCH_`), and ignores anything else, so other old files do no harm, but they belong in
-`Z_ARCH_old_budgets`.
+`Z_ARCH_`) as archived, and ignores anything else, so other old files do no harm, but they belong
+in `Z_ARCH_old_budgets`.
 
 ## If a project looks off
 

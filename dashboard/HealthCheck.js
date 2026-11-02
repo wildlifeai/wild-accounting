@@ -486,7 +486,8 @@ function buildHealth(budgets, actualLines, ctx) {
 
     // D3: spend with no item code falls out of the quarterly grid entirely. Journal lines
     // are left out: Xero journals cannot carry a Product/Service, so the advice would be
-    // impossible to follow. So is archived spend, which no total or grid counts anyway.
+    // impossible to follow. So is archived spend: no grid tracks it, so an item code would
+    // change nothing.
     const noItem = (actualLines || []).filter(l => l.kind === 'expense' && !l.journal &&
       !archivedLine_(l) && thisFY(l) && !itemCode_(l.item));
     if (noItem.length) {
@@ -696,11 +697,13 @@ function buildHealth(budgets, actualLines, ctx) {
     });
   })();
 
-  // --- D1 / D2: Xero coding. An untagged line is silently dropped from totals. Archived
-  // spend is left out, as in D3: no total counts it, tagged or not. ---
+  // --- D1 / D2: Xero coding. An untagged line is silently dropped from totals. An archived
+  // source's spend counts in its year (archivedPlan_), so its untagged lines are named too;
+  // only an archived project's spend is left out, which no total counts tagged or not. ---
   const noProject = [], noSource = [];
   (actualLines || []).forEach(l => {
-    if (l.kind !== 'expense' || archivedLine_(l) || !thisFY(l)) return;
+    if (l.kind !== 'expense' || !thisFY(l)) return;
+    if (startsWith_(String(l.project || ''), CONFIG.ARCHIVE_PREFIX)) return;
     if (!l.project) noProject.push(l);
     else if (!l.fundingSource) noSource.push(l);
   });

@@ -43,6 +43,48 @@ function isArchivedSource_(name) {
 }
 
 /**
+ * Each archived source as a secured plan made of its own Xero actuals: a line per project
+ * and month it spent or earned in, so its money counts in the financial year it fell in.
+ *
+ * Archiving takes the sheet away, not the money. A grant that ends mid-year was part of
+ * that year's income and spend, and the reserves Xero reports already hold its cash, so
+ * dropping its actuals understated the year. With its actuals as its plan, every view that
+ * sets plan beside actual sees the two agree, and it never reads as spend with no budget.
+ * Project tracking, the timeline and the health checks are about live sheets and are not
+ * given it. A line with no project, or on an archived project, counts nowhere, as for any
+ * source. A name that still has a live sheet in `live` is left to that sheet, whose own plan
+ * already holds its actuals to date.
+ */
+function archivedPlan_(actualLines, live) {
+  const liveNames = {};
+  (live || []).forEach(b => { liveNames[b.name] = true; });
+  const bySource = {};
+  (actualLines || []).forEach(l => {
+    const fs = clean_(l.fundingSource || '');
+    if (!fs || !isArchivedSource_(fs) || liveNames[fs]) return;
+    if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
+    const mk = DateMath.monthKey(new Date(l.date));
+    const months = bySource[fs] || (bySource[fs] = {});
+    const e = months[l.project + '||' + mk] ||
+      (months[l.project + '||' + mk] = { project: l.project, mk: mk, cost: 0, income: 0 });
+    e[l.kind === 'expense' ? 'cost' : 'income'] += Number(l.amount) || 0;
+  });
+  return Object.keys(bySource).map(name => {
+    const lines = Object.keys(bySource[name]).sort().map(k => {
+      const e = bySource[name][k];
+      const p = e.mk.split('-');
+      const start = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, 1);
+      return { description: '(archived actuals)', milestone: '(unassigned)', item: '',
+        project: e.project, start: start,
+        end: new Date(start.getFullYear(), start.getMonth() + 1, 0),
+        cost: e.cost, income: e.income, contribution: e.income - e.cost };
+    });
+    return { name: name, status: 'secured', archived: true, projectFolder: lines[0].project,
+      metadata: {}, forecast: { cost: {}, income: {}, comments: {} }, lines: lines };
+  });
+}
+
+/**
  * The share of a funding source's income its Contribution policy expects to fund General.
  *
  * Since 2026-10-25 this moves no money: General takes each source's whole margin
@@ -381,7 +423,9 @@ function buildSnapshot() {
   // that count money (reservesOffsets_). Project tracking nets its own (netReservesTracking_).
   const offsets = reservesOffsets_(planned, exclusivityReps,
     CONFIG.PLAN_REMAINING ? DateMath.monthKey(now) : null);
-  const counted = planned.concat(offsets);
+  // Archived sources keep their money in the year it fell in, as plans of their own actuals
+  // (archivedPlan_). Counted only: tracking, the timeline and the checks keep live sheets.
+  const counted = planned.concat(archivedPlan_(actualLines, planned), offsets);
   const agg = aggregateBudgets_(counted, fy, exclusivityReps);
   const projects = agg.projects;             // name -> rollup accumulator
   const fundingSources = agg.fundingSources; // per-source summary
@@ -404,11 +448,8 @@ function buildSnapshot() {
   actualLines.forEach(l => {
     if (l.kind !== 'expense') return;
     if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
-    // An archived source's budget file is skipped by the crawl (collectStatusFolder_),
-    // so keeping its actuals guaranteed a mismatch: spend with no budget beside it,
-    // inflating org actuals and making the whole organisation look overspent.
-    // buildTimeline_ already filtered both, so the two views disagreed.
-    if (isArchivedSource_(l.fundingSource)) return;
+    // An archived source's spend stays in: its sheet is gone, but archivedPlan_ has put its
+    // actuals beside it as its plan, so it adds to the year without reading as overspent.
     const p = project_(l.project);
     p.actualExpense += l.amount;
     
@@ -1083,8 +1124,8 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
 
   (actualLines || []).forEach(l => {
     // Same exclusions as the org totals, or runway would disagree with the cards above it.
+    // An archived source's money stays in, under the plan archivedPlan_ made of it.
     if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
-    if (isArchivedSource_(l.fundingSource)) return;
     const fs = l.fundingSource || '(unassigned)';
     // Money already spent or received is real whatever its sheet says, so a tag with no
     // sheet counts as secured.
