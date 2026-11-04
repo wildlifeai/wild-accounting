@@ -324,6 +324,23 @@ function runTests() {
   addInto_(accQ, { '26/27 Q1': 7 });
   check('addInto_ accumulates rather than overwrites',
     accQ['26/27 Q1'] === 17 && accQ['26/27 Q2'] === 5);
+  // Day weighting counts calendar days in every time zone: a 23- or 25-hour day at a
+  // daylight-saving change is still one day. At one per day, a line then costs each month
+  // its days and sums to its own cost. The years include changes on a month's last day,
+  // which subtracting Dates dropped from the month but kept in the line: 31 Oct 2027 in
+  // Europe, 30 Sep 2029 in New Zealand.
+  var calendarDays = true;
+  for (var fyYear = 2024; fyYear <= 2030; fyYear++) {
+    var perDay = { start: d(fyYear, 4, 1), end: d(fyYear + 1, 3, 31) };
+    perDay.cost = DateMath.daysInclusive(perDay.start, perDay.end);
+    var perDayMonths = distributeByMonth_([perDay], 'cost');
+    Object.keys(perDayMonths).forEach(function (k) {
+      if (perDayMonths[k] !== Math.round(perDayMonths[k])) calendarDays = false;
+    });
+    if (sumMap(perDayMonths) !== perDay.cost ||
+        perDay.cost !== (fyYear % 4 === 3 ? 366 : 365)) calendarDays = false;
+  }
+  check('dates: day weighting counts calendar days, the same in every time zone', calendarDays);
 
   // The C, D and E checks. All were unimplementable until sheets carried Owner, Status,
   // Funding end and Contribution policy. `now` is injected so they stay reproducible.
