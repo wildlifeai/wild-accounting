@@ -329,6 +329,20 @@ Service Performance, or retired. Three are worked out by the cockpit: **earned i
 (the largest funder's share of income, by each sheet's `Funder`) and **months of runway** (the
 secured line's, as at the last refresh).
 
+**All income** for the first two is every income line of the financial year, the total of
+Xero's P&L. That includes lines with no Projects tag and lines on an archived project, which the
+Overview's totals leave out, so the two can differ. A line with no Funding source counts in all
+income under **No funding source**, which is never named the largest funder, since interest,
+sales and donations with no tracking all land there. An archived source counts under its own
+name, since its sheet, which named the funder, is gone. A grant marked `Income recognition: as spent` counts the income its spend
+has earned, as everywhere in the cockpit, which matches Xero once the quarter's releases are
+posted.
+
+**Income by funder**, under the Toitūtanga table, lists each funder's income this financial year
+to date and its share of all income, largest first, with a bar for the share and all income at
+the foot. Its first row is income concentration. **No funding source** has its own row after
+the funders, whatever its size. A funder whose income nets to nothing is left out.
+
 The values come from the **Performance** sheet in the Budgets folder, read at each refresh. Its
 `KPIs` tab has one row per KPI: its pou, unit, cadence, who it is reported to (`Board`, `SSP`
 or funding source codes), status, owner, whether the cockpit works it out, and whether its year

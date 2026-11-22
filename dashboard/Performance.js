@@ -80,13 +80,27 @@ function kpiValueRows_(values) {
 }
 
 /**
+ * What T2 calls income with no Funding source tag: interest, sales and donations with no
+ * tracking all land here. It counts in all income and has its own row in the split, but it is
+ * no funder, so it is never named the largest.
+ */
+const NO_FUNDING_SOURCE = 'No funding source';
+
+/**
  * The three Toitūtanga KPIs the cockpit works out, by quarter of the financial year starting
- * `fyStartYear`, with their year to date: { T1: { byQ, ytd }, T2: { byQ, ytd, funder }, T3 }.
+ * `fyStartYear`, with their year to date:
+ * { T1: { byQ, ytd }, T2: { byQ, ytd, funder, total, funders }, T3 }.
  *
  * T1 earned income share: income on the accounts in CONFIG.PERFORMANCE.EARNED_INCOME_ACCOUNTS
  * over all income, from Xero. T2 income concentration: the largest funder's share of income,
- * by each sheet's Funder. T3 months of runway: the secured line's, as at this refresh, under
- * the current quarter. Percentages run 0 to 100.
+ * by each sheet's Funder, NO_FUNDING_SOURCE never the largest; `funders` is the year to date by
+ * funder, { funder, amount, share }, largest first with NO_FUNDING_SOURCE last, and `total` the
+ * income they share. T3 months of runway: the secured line's, as at this refresh, under the
+ * current quarter. Percentages run 0 to 100.
+ *
+ * All income is every income line in the year, the total of Xero's P&L. Organisation totals
+ * leave out a line with no project and one on an archived project (the rule D1 reports for
+ * spend); a share has to be of the whole year's income, or the largest funder's comes out high.
  */
 function computedKpis_(actualLines, budgets, runway, fyStartYear, now) {
   const funderOf = {};
@@ -100,15 +114,14 @@ function computedKpis_(actualLines, budgets, runway, fyStartYear, now) {
   const ytd = { total: 0, earned: 0, funders: {} };
   (actualLines || []).forEach(l => {
     if (l.kind === 'expense') return;
-    // An archived source's income counts in the year it fell in, as in every other total;
-    // with no sheet to name its Funder, it counts under its own name.
-    if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
+    // No project filter, unlike the organisation totals. An archived source's income counts
+    // in the year it fell in; with no sheet to name its Funder, under its own name.
     const q = quarterOfMonthKey_(DateMath.monthKey(new Date(l.date)));
     if (q.indexOf(fy) !== 0) return;
     const amount = Number(l.amount) || 0;
     const code = (/\((\w+)\)\s*$/.exec(l.account || '') || [])[1] || '';
-    const funder = funderOf[clean_(l.fundingSource || '')] || clean_(l.fundingSource || '') ||
-      '(no funding source)';
+    const source = clean_(l.fundingSource || '');
+    const funder = funderOf[source] || source || NO_FUNDING_SOURCE;
     const b = byQ[q] || (byQ[q] = { total: 0, earned: 0, funders: {} });
     [b, ytd].forEach(t => {
       t.total += amount;
@@ -117,15 +130,27 @@ function computedKpis_(actualLines, budgets, runway, fyStartYear, now) {
     });
   });
   const share = (part, whole) => whole > 0 ? Math.round(1000 * part / whole) / 10 : null;
-  const top = t => Object.keys(t.funders).sort((a, b) => t.funders[b] - t.funders[a])[0] || null;
+  const cents = n => Math.round(100 * n) / 100;
+  // Funders largest first, by name where two are level; one netting to nothing is left out,
+  // and so is NO_FUNDING_SOURCE, which stays in the total but is never the largest funder.
+  const counts = n => Math.abs(n || 0) >= 0.005;
+  const ranked = t => Object.keys(t.funders)
+    .filter(f => f !== NO_FUNDING_SOURCE && counts(t.funders[f]))
+    .sort((a, b) => t.funders[b] - t.funders[a] || (a < b ? -1 : 1));
+  const year = ranked(ytd);
+  // The split: the funders, then the income with no funding source as its own row.
+  const split = year.concat(counts(ytd.funders[NO_FUNDING_SOURCE]) ? [NO_FUNDING_SOURCE] : []);
   const out = { T1: { byQ: {}, ytd: share(ytd.earned, ytd.total) },
-    T2: { byQ: {}, ytd: ytd.total > 0 && top(ytd) ? share(ytd.funders[top(ytd)], ytd.total) : null,
-      funder: top(ytd) },
+    T2: { byQ: {}, ytd: year.length ? share(ytd.funders[year[0]], ytd.total) : null,
+      funder: year[0] || null, total: cents(ytd.total),
+      funders: split.map(f => ({ funder: f, amount: cents(ytd.funders[f]),
+        share: share(ytd.funders[f], ytd.total) })) },
     T3: { byQ: {}, ytd: null } };
   Object.keys(byQ).forEach(q => {
     const b = byQ[q];
+    const top = ranked(b)[0];
     out.T1.byQ[q] = share(b.earned, b.total);
-    if (top(b)) out.T2.byQ[q] = share(b.funders[top(b)], b.total);
+    if (top) out.T2.byQ[q] = share(b.funders[top], b.total);
   });
   const months = runway && runway.monthsOfRunway ? runway.monthsOfRunway.secured : null;
   if (months !== null && months !== undefined) {
@@ -139,8 +164,8 @@ function computedKpis_(actualLines, budgets, runway, fyStartYear, now) {
 /**
  * One financial year of the Performance section, from the snapshot's `performance` (as read,
  * with `computed`): each pou with its KPIs that have a value this year or last, every quarter,
- * the year to date and last year's figure as the comparative; the KPIs not measured yet, by
- * pou; and the KPIs added, changed, carried or retired. Pure.
+ * the year to date and last year's figure as the comparative, T2 with its income by funder;
+ * the KPIs not measured yet, by pou; and the KPIs added, changed, carried or retired. Pure.
  */
 function performanceView_(perf, fyStartYear) {
   const fy = fyLabel_(fyStartYear), prior = fyLabel_(fyStartYear - 1);
@@ -188,6 +213,11 @@ function performanceView_(perf, fyStartYear) {
       reportedTo: k.reportedTo, computed: k.computed, values: values,
       ytd: ytd === undefined ? null : ytd, comparative: comparative,
       note: k.computed && k.id === 'T2' && c && c.funder ? 'largest: ' + c.funder : '' };
+    // T2's year to date by funder, shown under its pou's table.
+    if (k.computed && k.id === 'T2' && c && c.funders && c.funders.length) {
+      row.funders = c.funders;
+      row.fundersTotal = c.total;
+    }
     if (filled.length || row.ytd !== null || comparative !== null) pouOf[k.pou].kpis.push(row);
     else pouOf[k.pou].notMeasured.push({ id: k.id, name: k.name, owner: k.owner });
   });

@@ -110,6 +110,9 @@ Ranked by how badly they hurt the persona who depends on them:
   and `accounting.reports.read` scopes then for apps created before 2 March 2026, which this one
   is. Moving means naming the granular scopes for bank transactions, invoices, manual journals
   and the balance sheet report, and one re-consent.
+- **No health check reports income with no `Projects` tag.** That income counts in earned income
+  share and income concentration, but drops out of the organisation totals, the runway and the
+  finance table. A check beside D1 would name it.
 
 ## Decisions
 
@@ -353,6 +356,23 @@ Ranked by how badly they hurt the persona who depends on them:
   (`budgetToDateOf_`, run by the page as `financeTable_` is). Whole-year rows are never split.
   The budget runs to the quarter end and the actual to last month, so between quarter ends
   they cover different months; the column names its month so the reader sees it.
+- **2026-11-22: earned income share and income concentration are shares of all the year's
+  income, and income concentration lists its funders.** The Treasurer checked the November board
+  pack against Xero, and Xero's P&L by funding source gave the largest funder a smaller share
+  than the cockpit. The two KPIs counted income only where the organisation totals do, leaving
+  out a line with no Projects tag or on an archived project, so each share was of less than the
+  year's income. No earlier decision chose that; it was the totals' rule carried over. A share is
+  a question about the whole year, so both now take every income line in the financial year,
+  Xero's P&L total, an archived source under its own name and a release journal when it posts.
+  A line with no funding source counts in the total and has its own row, `No funding source`, at
+  the foot of the split, but it is never named the largest funder, for the year or a quarter:
+  interest, sales and donations with no tracking all land there, and they are no one funder.
+  The totals keep their rule, since a line with no project has nowhere to go in them. Income
+  concentration also lists each funder's income to date and share, largest first, under the
+  Toitūtanga table, as the Treasurer asked, full access only like the rest of the tab. Published
+  figures move: income concentration falls wherever the income added is not the largest
+  funder's, as in the Treasurer's check, and earned income share moves toward the sales share
+  of the income added, down where it is grants and up where it is sales.
 
 ## History
 
