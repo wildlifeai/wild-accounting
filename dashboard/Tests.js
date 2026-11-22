@@ -2602,6 +2602,122 @@ function runTests() {
       .map(function (f) { return f.id; }).filter(function (id) { return id[0] === 'P'; })
       .join() === 'P2');
 
+  // ---- T1 and T2 over all the year's income, and T2's income by funder ----------------
+  // Worked by hand. Toi 3,000 + 1,000; sales with no project 2,000; DOC 1,500 on an archived
+  // project + a 1,000 release journal with no project; an archived source 1,000; 500 with no
+  // funding source; a 700 invoice deferred in full. All income 10,000, the largest funder Toi
+  // at 40%. Leaving out lines with no project or on an archived project gave Toi 80%.
+  var fsLine = function (amount, account, project, source, date, extra) {
+    return Object.assign({ kind: 'income', amount: amount, account: account, project: project,
+      fundingSource: source, date: date }, extra || {});
+  };
+  var fsLines = [
+    fsLine(3000, 'Grants (210)', 'Wildlife Watcher', 'XXX_27_TOI', d(2026, 5, 10)),
+    fsLine(1000, 'Grants (210)', 'Spyfish Aotearoa', 'XXX_27_TOI', d(2026, 8, 10)),
+    fsLine(2000, 'Sales (200)', '', 'XXX_26_SALES', d(2026, 8, 12)),
+    fsLine(1500, 'Grants (210)', CONFIG.ARCHIVE_PREFIX + 'Old', 'XXX_27_DOC', d(2026, 8, 14)),
+    fsLine(1000, 'Grants (210)', '', 'XXX_27_DOC', d(2026, 9, 15),
+      { journal: true, docType: 'Manual journal' }),
+    fsLine(1000, 'Grants (210)', 'General', 'XXX_25_OLD', d(2026, 6, 10)),
+    fsLine(500, 'Other income (260)', '', '', d(2026, 9, 20)),
+    fsLine(700, 'Grants (210)', 'General', 'XXX_27_DEF', d(2026, 7, 10)),
+    fsLine(-700, 'Grants (210)', 'General', 'XXX_27_DEF', d(2026, 7, 31), { journal: true }),
+    { kind: 'expense', amount: 9000, account: 'Wages (477)', project: '', fundingSource: '',
+      date: d(2026, 8, 20) },
+    fsLine(4000, 'Grants (210)', '', 'XXX_27_TOI', d(2026, 2, 10))];
+  var fsBudgets = [{ name: 'XXX_27_TOI', metadata: { funder: 'Toi Foundation' } },
+    { name: 'XXX_27_DOC', metadata: { funder: 'Department of Conservation' } },
+    { name: 'XXX_26_SALES', metadata: {} }];
+  var fsKpi = computedKpis_(fsLines, fsBudgets, null, 2026, d(2026, 11, 22));
+  var fsSplit = function (name) {
+    var f = fsKpi.T2.funders.filter(function (x) { return x.funder === name; })[0];
+    return f ? f.amount : null;
+  };
+  check('performance: income with no project counts in the total T1 and T2 share',
+    fsKpi.T2.total === 10000 && fsSplit('XXX_26_SALES') === 2000 &&
+    fsSplit(NO_FUNDING_SOURCE) === 500);
+  check('performance: income on an archived project or source counts, a release journal too',
+    fsSplit('Department of Conservation') === 2500 && fsSplit('XXX_25_OLD') === 1000);
+  check('performance: T2 is the largest funder\'s share of all the year\'s income, by hand',
+    fsKpi.T2.ytd === 40 && fsKpi.T2.funder === 'Toi Foundation' &&
+    fsKpi.T2.byQ['26/27 Q1'] === 75 && fsKpi.T2.byQ['26/27 Q2'] === 41.7);
+  check('performance: T1 shares the same total, sales over all the year\'s income',
+    fsKpi.T1.ytd === 20 && fsKpi.T1.byQ['26/27 Q2'] === 33.3);
+  check('performance: income by funder is largest first and adds up to the year\'s income',
+    fsKpi.T2.funders.map(function (f) { return f.funder + ':' + f.share; }).join() ===
+      'Toi Foundation:40,Department of Conservation:25,XXX_26_SALES:20,XXX_25_OLD:10,' +
+      NO_FUNDING_SOURCE + ':5' &&
+    fsKpi.T2.funders.reduce(function (t, f) { return t + f.amount; }, 0) === fsKpi.T2.total);
+  check('performance: a funder whose income nets to nothing is left out of the split',
+    fsSplit('XXX_27_DEF') === null);
+  var fsKpis = kpiRows_([['KPI id', 'KPI', 'Pou', 'Unit', 'Cadence', 'Computed'],
+    ['T1', 'Earned income share', 'Toitūtanga', '%', 'quarterly', 'yes'],
+    ['T2', 'Income concentration', 'Toitūtanga', '%', 'quarterly', 'yes']]);
+  var fsPerf = { url: 'u', kpis: fsKpis, values: [], computed: fsKpi };
+  var fsT2 = function (view) {
+    var hit = {};
+    ((view && view.pous) || []).forEach(function (g) {
+      g.kpis.forEach(function (k) { if (k.id === 'T2') hit = k; });
+    });
+    return hit;
+  };
+  var fsView = fsT2(performanceView_(fsPerf, 2026));
+  check('performance: the view gives T2 its income by funder and the year\'s income',
+    (fsView.funders || []).length === 5 && fsView.fundersTotal === 10000 &&
+    fsView.note === 'largest: Toi Foundation');
+  var fsSnap = { generatedAt: 'g', performance: fsPerf, projects: [], fundingSources: [],
+    breakdownRows: [], tracking: [], timeline: [], health: [] };
+  var fsCopy = function () { return JSON.parse(JSON.stringify(fsSnap)); };
+  var fsRead = false;
+  var fsRefused = function (allowed) {
+    try {
+      performanceFor_(allowed, function () { fsRead = true; return fsSnap; });
+      return false;
+    } catch (e) { return /full access/.test(e.message); }
+  };
+  check('performance: people limited to some projects get no income by funder',
+    filterSnapshotForProjects_(fsCopy(), ['Spyfish Aotearoa']).performance === undefined &&
+    filterSnapshotForProjects_(fsCopy(), []).performance === undefined &&
+    fsRefused(['Spyfish Aotearoa']) && fsRefused([]) && fsRefused(null) && !fsRead);
+  check('performance: full access gets income by funder, in the snapshot and on the tab',
+    (filterSnapshotForProjects_(fsCopy(), ['*']).performance.computed.T2.funders || [])
+      .length === 5 &&
+    (fsT2(performanceFor_(['*'], function () { return fsSnap; }).performance).funders || [])
+      .length === 5);
+
+  // ---- T2 never names income with no funding source as the largest funder ------------
+  // Worked by hand. Toi 1,000 in Q1 and 3,000 in Q2, tagged; donations 3,000 in Q1 and
+  // interest 2,000 in Q2 with no tracking. All income 9,000: Toi 44.4%, the untagged 55.6%.
+  // Ranked as a funder, the untagged income was named the largest at 55.6%, and 75% in Q1.
+  var nfLines = [
+    fsLine(1000, 'Grants (210)', 'Wildlife Watcher', 'XXX_27_TOI', d(2026, 5, 10)),
+    fsLine(3000, 'Donations (220)', '', '', d(2026, 5, 20)),
+    fsLine(3000, 'Grants (210)', 'Wildlife Watcher', 'XXX_27_TOI', d(2026, 8, 10)),
+    fsLine(2000, 'Interest income (270)', '', '', d(2026, 8, 31))];
+  var nfKpi = computedKpis_(nfLines, fsBudgets, null, 2026, d(2026, 11, 22));
+  check('performance: T2 names the largest funder, not the income with no funding source',
+    nfKpi.T2.ytd === 44.4 && nfKpi.T2.funder === 'Toi Foundation' &&
+    nfKpi.T2.funder !== NO_FUNDING_SOURCE);
+  check('performance: each quarter\'s T2 passes over the income with no funding source too',
+    nfKpi.T2.byQ['26/27 Q1'] === 25 && nfKpi.T2.byQ['26/27 Q2'] === 60);
+  check('performance: income with no funding source stays in the total, its own row last',
+    nfKpi.T2.total === 9000 &&
+    nfKpi.T2.funders.map(function (f) { return f.funder + ':' + f.amount + ':' + f.share; })
+      .join() === 'Toi Foundation:4000:44.4,' + NO_FUNDING_SOURCE + ':5000:55.6');
+  var nfView = fsT2(performanceView_({ url: 'u', kpis: fsKpis, values: [], computed: nfKpi },
+    2026));
+  check('performance: the tab names the largest funder, the untagged income under it',
+    nfView.note === 'largest: Toi Foundation' && nfView.ytd === 44.4 &&
+    (nfView.funders || []).map(function (f) { return f.funder; }).join() ===
+      'Toi Foundation,' + NO_FUNDING_SOURCE);
+  var nfOnly = computedKpis_([fsLine(2000, 'Interest income (270)', '', '', d(2026, 8, 31))],
+    fsBudgets, null, 2026, d(2026, 11, 22));
+  check('performance: with only income with no funding source, T2 names no funder',
+    nfOnly.T2.ytd === null && nfOnly.T2.funder === null &&
+    Object.keys(nfOnly.T2.byQ).length === 0 && nfOnly.T2.total === 2000 &&
+    nfOnly.T2.funders.length === 1 && nfOnly.T2.funders[0].funder === NO_FUNDING_SOURCE &&
+    nfOnly.T1.ytd === 0);
+
   Logger.log(results.join('\n'));
   return results;
 }

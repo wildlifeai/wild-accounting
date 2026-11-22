@@ -215,6 +215,11 @@
   .kpi-note { color: var(--hint); font-size: 12px; }
   .kpi-changed { margin: 0 0 8px; padding-left: 20px; font-size: 13px; color: var(--muted); }
   .kpi-changed li { margin-bottom: 4px; }
+  /* T2's income by funder: a thin bar per funder, its share of the year's income, growing
+     from the left and rounded at its end. */
+  .funder-table td.funder-bar { width: 40%; }
+  .funder-bar span { display: block; height: 8px; background: var(--green);
+    border-radius: 0 4px 4px 0; }
 
   /* Each tab's controls as a ribbon: groups side by side, each named underneath, a
      hairline between them, wrapping on a narrow screen. */
