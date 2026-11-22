@@ -135,8 +135,8 @@
               (or by funding source or milestone, as grouped): this year's <b>budget</b> as
               the board approved it, <b>actual</b> to last month, the <b>forecast</b> and
               the difference; a later year on <b>secured</b> money, <b>expected</b> and
-              <b>full</b>. By project, a project's <b>margin to General</b> is the part of
-              its income General receives. Brought forward adds where each group stands as a
+              <b>full</b>. By project, a project's income is what its funders give it, and
+              General shows only its own. Brought forward adds where each group stands as a
               year begins and where it ends; for the whole organisation, its working capital.
             </div>
           </span>
@@ -321,8 +321,12 @@
   <!-- The runway walk the server runs, sent as its own source, so the chart cannot drift
        from the tested code. See runwayWalk_ in Aggregator.js. -->
   <script><?!= runwayWalk_.toString() ?></script>
+  <!-- And which of its months the chart draws: runwayDrawn_, beside it. -->
+  <script><?!= runwayDrawn_.toString() ?></script>
   <!-- The same for the finance table under the chart: financeTable_ in Board.js. -->
   <script><?!= financeTable_.toString() ?></script>
+  <!-- And the budget to date each of its groups shows: budgetToDateOf_, beside it. -->
+  <script><?!= budgetToDateOf_.toString() ?></script>
   <?!= include('JavaScript'); ?>
 </body>
 </html>

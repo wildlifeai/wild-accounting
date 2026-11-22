@@ -188,10 +188,12 @@ const CONFIG = {
   // The finance table under the runway chart (Board.js), full access only. Its budget is a tab
   // of the Cockpit Settings spreadsheet: income and cost per project per financial year as the board
   // approved them, and on the TOTAL_ROW row the working capital that budget expected at year end.
+  // A row naming a quarter in the last column holds that quarter's figures instead, which give
+  // the budget to date (boardBudgetToDate_); the header is written only when the tab is made.
   BOARD: {
     TAB: 'Board budget',
-    HEADER: ['Financial year', 'Project', 'Income', 'Cost', 'Working capital at year end',
-      'Notes'],
+    HEADER: ['Financial year', 'Project', 'Income', 'Cost',
+      'Working capital at year end, or quarter end', 'Notes', 'Quarter (blank for the year)'],
     TOTAL_ROW: 'Organisation',
     // The order the board's updates have used. A project not listed follows them.
     PROJECTS: ['Wildlife Watcher', 'Spyfish Aotearoa', 'Wild About AI', 'General']

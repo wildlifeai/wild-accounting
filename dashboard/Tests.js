@@ -1105,6 +1105,60 @@ function runTests() {
     !/\b(round_|monthsUntil_|addInto_|scaleMap_|distributeByMonth_|CONFIG|DateMath|clean_)\b/
       .test(runwayWalk_.toString()));
 
+  // The chart draws, of the months gone, only the quarter ends and its first point, since
+  // the release journals land at quarter ends; every budget month as before.
+  var rdPart = { project: 'P', fundingSource: 'S', milestone: 'M', status: 'secured',
+    probability: 1, cost: {}, income: {}, actualCost: {}, actualIncome: {} };
+  ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10']
+    .forEach(function (k) {
+      rdPart.actualCost[k] = 100;
+      rdPart.actualIncome[k] = k === '2026-06' || k === '2026-09' ? 300 : 0;
+    });
+  ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03'].forEach(function (k) {
+    rdPart.cost[k] = 300;
+  });
+  var rdWalk = runwayWalk_([rdPart], '2026-11', undefined,
+    { amount: 1000, month: '2026-09' });
+  var rdTable = financeTable_([rdPart], '2026-11',
+    [{ label: '26/27', from: '2026-04', to: '2027-03' }], 'project', 'General');
+  var rdBefore = JSON.stringify([rdWalk, rdTable]);
+  var rdDrawn = runwayDrawn_(rdWalk.months, 4);
+  var rdShown = function (rows, drawn) {
+    return rows.filter(function (r, i) { return drawn[i]; })
+      .map(function (r) { return r.month; }).join();
+  };
+  check('runway chart: of the months gone, only the quarter ends and the first are drawn',
+    rdShown(rdWalk.months, rdDrawn) ===
+      '2026-04,2026-06,2026-09,2026-11,2026-12,2027-01,2027-02,2027-03');
+  check('runway chart: what is drawn moves no value, crossover, runway or table',
+    JSON.stringify([rdWalk, rdTable]) === rdBefore && rdWalk.crossover.secured === '2027-02' &&
+    rdWalk.monthsOfRunway.secured === 3 &&
+    rdDrawn[rdWalk.months.map(function (r) { return r.month; }).indexOf('2027-02')] &&
+    rdWalk.months.every(function (r, i) { return r.actual || rdDrawn[i]; }));
+  var rdJan = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07']
+    .map(function (k) { return { month: k, actual: true }; });
+  check('runway chart: quarter ends follow the financial year, and the last point stays',
+    rdShown(rdJan, runwayDrawn_(rdJan, 1)) === '2026-01,2026-03,2026-06,2026-07' &&
+    runwayDrawn_([]).length === 0);
+  // A refresh in December with a typed Reserves row for 30 November: November is the month
+  // the lines start from and the last of actuals, so it is drawn, and the line passes through
+  // the position the today rule names rather than cutting from September to December.
+  var rdDec = runwayWalk_([rdPart], '2026-12', undefined, { amount: 1000, month: '2026-11' });
+  var rdNov = rdDec.months.map(function (r) { return r.month; }).indexOf('2026-11');
+  check('runway chart: the working capital\'s month, the last of actuals, is always drawn',
+    rdNov !== -1 && rdDec.months[rdNov].actual && !runwayDrawn_(rdDec.months, 4)[rdNov] &&
+    runwayDrawn_(rdDec.months, 4, '2026-11', '2026-11')[rdNov] &&
+    rdDec.months[rdNov].secured - rdDec.months[rdNov].spend === rdDec.openingNet);
+  var rdOct = runwayDrawn_(rdDec.months, 4, '2026-10', '2026-11');
+  check('runway chart: the working capital\'s month and the last actual month each stay drawn',
+    rdShown(rdDec.months, rdOct) ===
+      '2026-04,2026-06,2026-09,2026-10,2026-11,2026-12,2027-01,2027-02,2027-03');
+  var rdAlone = new Function('return ' + runwayDrawn_.toString())();
+  check('runway chart: the page runs which months are drawn from its own source',
+    JSON.stringify(rdAlone(rdWalk.months, 4)) === JSON.stringify(rdDrawn) &&
+    JSON.stringify(rdAlone(rdDec.months, 4, '2026-10', '2026-11')) === JSON.stringify(rdOct) &&
+    !/\b(CONFIG|DateMath|fyStartMonth_|qiOfMonthKey_)\b/.test(runwayDrawn_.toString()));
+
   // Parts split income the way the cards do: the source's whole margin, half its income
   // here whatever its 40% policy says, moves from a non-General line to a "(margin)" part
   // under General, budget and actual alike.
@@ -2247,12 +2301,17 @@ function runTests() {
   check('board budget: the tab gives a row per year and project, with its amounts',
     bdBudget.length === 2 && bdBudget[0].income === 2000 && bdBudget[0].cost === 1500 &&
     bdBudget[1].reserves === 4000);
+  check('board budget: a six-column row is the whole year, and a blank amount is none',
+    bdBudget[0].quarter === null && bdBudget[1].quarter === null &&
+    bdBudget[1].income === null && bdBudget[1].cost === null);
   var bdSpy = bdFig(bd, 'Spyfish Aotearoa', '26/27', 'expected');
-  check('finance: a project shows its funders\' income and the margin it passes to General',
-    bdSpy.income === 1500 && bdSpy.margin === -500 && bdSpy.cost === 1000 && bdSpy.surplus === 500);
-  check('finance: General shows the margins it receives on their own line',
-    bdFig(bd, 'General', '26/27', 'expected').margin === 500 &&
-    bdFig(bd, 'General', '26/27', 'expected').income === 500);
+  check('finance: by project, a project shows its income as its funders give it, no margin',
+    bdSpy.income === 1500 && bdSpy.cost === 1000 && bdSpy.surplus === 500 &&
+    !('margin' in bdSpy));
+  check('finance: by project, General shows only its own income and cost',
+    bdFig(bd, 'General', '26/27', 'expected').income === 500 &&
+    bdFig(bd, 'General', '26/27', 'expected').cost === 1000 &&
+    bdFig(bd, 'General', '26/27', 'expected').surplus === -500);
   check('finance: actual is the months before this one',
     bdFig(bd, 'Spyfish Aotearoa', '26/27', 'actual').income === 500 &&
     bdFig(bd, 'Spyfish Aotearoa', '26/27', 'actual').cost === 400);
@@ -2267,16 +2326,108 @@ function runTests() {
     bdFig(bd, 'All', '26/27', 'expected').cost === 2400);
   check('finance: each year holds only its own months',
     bdFig(bd, 'General', '27/28', 'secured').cost === 2000);
+  // The margins net to zero across projects: the projects and General add up to the
+  // organisation, and the table is the one the parts would give had no margin been moved.
+  var bdScs = ['actual', 'secured', 'expected', 'full'];
+  check('finance: by project, the groups add up to the organisation in every year and case',
+    bdYears.every(function (y) {
+      return bdScs.every(function (sc) {
+        var t = bd.filter(function (g) { return g.key !== 'All'; }).reduce(function (a, g) {
+          var f = g.years[y.label] && g.years[y.label][sc];
+          return f ? { income: a.income + f.income, cost: a.cost + f.cost } : a;
+        }, { income: 0, cost: 0 });
+        var o = bdFig(bd, 'All', y.label, sc);
+        return t.income === o.income && t.cost === o.cost;
+      });
+    }));
+  var bdGross = bdParts.filter(function (p) {
+    return p.milestone !== marginMilestone_(p.fundingSource);
+  }).map(function (p) {
+    return p.fundingSource !== 'XXX_27_P' ? p : Object.assign({}, p,
+      { income: { '2026-11': 1000 }, actualIncome: { '2026-08': 500 } });
+  });
+  check('finance: by project, the table is the one with no margin moved, totals included',
+    JSON.stringify(financeTable_(bdGross, '2026-10', bdYears, 'project', 'General')) ===
+      JSON.stringify(bd));
+  // From the parts the runway builds: the source's whole margin is General's there and back
+  // in its project's income here, so General, with no work of its own, has no group.
+  var bdFromParts = financeTable_(rwParts, '2026-06', [{ label: '26/27', from: '2026-04',
+    to: '2027-03' }], 'project', CONFIG.GENERAL_PROJECT);
+  check('finance: from runway parts, the margin is back in its project\'s income',
+    bdFromParts.map(function (g) { return g.key; }).join() === 'P,All' &&
+    bdFig(bdFromParts, 'P', '26/27', 'expected').income === 1200 &&
+    bdFig(bdFromParts, 'P', '26/27', 'actual').income === 200 &&
+    bdFig(bdFromParts, 'All', '26/27', 'expected').income === 1200);
+  // One source, two projects: 1,000 against 600 for one and 500 against 300 for the other,
+  // the second's spread over two months, and actual income for both. Each gets back the
+  // margin its own income gave, month by month, not the largest project all of it.
+  var bdProj = function (l, project) { return Object.assign(l, { project: project }); };
+  var bdTwo = runwayParts_([mSrc('S', 'secured', {}, [
+    bdProj(mLine(2026, 10, 600, 1000), 'Wildlife Watcher'),
+    bdProj(mLine(2026, 10, 150, 250), 'Spyfish Aotearoa'),
+    bdProj(mLine(2026, 11, 150, 250), 'Spyfish Aotearoa')])],
+  [{ date: new Date(2026, 4, 10), amount: 400, kind: 'income', project: 'Wildlife Watcher',
+    fundingSource: 'S', item: '' },
+  { date: new Date(2026, 4, 12), amount: 200, kind: 'income', project: 'Spyfish Aotearoa',
+    fundingSource: 'S', item: '' }], {}, {});
+  var bdTwoYear = [{ label: '26/27', from: '2026-04', to: '2027-03' }];
+  var bdTwoT = financeTable_(bdTwo, '2026-08', bdTwoYear, 'project', CONFIG.GENERAL_PROJECT);
+  var bdTwoWw = bdFig(bdTwoT, 'Wildlife Watcher', '26/27', 'expected');
+  var bdTwoSpy = bdFig(bdTwoT, 'Spyfish Aotearoa', '26/27', 'expected');
+  check('finance: a source funding two projects returns each the margin its income gave',
+    bdTwoWw.income === 1400 && bdTwoWw.cost === 600 && bdTwoWw.surplus === 800 &&
+    bdTwoSpy.income === 700 && bdTwoSpy.cost === 300 && bdTwoSpy.surplus === 400 &&
+    bdFig(bdTwoT, 'Wildlife Watcher', '26/27', 'actual').income === 400 &&
+    bdFig(bdTwoT, 'Spyfish Aotearoa', '26/27', 'actual').income === 200 &&
+    bdTwoT.map(function (g) { return g.key; }).join() ===
+      'Wildlife Watcher,Spyfish Aotearoa,All');
+  check('finance: splitting a margin between projects leaves the organisation as it was',
+    JSON.stringify(bdTwoT.filter(function (g) { return g.key === 'All'; })[0]) ===
+      JSON.stringify(financeTable_(bdTwo, '2026-08', bdTwoYear, 'fundingSource',
+        CONFIG.GENERAL_PROJECT).filter(function (g) { return g.key === 'All'; })[0]) &&
+    bdFig(bdTwoT, 'All', '26/27', 'expected').income === 2100);
+  // The projects ticked: a project's figures are the same whether or not General is ticked,
+  // since its margin comes back with it, and the total is what the groups shown add up to.
+  var bdTick = runwayParts_([
+    mSrc('T', 'secured', {}, [bdProj(mLine(2026, 10, 600, 1200), 'Wildlife Watcher')]),
+    mSrc('G', 'secured', {}, [bdProj(mLine(2026, 10, 100, 0), CONFIG.GENERAL_PROJECT)])],
+  [], {}, {});
+  var bdTickFig = function (parts, shown, key) {
+    var g = financeTable_(parts, '2026-08', bdTwoYear, 'project', CONFIG.GENERAL_PROJECT,
+      shown).filter(function (r) { return r.key === key; })[0];
+    return g ? g.years['26/27'].expected : null;
+  };
+  var bdWwOnly = bdTickFig(bdTick, ['Wildlife Watcher'], 'Wildlife Watcher');
+  var bdWwGen = bdTickFig(bdTick, ['Wildlife Watcher', CONFIG.GENERAL_PROJECT],
+    'Wildlife Watcher');
+  check('finance: a project\'s income and surplus do not depend on General being ticked',
+    bdWwOnly.income === 1200 && bdWwOnly.surplus === 600 &&
+    bdWwGen.income === 1200 && bdWwGen.surplus === 600 &&
+    bdTickFig(bdTick, ['Wildlife Watcher'], CONFIG.GENERAL_PROJECT) === null);
+  check('finance: the total is what the projects ticked add up to',
+    bdTickFig(bdTick, ['Wildlife Watcher'], 'All').income === 1200 &&
+    bdTickFig(bdTick, ['Wildlife Watcher'], 'All').cost === 600 &&
+    bdTickFig(bdTick, [CONFIG.GENERAL_PROJECT], 'All').income === 0 &&
+    bdTickFig(bdTick, [CONFIG.GENERAL_PROJECT], 'All').cost === 100 &&
+    bdTickFig(bdTick, [CONFIG.GENERAL_PROJECT], 'Wildlife Watcher') === null &&
+    JSON.stringify(financeTable_(bdTick, '2026-08', bdTwoYear, 'project',
+      CONFIG.GENERAL_PROJECT, ['Wildlife Watcher', CONFIG.GENERAL_PROJECT])) ===
+      JSON.stringify(financeTable_(bdTick, '2026-08', bdTwoYear, 'project',
+        CONFIG.GENERAL_PROJECT)));
+  check('finance: a project ticked alone gets its share of a shared margin, not the rest',
+    bdTickFig(bdTwo, ['Wildlife Watcher'], 'Wildlife Watcher').income === 1400 &&
+    bdTickFig(bdTwo, ['Wildlife Watcher'], 'All').income === 1400 &&
+    bdTickFig(bdTwo, ['Wildlife Watcher'], 'Spyfish Aotearoa') === null);
   var bdBySource = financeTable_(bdParts, '2026-10', bdYears, 'fundingSource', 'General');
-  check('finance: grouped by funding source, a source keeps its own margin',
+  check('finance: grouped by funding source, a source shows the income its funders give',
     bdFig(bdBySource, 'XXX_27_P', '26/27', 'expected').income === 1500 &&
-    bdFig(bdBySource, 'XXX_27_P', '26/27', 'expected').margin === 0);
+    bdFig(bdBySource, 'XXX_27_P', '26/27', 'expected').cost === 1000);
   // Brought forward: the page works everything before a year by the same function, so that
-  // plus the year's own surplus and margin is where each group stands at the year's end.
+  // plus the year's own surplus is where each group stands at the year's end.
   var bdPos = function (rows, key, year, sc) {
     var g = rows.filter(function (r) { return r.key === key; })[0];
     var f = g && g.years[year] ? g.years[year][sc] : null;
-    return f ? f.income + f.margin - f.cost : 0;
+    return f ? f.income - f.cost : 0;
   };
   var bdBefore = financeTable_(bdParts, '2026-10', [{ label: '27/28', from: '0000-01',
     to: '2027-03' }], 'project', 'General');
@@ -2298,7 +2449,88 @@ function runTests() {
   var bdAlone = new Function('return ' + financeTable_.toString())();
   check('finance: the page runs the function from its own source, needing nothing else',
     JSON.stringify(bdAlone(bdParts, '2026-10', bdYears, 'project', 'General')) ===
-      JSON.stringify(bd));
+      JSON.stringify(bd) &&
+    JSON.stringify(bdAlone(bdTwo, '2026-08', bdTwoYear, 'project', CONFIG.GENERAL_PROJECT,
+      ['Wildlife Watcher'])) === JSON.stringify(financeTable_(bdTwo, '2026-08', bdTwoYear,
+      'project', CONFIG.GENERAL_PROJECT, ['Wildlife Watcher'])));
+
+  // Budget to date: the Board budget tab's quarter rows, summed to the quarter before this one.
+  var bdQ = boardBudgetRows_([
+    ['26/27', 'Spyfish Aotearoa', '2,000', '1,500', '', ''],
+    ['26/27', 'Spyfish Aotearoa', '400', '300', '', '', 'Q1'],
+    ['26/27', 'Spyfish Aotearoa', '600', '500', '', '', 'Q2'],
+    ['26/27', 'Spyfish Aotearoa', '600', '400', '', '', '26/27 Q3'],
+    ['26/27', 'General', '100', '200', '', '', 'Q1'],
+    ['26/27', 'Organisation', '', '', '3,000', '', ''],
+    ['26/27', 'Organisation', '1,000', '900', '3,500', '', 'Q1'],
+    ['26/27', 'Organisation', '1,200', '1,100', '3,600', '', 'q2'],
+    ['26/27', 'Organisation', '1', '1', '', '', 'Q5'],
+    ['26/27', 'Organisation', '1', '1', '', '', '27/28 Q1'],
+    ['27/28', 'Spyfish Aotearoa', '700', '700', '', '', '1']]);
+  check('board budget: column G names a quarter; one unread, or of another year, is skipped',
+    bdQ.length === 9 && bdQ[0].quarter === null && bdQ[1].quarter === 1 &&
+    bdQ[3].quarter === 3 && bdQ[7].quarter === 2 && bdQ[8].quarter === 1);
+  var bdTd = boardBudgetToDate_(bdQ, '26/27 Q3', 'Organisation');
+  check('budget to date: the quarters to the one before this, the Organisation\'s with its ' +
+    'working capital then',
+    bdTd.fy === '26/27' && bdTd.quarter === 2 && bdTd.through === '2026-09' &&
+    bdTd.projects['Spyfish Aotearoa'].income === 1000 &&
+    bdTd.projects['Spyfish Aotearoa'].cost === 800 &&
+    bdTd.projects.Organisation.income === 2200 && bdTd.projects.Organisation.cost === 2000 &&
+    bdTd.reserves === 3600);
+  check('budget to date: a project missing a quarter to date is left out, not short',
+    !bdTd.projects.General);
+  check('budget to date: none in a year\'s first quarter, and whole-year rows are never split',
+    boardBudgetToDate_(bdQ, '26/27 Q1', 'Organisation') === null &&
+    boardBudgetToDate_(bdBudget, '26/27 Q3', 'Organisation') === null &&
+    boardBudgetToDate_(bdQ, '27/28 Q2', 'Organisation').projects['Spyfish Aotearoa'].cost ===
+      700);
+  var bdTdWc = boardBudgetToDate_(boardBudgetRows_([
+    ['26/27', 'Organisation', '', '', '3,500', '', 'Q1'],
+    ['26/27', 'Organisation', '', '', '3,600', '', 'Q2']]), '26/27 Q3', 'Organisation');
+  check('budget to date: quarter rows with working capital alone budget no income or cost',
+    bdTdWc.reserves === 3600 && Object.keys(bdTdWc.projects).length === 0);
+  check('budget to date: the projects with a budget this year, whole or by quarter',
+    bdTd.budgeted.join() === 'Spyfish Aotearoa,General' && bdTdWc.budgeted.length === 0);
+  // The total's budget to date. Spyfish and the Organisation both have Q1 and Q2; General
+  // has Q1 only. With everything shown the total is the Organisation's own, not Spyfish's.
+  var bdAllShown = ['Wildlife Watcher', 'Spyfish Aotearoa', 'Wild About AI', 'General'];
+  var bdTdOf = function (td, project, shown, whole) {
+    var t = budgetToDateOf_(td, project, shown, whole, 'Organisation');
+    return t ? [t.income, t.cost, t.surplus].join() : null;
+  };
+  check('budget to date: with everything shown, the total is the Organisation\'s quarters',
+    bdTdOf(bdTd, null, bdAllShown, true) === '2200,2000,200');
+  check('budget to date: a project shows its own, or nothing without every quarter so far',
+    bdTdOf(bdTd, 'Spyfish Aotearoa', bdAllShown, true) === '1000,800,200' &&
+    bdTdOf(bdTd, 'General', bdAllShown, true) === null &&
+    bdTdOf(bdTd, 'Wildlife Watcher', bdAllShown, true) === null);
+  check('budget to date: a narrower total adds up the projects shown, none with a budget ' +
+    'lacking its quarters',
+    bdTdOf(bdTd, null, ['Spyfish Aotearoa'], false) === '1000,800,200' &&
+    bdTdOf(bdTd, null, ['Spyfish Aotearoa', 'Wildlife Watcher'], false) === '1000,800,200' &&
+    bdTdOf(bdTd, null, ['Spyfish Aotearoa', 'General'], false) === null &&
+    bdTdOf(bdTd, null, ['Wildlife Watcher'], false) === null &&
+    bdTdOf(null, null, bdAllShown, true) === null);
+  // No Organisation quarter rows: everything shown adds up the projects, and is blank when a
+  // project with a budget this year has no quarter rows, rather than short.
+  var bdTdNoOrg = boardBudgetToDate_(boardBudgetRows_([
+    ['26/27', 'Spyfish Aotearoa', '400', '300', '', '', 'Q1'],
+    ['26/27', 'Spyfish Aotearoa', '600', '500', '', '', 'Q2'],
+    ['26/27', 'Wild About AI', '100', '100', '', '', 'Q1'],
+    ['26/27', 'Wild About AI', '100', '100', '', '', 'Q2'],
+    ['26/27', 'Wildlife Watcher', '3,000', '2,000', '', '']]), '26/27 Q3', 'Organisation');
+  check('budget to date: with no Organisation quarters, a project without them leaves it blank',
+    bdTdOf(bdTdNoOrg, null, bdAllShown, true) === null &&
+    bdTdOf(bdTdNoOrg, null, ['Spyfish Aotearoa', 'Wild About AI', 'General'], false) ===
+      '1200,1000,200');
+  var bdTdAlone = new Function('return ' + budgetToDateOf_.toString())();
+  check('budget to date: the page runs the total from its own source, needing nothing else',
+    JSON.stringify(bdTdAlone(bdTd, null, bdAllShown, true, 'Organisation')) ===
+      JSON.stringify(budgetToDateOf_(bdTd, null, bdAllShown, true, 'Organisation')) &&
+    JSON.stringify(bdTdAlone(bdTdNoOrg, null, ['Spyfish Aotearoa'], false, 'Organisation')) ===
+      JSON.stringify(budgetToDateOf_(bdTdNoOrg, null, ['Spyfish Aotearoa'], false,
+        'Organisation')));
 
   // ---- Performance: the strategy's KPIs by pou ------------------------------------------
   var pfKpis = kpiRows_([
