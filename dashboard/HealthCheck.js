@@ -192,7 +192,14 @@ const HEALTH_CATALOGUE = {
     title: 'Xero has not given the cockpit a permission it needs',
     action: 'Run resetXeroConnection, then logXeroAuthUrl, and approve: the new permission ' +
             'is read-only. Actuals stop until you approve, so do both in one sitting. Until ' +
-            'then, type the Reserves row on Cockpit Settings by hand.' },
+            'then, type the working capital row on the Reserves tab of Cockpit Settings by ' +
+            'hand.' },
+  F8: { severity: 'warning', category: 'System',
+    title: 'Working capital not read from Xero\'s Balance Sheet',
+    action: 'The report lacks a section the working capital is added up from, so nothing ' +
+            'was written. Check the Balance Sheet in Xero; until it has those sections, type ' +
+            'the working capital row on the Reserves tab of Cockpit Settings by hand. The ' +
+            'runway starts from the latest row there meanwhile.' },
   F5: { severity: 'info', category: 'System',
     title: 'Refresh summary',
     action: '' },
@@ -219,7 +226,8 @@ const HEALTH_SEVERITY_RANK = { error: 0, warning: 1, info: 2 };
  * @param {Array} actualLines  normalised Xero lines
  * @param {Object} ctx  { now, xeroConnected, exclusion: {count,total},
  *                       unposted: {count,total}, secretsMissing: [],
- *                       reservesIssue: 'scope' | null, exclusivity: {reps, suppressed},
+ *                       reservesIssue: lastReservesIssue()'s object or null,
+ *                       exclusivity: {reps, suppressed},
  *                       reservesOverPaid: reservesOverPaid_'s list,
  *                       performance: performanceHealth_'s object }
  * @return {Array} findings, most severe first, and by value at risk within severity
@@ -736,9 +744,14 @@ function buildHealth(budgets, actualLines, ctx) {
   (ctx.secretsMissing || []).forEach(k => {
     add('F3', { detail: 'Script Property "' + k + '" is not set' });
   });
-  if (ctx.reservesIssue === 'scope') {
-    add('F4', { detail: 'reserves are not read from the Balance Sheet: the connection was ' +
-      'approved before accounting.reports.read was asked for' });
+  const resIssue = ctx.reservesIssue || {};
+  if (resIssue.kind === 'scope') {
+    add('F4', { detail: 'working capital is not read from the Balance Sheet: the connection ' +
+      'was approved before accounting.reports.read was asked for' });
+  }
+  if (resIssue.kind === 'sections') {
+    add('F8', { detail: 'the Balance Sheet at ' + resIssue.asAt + ' has no ' +
+      (resIssue.missing || []).join(' and no ') + ' section' });
   }
   const excl = ctx.exclusion || { count: 0, total: 0 };
   add('F5', { detail: (budgets || []).length + ' funding source(s) read, ' +

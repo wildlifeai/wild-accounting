@@ -2,7 +2,8 @@
  * Permissions.js
  * Who may see what: the Permissions tab of the "Cockpit Settings" spreadsheet, which
  * getUserPermissions reads on every page load to scope the snapshot to a person's projects.
- * The same spreadsheet's Reserves tab, read at refresh, starts the runway (readReserves_).
+ * The same spreadsheet's Reserves tab, the working capital read at refresh, starts the runway
+ * (readReserves_).
  *
  * This was ForecastStore.js until 2026-09-29. Forecasts were once stored centrally here;
  * they are now read from each funding source's own Forecast tab
@@ -81,13 +82,15 @@ function getUserPermissions(email) {
   return []; // default to no access
 }
 
-// ---- Reserves ----
+// ---- Working capital (the Reserves tab) ----
 
 /**
- * The latest reserves figure on the Reserves tab, or null, after writing the last
+ * The latest working capital on the Reserves tab, or null, after writing the last
  * quarter-end's row from Xero (syncReservesFromXero_). Read at refresh; the tab is created
  * with its header the first time. A sheet that cannot be read leaves the runway as funded
  * money only rather than failing the refresh: the rest of the snapshot does not depend on it.
+ * The tab keeps the name Reserves so the rows already on it still count; it is not the
+ * Reserves funding source (CONFIG.RESERVES_SOURCE).
  */
 function readReserves_(now, quarterClose) {
   _lastReservesIssue = null;
@@ -102,27 +105,32 @@ function readReserves_(now, quarterClose) {
     syncReservesFromXero_(sheet, now, quarterClose);
     return latestReserves_(sheet.getDataRange().getValues().slice(1), now);
   } catch (e) {
-    Logger.log('Reserves not read, so the runway shows funded money only: ' + e.message);
+    Logger.log('Working capital not read, so the runway shows funded money only: ' +
+      e.message);
     return null;
   }
 }
 
-// Why the last refresh could not read reserves from Xero, for F4: 'scope' or null.
+// Why the last refresh could not write working capital from Xero: null, { kind: 'scope' }
+// for F4, or { kind: 'sections', asAt, missing } for F8.
 var _lastReservesIssue = null;
 function lastReservesIssue() { return _lastReservesIssue; }
 
 // Column C of a row the refresh wrote starts with this, which is how a typed row is told
-// apart from it and left alone.
+// apart from it and left alone. Rows written before 2026-11-22 start with it too, so it
+// must not change.
 var RESERVES_AUTO_NOTE = 'From Xero: ';
 
 /**
- * Write the last quarter-end's reserves from Xero's Balance Sheet into the tab, replacing
- * the row an earlier refresh wrote for that date. A row someone typed for that date wins,
- * so a correction is never overwritten. Without the reports scope Xero refuses the report:
- * F4 says so and the typed rows still work.
+ * Write the last quarter-end's working capital from Xero's Balance Sheet into the tab,
+ * replacing the row an earlier refresh wrote for that date. A row someone typed for that
+ * date wins, so a correction is never overwritten. Without the reports scope Xero refuses
+ * the report: F4 says so and the typed rows still work. A report without the sections the
+ * figure is added up from writes nothing and raises F8, rather than guessing. `fetchReport`
+ * stands in for fetchBalanceSheet_ in the tests, which have no Xero.
  */
-function syncReservesFromXero_(sheet, now, quarterClose) {
-  if (!isXeroConnected()) return;
+function syncReservesFromXero_(sheet, now, quarterClose, fetchReport) {
+  if (!fetchReport && !isXeroConnected()) return;
   var qi = qiOfDate_(now) - 1;
   var end = quarterBounds_(qi).end;
   var rows = sheet.getDataRange().getValues();
@@ -135,43 +143,76 @@ function syncReservesFromXero_(sheet, now, quarterClose) {
   }
   var bs;
   try {
-    bs = fetchBalanceSheet_(isoDate_(end));
+    bs = (fetchReport || fetchBalanceSheet_)(isoDate_(end));
   } catch (e) {
-    if (/Xero API 40[13]/.test(e.message)) _lastReservesIssue = 'scope';
-    Logger.log('Reserves not read from Xero: ' + e.message);
+    if (/Xero API 40[13]/.test(e.message)) _lastReservesIssue = { kind: 'scope' };
+    Logger.log('Working capital not read from Xero: ' + e.message);
     return;
   }
-  var r = reservesFromBalanceSheet_(bs, unpostedReleases_(quarterClose, labelOfQi_(qi)));
+  var r = workingCapitalFromBalanceSheet_(bs, unpostedReleases_(quarterClose, labelOfQi_(qi)));
+  if (r.missing) {
+    _lastReservesIssue = { kind: 'sections', asAt: isoDate_(end), missing: r.missing };
+    Logger.log('Working capital not written: the Balance Sheet has no ' +
+      r.missing.join(' and ') + ' section');
+    return;
+  }
   var row = [end, r.amount, r.note];
   if (at === -1) sheet.appendRow(row);
   else sheet.getRange(at + 1, 1, 1, 3).setValues([row]);
 }
 
 /**
- * Free money from Balance Sheet balances: the bank accounts, plus invoices still owed to us,
- * less bills still to pay and grants received in advance, plus releases still to post. The
- * runway already counts a bill or invoice from its date, so what is unpaid on it at the
- * quarter end comes off (or goes on) here; without that, an unpaid bill counted as cash
- * still in the bank. Until a quarter's release journal is in, the liability still holds
- * money that was spent, so the unposted releases go back on. The note shows each part, so
+ * Working capital, as the Treasurer works it out, from the Balance Sheet's section totals
+ * (parseBalanceSheet_): Bank plus Current Assets, less Current Liabilities, plus the grant
+ * releases still to post. Current liabilities hold the bills still to pay, GST, PAYE and
+ * accruals, and the grants received but not yet released, under whatever name the
+ * accountant gives that account. Fixed and non-current items are left out: they are what
+ * separates working capital from equity. The runway already counts a bill or invoice from
+ * its date, so what is unpaid on it at the quarter end comes off (or goes on) here. Until a
+ * quarter's release journal is in, the liability still holds money that was spent, so the
+ * unposted releases go back on.
+ *
+ * A Bank section inside Current Assets is already in its total, and a report with no Bank
+ * section is taken to hold the bank accounts in Current Assets. With neither asset section,
+ * or no Current Liabilities, it returns { missing: [section names] } and no amount, since a
+ * figure without them is a guess. Otherwise { amount, note }, the note naming each part, so
  * the figure can be checked against Xero.
  */
-function reservesFromBalanceSheet_(bs, unposted) {
+function workingCapitalFromBalanceSheet_(bs, unposted) {
   var R = CONFIG.RESERVES;
-  var bank = 0;
-  R.BANK_CODES.forEach(function (c) { bank += (bs.byCode || {})[c] || 0; });
-  var named = function (name) {
-    var v = (bs.byName || {})[name];
-    return { amount: v || 0,
-      text: name + ' ' + (v === undefined ? '0 (not on the balance sheet)' : Math.round(v)) };
-  };
-  var owedToUs = named(R.RECEIVABLE_ACCOUNT), toPay = named(R.PAYABLE_ACCOUNT),
-    inAdvance = named(R.IN_ADVANCE_ACCOUNT);
-  var amount = Math.round(bank + owedToUs.amount - toPay.amount - inAdvance.amount +
-    (unposted || 0));
-  var note = RESERVES_AUTO_NOTE + 'accounts ' + R.BANK_CODES.join(' + ') + ' ' +
-    Math.round(bank) + ', plus ' + owedToUs.text + ', less ' + toPay.text + ', less ' +
-    inAdvance.text + ', plus releases not yet posted ' + Math.round(unposted || 0) +
+  var key = function (t) { return String(t).replace(/\s+/g, ' ').trim().toLowerCase(); };
+  var sections = (bs && bs.sections) || {};
+  var bank = sections[key(R.BANK_SECTION)];
+  var assets = sections[key(R.CURRENT_ASSETS_SECTION)];
+  var owed = sections[key(R.CURRENT_LIABILITIES_SECTION)];
+  var missing = [];
+  if (!bank && !assets) missing.push(R.BANK_SECTION + ' or ' + R.CURRENT_ASSETS_SECTION);
+  if (!owed) missing.push(R.CURRENT_LIABILITIES_SECTION);
+  if (missing.length) return { missing: missing };
+
+  var bankInAssets = !!(bank && assets &&
+    bank.within.indexOf(key(R.CURRENT_ASSETS_SECTION)) !== -1);
+  var bankApart = bank && !bankInAssets ? bank.total : 0;
+  var assetsTotal = assets ? assets.total : 0;
+  var amount = Math.round(bankApart + assetsTotal - owed.total + (unposted || 0));
+
+  var parts;
+  if (!assets) {
+    parts = R.BANK_SECTION + ' ' + Math.round(bank.total) + ', plus ' +
+      R.CURRENT_ASSETS_SECTION + ' 0 (no such section)';
+  } else if (!bank) {
+    parts = R.CURRENT_ASSETS_SECTION + ' ' + Math.round(assetsTotal) + ' (no ' +
+      R.BANK_SECTION + ' section, so the bank is taken to be in it)';
+  } else if (bankInAssets) {
+    parts = R.CURRENT_ASSETS_SECTION + ' ' + Math.round(assetsTotal) + ' (' +
+      R.BANK_SECTION + ' ' + Math.round(bank.total) + ' included)';
+  } else {
+    parts = R.BANK_SECTION + ' ' + Math.round(bank.total) + ', plus ' +
+      R.CURRENT_ASSETS_SECTION + ' ' + Math.round(assetsTotal);
+  }
+  var note = RESERVES_AUTO_NOTE + 'working capital from the Balance Sheet, ' + parts +
+    ', less ' + R.CURRENT_LIABILITIES_SECTION + ' ' + Math.round(owed.total) +
+    ', plus releases not yet posted ' + Math.round(unposted || 0) +
     '. Type your own row for this date to override.';
   return { amount: amount, note: note };
 }
@@ -235,7 +276,8 @@ function readBoardBudget_() {
 }
 
 /**
- * Board budget rows, header gone, as { fy, project, income, cost, reserves }. A financial
+ * Board budget rows, header gone, as { fy, project, income, cost, reserves }, `reserves`
+ * being column E, the working capital the budget expected at year end. A financial
  * year is written as the cockpit labels it ("26/27"); a row without one, or without a
  * project, is skipped. Read as displayed text, so "26/27" cannot arrive as a date.
  */

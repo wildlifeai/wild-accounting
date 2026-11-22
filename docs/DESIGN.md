@@ -69,7 +69,7 @@ means "does it answer these".
 | 1 | Forecast reported to Board | Q | Board | Cockpit: secured + weighted pipeline, frozen | Runway on the Overview on secured, weighted and all-proposed money, and a gap after pipeline. **Freezing does not exist**: the snapshot is overwritten every 6 hours, so August's figure is gone by November |
 | 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | Exists. General takes each source's whole margin, the same way in every view |
 | 3 | P&L (income and expenses) | Q | Board | Xero | Approved bank transactions, invoices and bills, and posted manual journals, counted as Xero's P&L counts them. Payroll posts as Xero Payroll bills and reaches the cockpit; milestone grain depends on each line carrying an item code, which D3 reports |
-| 4 | Working capital balance and forecast | Q | Board, Treasurer | Xero balance sheet + deferred grants | **Absent.** Needs a Xero scope the cockpit does not hold |
+| 4 | Working capital balance and forecast | Q | Board, Treasurer | Xero balance sheet + deferred grants | Exists: each refresh reads working capital (bank plus current assets, less current liabilities) from Xero's Balance Sheet at the last quarter close onto the Cockpit Settings `Reserves` tab; the runway and the board finance table carry it forward |
 | 5 | Bill payments | M | Bookkeeper | Xero | Native Xero. Deliberately out of scope |
 | 6 | Payroll | F | Bookkeeper | Xero Payroll | Posts as bills with both tracking categories. The Health tab flags untagged spend (D1, D2), missing item codes (D3), tags with no sheet (D4) and spend after a grant ended (D6). **Not routed to the bookkeeper**: someone has to read the Health tab |
 | 7 | Funding source income and expense variance | M | Project lead | Cockpit | Exists, on Project tracking. Monthly cadence not enforced |
@@ -282,6 +282,29 @@ Ranked by how badly they hurt the persona who depends on them:
   begins and say when a year's funding falls behind its spend. The budget figures are the
   working capital on the `Board budget` tab's `Organisation` rows, the year before's brought
   forward; projects have no budgeted position, so theirs stay blank.
+- **2026-11-22: the runway starts from working capital, added up from the Balance Sheet's
+  sections.** The anchor named its accounts: two bank codes, receivables, payables and the
+  liability holding grants received in advance, matched by name. That liability was not
+  found under its configured name, so it counted as nothing, and GST, PAYE, accruals and the
+  other current liabilities were never taken off, so the anchor sat above the Treasurer's
+  working capital by exactly those. Walking the runway back from her figure gave her opening
+  working capital for the year, so the walk was right and only the anchor was wrong. The
+  cockpit now follows the Treasurer's definitions: working capital is current assets
+  including bank, less current liabilities; reserves are equity, which differs from it only
+  by fixed and non-current items. `workingCapitalFromBalanceSheet_` takes Xero's section
+  totals, `Bank` plus `Current Assets` less `Current Liabilities`, so a renamed or new account
+  still counts, and adds the grant releases Quarter close has not seen posted, usually
+  nothing since the Treasurer posts them at each quarter end. `Bank` inside `Current Assets`
+  counts once. A report without an asset section or `Current Liabilities` writes nothing and
+  raises F8, rather than guessing. The figure is called working capital wherever it shows:
+  the runway's label at today, the finance table's Organisation rows, the Health tab, and
+  the header a new `Reserves` tab is given; the tab keeps its name, so its rows still count.
+  The `Reserves` funding source, General's budget, keeps its name: it is a different thing.
+  Published figures move at the first refresh after the push, which rewrites the last
+  quarter end's row: the runway's lines, the Organisation's brought and carried forward and
+  the runway KPI move by the difference, mostly down by the current liabilities the old
+  anchor missed. Rows for earlier quarter ends keep the old definition until someone retypes
+  them.
 
 ## History
 
