@@ -201,7 +201,9 @@ click **Refresh now**.
 - **An actual looks wrong or missing**: the figure comes straight from Xero, so it is almost
   always a coding issue. See [Coding transactions in Xero](#coding-transactions-in-xero).
 - **A proposal has been won**: move its sheet from `proposed/` to `secured/`. The folder is the
-  status; the secured forecast counts `secured/` only, the proposed forecast counts both.
+  status; the secured forecast counts `secured/` only, the proposed forecast counts both, and a
+  sheet in `secured/` counts in full whatever its `Probability` says. Then add its item codes to
+  Xero's Products and Services, so its spend can be coded.
 - **A funding source has finished**: see [Archiving a funding source](#archiving-a-funding-source).
 
 ## General and Reserves
@@ -399,5 +401,7 @@ in `Z_ARCH_old_budgets`.
 2. Read the **Health** tab. Most wrong numbers are already named there, with the fix.
 3. Check the sheet's `Budget` tab totals make sense: `Cost`, `Income` and the dates.
 4. Check the Xero coding for that project and funding source.
-5. Still stuck? Ask the GM, who can see in the Apps Script editor's **Executions** log exactly
+5. Early in a month? Last month counts as actual from the first, but until its books are closed
+   in Xero only what has been posted shows, so totals dip and settle once the month is closed.
+6. Still stuck? Ask the GM, who can see in the Apps Script editor's **Executions** log exactly
    what the last refresh read.
