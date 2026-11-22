@@ -48,8 +48,9 @@ function getFilteredSnapshot_() {
   const out = filterSnapshotForProjects_(snap, getUserPermissions(email));
   if (out) out._userEmail = email;
   // The finance table under the runway compares against the board's budget, read on each
-  // load so a correction shows without a refresh. Full access only, as the runway is.
-  if (out && out._accessLevel === 'admin') out.board = boardBudgetPayload_();
+  // load so a correction shows without a refresh, to date as of the snapshot's quarter, as
+  // its actuals are. Full access only, as the runway is.
+  if (out && out._accessLevel === 'admin') out.board = boardBudgetPayload_(out.currentQuarter);
   return out;
 }
 

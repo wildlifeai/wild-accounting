@@ -62,8 +62,14 @@ probability), or the **surplus** where income covers the cost.
    ticked to the end of the last; each line's label still says when it goes short, even after
    them. Its first two lines name the months it runs, the grouping, and what Show and Filter
    picked, so a screenshot of the chart alone says what it shows. The vertical rule is today, labelled with the *net position*, income received minus spend to
-   date; shaded months are budget, and a hollow dot is where a line goes below zero. The three
-   lines are secured money only, the probability-weighted pipeline, and every application
+   date; shaded months are budget, and a hollow dot is where a line goes below zero. Of the
+   months gone, the lines are drawn only through the chart's first month and each quarter end
+   (June, September, December and March), because the accountant posts the grant release
+   journals only at quarter ends, so the actuals of the months between jump; every budget month
+   is drawn. The month of the working capital the lines start from and the last month of
+   actuals, whose position labels today's rule, are always drawn too. The months skipped still
+   count, so the lines, the month each goes short and the table are the same either way. The
+   three lines are secured money only, the probability-weighted pipeline, and every application
    landing. Each line's label at the right edge gives the months until cumulative spend
    overtakes cumulative income and the month it goes short. "Beyond *month*" means no shortfall
    before the last budgeted month, which is not the same as safe: the budgets may simply stop
@@ -107,29 +113,39 @@ probability), or the **surplus** where income covers the cost.
    **Funding source** or **Milestone** draws one line per group, counting applications at their
    probability (secured money only if *Proposed* is unticked); the lines add up to the
    organisation's. The largest groups are named and the rest share an "Other" line. Hover a
-   month, or move along the chart with the arrow keys, for every line's value in it.
+   drawn month, or move between drawn months with the arrow keys, for every line's value in it.
 2. **Show as a table**, under the chart: income, cost and surplus for each financial year
    ticked, from exactly what the ribbon picks, so it agrees with the chart. Its rows follow
    **Group by**: by project when grouped by status or by project, otherwise by funding source or
    milestone, then the total, named **Organisation** when every project and source is shown.
    The current year has four columns: the **Budget** the board approved, **Actual** from Xero to
    the end of last month, the **Forecast** to 31 March (actuals so far, then the plan with each
-   application at its probability) and the forecast less the budget. A later year is a draft on
+   application at its probability) and the forecast less the budget. When the `Board budget`
+   tab has quarter rows for the year (see **GM** below), a fifth, **Budget to** the end of the
+   quarter before this one, sits beside the actual: the quarter rows added up to that quarter.
+   There is no **Budget to** column in a year's first quarter. It runs to the quarter end,
+   while the actual runs to last month, so between quarter ends the actual holds a month or
+   two more. A later year is a draft on
    **Secured** money, **Expected** and **Full** (every application won), and the line under the
    table gives its fundraising target, expected income above secured. With **Brought forward**
    ticked, each group opens a year with **Brought forward**, where it stands as the year begins
-   (its income and margin less its cost, from the first month the plan holds), and closes with
-   **Carried forward**, that plus the year's surplus and margin. The organisation's starts from
+   (its income less its cost, from the first month the plan holds), and closes with
+   **Carried forward**, that plus the year's surplus. The organisation's starts from
    the working capital, so its rows read **Working capital brought forward** and **Working
    capital carried forward**, the second being the working capital at the year's end, and its
    budget columns are the working capital the board's budget expected at the end of the year
-   before and of this one.
+   before and of this one, and under **Budget to**, the working capital its `Organisation` row
+   for that quarter gives.
 
-   By project, a project shows its income as its funders give it; **Margin to General** is the
-   part of that income General receives (see [General and Reserves](#general-and-reserves)),
-   and General shows those margins as **Margins from projects**, as the board's updates set out
-   each project's surplus. The budget columns show only by project with every funding source
-   ticked, since the board's budget is for whole projects.
+   By project, a project's income is what its funders give it, so its surplus adds to reserves
+   and its loss draws on them, as the Treasurer sets it out. General shows only its own income
+   and cost, so its deficit draws on them too. The margin each project passes to General (see
+   [General and Reserves](#general-and-reserves)) goes back to that project in this table
+   only, and where a source funds several projects, each gets back the share its own income
+   gave. It moves money between projects and nets to zero, so the Organisation's rows are the
+   same either way, and the chart, its readout and Project tracking still show it. A project's
+   rows are the same whether or not General is ticked. The budget columns show only by project
+   with every funding source ticked, since the board's budget is for whole projects.
 
    **GM:** the budget the board approved lives on the `Board budget` tab of **Cockpit
    Settings**: one row per financial year (`26/27`) and project, with its income and cost, and
@@ -138,9 +154,22 @@ probability), or the **surplus** where income covers the cost.
    forward budget. The page reads the tab each time it loads, so a correction shows without a
    refresh.
 
-Grouped by project, General's line includes every project's margin: the income its funding
-sources pay for its work, less what the work costs, which is what pays for General. A project's
-line nets to zero over each source's life, dipping while it spends ahead of a tranche. Grouped
+   For **Budget to**, add quarter rows: the same columns, with the quarter (`Q1` to `Q4`) in the
+   seventh column, G, and that quarter's income and cost, so a row with G blank stays the whole
+   year. A tab made before this column has no heading over it; type `Quarter` in G1 if you
+   like, since the column is read by position. A project's budget to date needs a row for every
+   quarter so far, or it stays blank rather than short. For the whole organisation, with every
+   project and source shown, the column uses the `Organisation`'s own quarter rows where it has
+   them, with their income and cost, and the working capital the budget expected at each
+   quarter end in column E. Otherwise it adds up the projects shown, and stays blank when one
+   of them has a budget for the year but not a row for every quarter so far, rather than show
+   a short total. A year with whole-year rows only has no **Budget to** column: the cockpit
+   never splits a year into quarters itself.
+
+On the chart grouped by project, General's line includes every project's margin: the income its
+funding sources pay for its work, less what the work costs, which is what pays for General. A
+project's line nets to zero over each source's life, dipping while it spends ahead of a
+tranche. The table under it returns each margin to its project, as above. Grouped
 by milestone, the margins appear as lines named like `SPY_26_UOA (margin)`; a source with no
 income for its project work, such as a cost General carries for a project, shows there as a
 negative margin.

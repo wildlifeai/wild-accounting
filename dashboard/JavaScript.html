@@ -575,13 +575,17 @@
     return !document.querySelector('#' + id + ' input:not(:checked)');
   }
 
-  /** The runway parts the show and filter controls select. */
-  function selectedRunwayParts(rw) {
+  /**
+   * The runway parts the show and filter controls select. With `anyProject`, every project's,
+   * for the finance table by project, which counts the projects ticked itself.
+   */
+  function selectedRunwayParts(rw, anyProject) {
     var statuses = selectedStatuses();
     var projects = selectedValues('filter-projects');
     var sources = selectedValues('filter-sources');
     return (rw.parts || []).filter(function (p) {
-      return statuses.indexOf(p.status) !== -1 && projects.indexOf(p.project) !== -1 &&
+      return statuses.indexOf(p.status) !== -1 &&
+        (anyProject || projects.indexOf(p.project) !== -1) &&
         sources.indexOf(p.fundingSource) !== -1;
     });
   }
@@ -678,7 +682,15 @@
       showText(statuses) + ' · ' + pickedText('filter-projects', 'projects') + ' · ' +
         pickedText('filter-sources', 'funding sources')
     ];
-    renderRunwayChart(rows, series, chart, mode === 'status', net, reserves, caption);
+    // Of the months gone, the chart draws only the quarter ends (runwayDrawn_): the release
+    // journals are posted then, so the months between them jump. The working capital's month
+    // and the last month of actuals are drawn too, so the lines pass through the figure they
+    // start from and the position the today rule names.
+    var lastActual = null;
+    rows.forEach(function (r) { if (r.actual) lastActual = r.month; });
+    var drawn = runwayDrawn_(rows, parseInt(from.split('-')[1], 10),
+      reserves ? reserves.month : null, lastActual);
+    renderRunwayChart(rows, series, chart, mode === 'status', net, reserves, caption, drawn);
   }
 
   // One expected-case line per group. With Proposed unticked there are no application
@@ -728,8 +740,9 @@
   // `series` is most important first: { label, color, values (net per month), cross,
   // horizon }. `net` is the position today: income received minus spend to date, plus the
   // working capital when `reserves` ({ amount, asAt }) started the lines. `caption` is the
-  // lines of words the chart opens with.
-  function renderRunwayChart(rows, series, host, withSpend, net, reserves, caption) {
+  // lines of words the chart opens with. `drawn` says, month by month, whether the lines pass
+  // through it and the readout stops on it (runwayDrawn_); every month when not given.
+  function renderRunwayChart(rows, series, host, withSpend, net, reserves, caption, drawn) {
     // Sized to the container once at render, so text is 1:1 rather than scaled with
     // the viewBox. If the Overview is hidden when a refresh lands, the fallback width
     // still scales cleanly because the SVG is also width:100%.
@@ -741,10 +754,15 @@
     var n = rows.length;
     var xStep = pw / Math.max(1, n - 1);
     var xOf = function (i) { return padL + (n === 1 ? pw / 2 : i * xStep); };
+    var on = function (i) { return !drawn || !!drawn[i]; };
 
     var lo = 0, hi = 0;
     series.forEach(function (s) {
-      s.values.forEach(function (v) { if (v < lo) lo = v; if (v > hi) hi = v; });
+      s.values.forEach(function (v, i) {
+        if (!on(i)) return;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      });
     });
     if (hi === lo) hi = lo + 1;
     var step = niceStep((hi - lo) / 4);
@@ -800,9 +818,12 @@
     // zero line marks each crossover month; the line's label names it, so no text here.
     var ends = [];
     series.slice().reverse().forEach(function (s) {
-      var d = s.values.map(function (val, k) {
-        return (k ? 'L' : 'M') + xOf(k).toFixed(1) + ' ' + yOf(val).toFixed(1);
-      }).join(' ');
+      var pts = [];
+      s.values.forEach(function (val, k) {
+        if (!on(k)) return;
+        pts.push((pts.length ? 'L' : 'M') + xOf(k).toFixed(1) + ' ' + yOf(val).toFixed(1));
+      });
+      var d = pts.join(' ');
       svg.push('<path class="rw-line" style="stroke:' + s.color + '" d="' + d + '"/>');
       if (s.cross) {
         for (var q = 0; q < n; q++) {
@@ -854,7 +875,7 @@
     host.setAttribute('tabindex', '0');
     host.setAttribute('aria-label', 'Runway chart. Use the arrow keys to read each month.');
 
-    // Hover layer: the crosshair snaps to the nearest month and one tooltip lists every
+    // Hover layer: the crosshair snaps to the nearest month drawn and one tooltip lists every
     // line there, so nobody has to land on a 2px line. Same readout on keyboard focus.
     var tip = document.getElementById('rw-tip');
     var xh = document.getElementById('rw-xh');
@@ -886,17 +907,30 @@
       tip.style.top = (padT * scale + 8) + 'px';
     }
     function hide() { xh.style.display = 'none'; tip.classList.add('hidden'); cur = -1; }
+    // The drawn month nearest `i`, and the next drawn one either side, so the readout only
+    // stops where the lines have a point.
+    function nearest(i) {
+      for (var k = 0; k < n; k++) {
+        if (i - k >= 0 && on(i - k)) return i - k;
+        if (i + k < n && on(i + k)) return i + k;
+      }
+      return i;
+    }
+    function stepTo(i, by) {
+      for (var k = i + by; k >= 0 && k < n; k += by) { if (on(k)) return k; }
+      return i;
+    }
     host.querySelector('#rw-hit').addEventListener('pointermove', function (ev) {
       var rect = svgEl.getBoundingClientRect();
       var vx = (ev.clientX - rect.left) * (W / rect.width);
-      show(Math.max(0, Math.min(n - 1, Math.round((vx - padL) / xStep))));
+      show(nearest(Math.max(0, Math.min(n - 1, Math.round((vx - padL) / xStep)))));
     });
     host.onpointerleave = hide;
     host.onfocus = function () { if (cur < 0) show(firstFuture >= 0 ? firstFuture : 0); };
     host.onblur = hide;
     host.onkeydown = function (ev) {
-      if (ev.key === 'ArrowRight') { show(cur < 0 ? 0 : Math.min(n - 1, cur + 1)); ev.preventDefault(); }
-      else if (ev.key === 'ArrowLeft') { show(cur < 0 ? n - 1 : Math.max(0, cur - 1)); ev.preventDefault(); }
+      if (ev.key === 'ArrowRight') { show(cur < 0 ? 0 : stepTo(cur, 1)); ev.preventDefault(); }
+      else if (ev.key === 'ArrowLeft') { show(cur < 0 ? n - 1 : stepTo(cur, -1)); ev.preventDefault(); }
       else if (ev.key === 'Escape') { hide(); }
     };
   }
@@ -939,36 +973,42 @@
       var m = fyMonths(fy);
       return { label: fy, from: m.from, to: m.to, now: fy === current };
     });
-    var parts = selectedRunwayParts(rw);
-    var groups = financeTable_(parts, rw.nowKey, years, group, general);
+    // By project, every project's parts go in and financeTable_ counts the ones ticked, so a
+    // margin follows the project it came from whether or not General is ticked.
+    var byProject = group === 'project';
+    var parts = selectedRunwayParts(rw, byProject);
+    var shown = byProject ? selectedValues('filter-projects') : undefined;
+    var groups = financeTable_(parts, rw.nowKey, years, group, general, shown);
     var whole = allChecked('filter-projects') && allChecked('filter-sources');
 
-    // Brought forward: where each group stands when each year begins, its income and margin
-    // less its cost from the first month the parts hold, worked by the same function over
-    // everything before the year. The whole organisation's starts from the working capital:
+    // Brought forward: where each group stands when each year begins, its income less its
+    // cost from the first month the parts hold, worked by the same function over everything
+    // before the year. The whole organisation's starts from the working capital:
     // the amount the runway walk moves every line by to meet it.
     var carry = carryForward();
     var before = {}, offset = 0;
     if (carry) {
       financeTable_(parts, rw.nowKey, years.map(function (y) {
         return { label: y.label, from: '0000-01', to: prevMonthKey(y.from) };
-      }), group, general).forEach(function (g) { before[g.key] = g; });
+      }), group, general, shown).forEach(function (g) { before[g.key] = g; });
       if (whole && rw.reserves) {
-        var withRes = runwayWalk_(parts, rw.nowKey, undefined, rw.reserves).months;
-        var without = runwayWalk_(parts, rw.nowKey).months;
+        var walked = selectedRunwayParts(rw);
+        var withRes = runwayWalk_(walked, rw.nowKey, undefined, rw.reserves).months;
+        var without = runwayWalk_(walked, rw.nowKey).months;
         if (withRes.length && without.length) offset = withRes[0].secured - without[0].secured;
       }
     }
     function bfOf(g, y, sc) {
       var b = before[g.key] && before[g.key].years[y.label];
       var f = b ? b[sc] : null;
-      var pos = f ? f.income + f.margin - f.cost : 0;
+      var pos = f ? f.income - f.cost : 0;
       return g.key === 'All' && whole ? pos + offset : pos;
     }
     // The working capital the board's budget expected at a year's end, on its Organisation row.
+    // A quarter row is that quarter's, so the year's figures come from whole-year rows only.
     function orgReserves(fy) {
       var r = board ? board.budget.filter(function (b) {
-        return b.fy === fy && b.project === board.totalRow;
+        return b.fy === fy && b.project === board.totalRow && !b.quarter;
       })[0] : null;
       return r && r.reserves !== null && r.reserves !== undefined ? r.reserves : null;
     }
@@ -983,24 +1023,29 @@
     function budgetOf(fy, key) {
       if (!withBudget) return null;
       var rows = board.budget.filter(function (b) {
-        return b.fy === fy && b.project !== board.totalRow &&
+        return b.fy === fy && b.project !== board.totalRow && !b.quarter &&
           (key === 'All' ? selectedValues('filter-projects').indexOf(b.project) !== -1
             : b.project === key);
       });
       if (!rows.length) return null;
       var t = rows.reduce(function (s, b) {
-        return { income: s.income + b.income, cost: s.cost + b.cost };
+        return { income: s.income + (b.income || 0), cost: s.cost + (b.cost || 0) };
       }, { income: 0, cost: 0 });
       t.surplus = t.income - t.cost;
       return t;
     }
+    // The budget to date (boardBudgetToDate_), this year's only, from the quarter rows: a
+    // project's own, and for the total the Organisation's rows when every project and source
+    // is shown, or else the projects shown, read by budgetToDateOf_.
+    var toDate = withBudget && board.toDate && board.toDate.fy === current ? board.toDate : null;
+    var shownProjects = selectedValues('filter-projects');
 
-    var blank = { income: 0, margin: 0, cost: 0, surplus: 0 };
+    var blank = { income: 0, cost: 0, surplus: 0 };
     function fig(g, y, sc) { return (g.years[y.label] || {})[sc] || blank; }
     function size(g) {
       return years.reduce(function (t, y) {
         var e = fig(g, y, 'full');
-        return t + Math.abs(e.income) + Math.abs(e.cost) + Math.abs(e.margin);
+        return t + Math.abs(e.income) + Math.abs(e.cost);
       }, 0);
     }
     var all = groups.filter(function (g) { return g.key === 'All'; })[0];
@@ -1013,32 +1058,42 @@
     });
     if (!rest.length) { host.innerHTML = ''; return; }
 
-    // The columns: this year's four, a later year's three.
+    // The columns: this year's four, five with a budget to date, a later year's three.
     var cols = years.map(function (y) {
-      return y.now ? (withBudget ? ['Budget', 'Actual to ' + fmtMonthKey(actualTo), 'Forecast',
-        'Forecast less budget'] : ['Actual to ' + fmtMonthKey(actualTo), 'Forecast'])
+      return y.now ? (withBudget ? ['Budget'].concat(toDate
+        ? ['Budget to ' + fmtMonthKey(toDate.through)] : [], ['Actual to ' +
+          fmtMonthKey(actualTo), 'Forecast', 'Forecast less budget'])
+        : ['Actual to ' + fmtMonthKey(actualTo), 'Forecast'])
         : ['Secured', 'Expected', 'Full'];
     });
     var width = 1 + cols.reduce(function (t, c) { return t + c.length; }, 0);
     var starts = [];
     cols.forEach(function (c) { c.forEach(function (h, j) { starts.push(j === 0); }); });
-    // One figure: a line of the year's own (income, cost, surplus, margin), or where the group
-    // stands as the year begins (bf) and ends (cf, brought forward plus surplus and margin).
+    // One figure: a line of the year's own (income, cost, surplus), or where the group stands
+    // as the year begins (bf) and ends (cf, brought forward plus surplus).
     function val(g, y, sc, k) {
       var f = fig(g, y, sc);
       if (k === 'bf') return bfOf(g, y, sc);
-      if (k === 'cf') return bfOf(g, y, sc) + f.surplus + f.margin;
+      if (k === 'cf') return bfOf(g, y, sc) + f.surplus;
       return f[k];
     }
     // The board budgeted working capital for the whole organisation only: the year before's
     // Organisation row brings forward, this year's carries forward.
     function budgetVal(g, y, k) {
-      if (k === 'margin') return null;
       if (k === 'bf' || k === 'cf') {
         return g.key === 'All' && whole ? orgReserves(k === 'bf' ? prevFy(y.label) : y.label) : null;
       }
       var b = budgetOf(y.label, g.key);
       return b ? b[k] : null;
+    }
+    // To date, the organisation opens the year as the budget does and closes the quarter at
+    // the working capital its row for that quarter gives.
+    function toDateVal(g, y, k) {
+      if (k === 'bf') return budgetVal(g, y, k);
+      if (k === 'cf') return g.key === 'All' && whole ? toDate.reserves : null;
+      var t = budgetToDateOf_(toDate, g.key === 'All' ? null : g.key, shownProjects, whole,
+        board.totalRow);
+      return t ? t[k] : null;
     }
     function values(g, k) {
       return years.map(function (y) {
@@ -1048,7 +1103,8 @@
         var a = val(g, y, 'actual', k), e = val(g, y, 'expected', k);
         if (!withBudget) return [a, e];
         var bv = budgetVal(g, y, k);
-        return [bv, a, e, bv === null ? null : e - bv];
+        return [bv].concat(toDate ? [toDateVal(g, y, k)] : [],
+          [a, e, bv === null ? null : e - bv]);
       }).reduce(function (t, v) { return t.concat(v); }, []);
     }
     var lab = { bf: 'Brought forward', income: 'Income', cost: 'Cost', surplus: 'Surplus',
@@ -1069,16 +1125,6 @@
         ['income', 'cost', 'surplus'].map(function (k) {
           return line(g, k, k === 'surplus' ? 'bd-sum' : '');
         }));
-      var hasMargin = g.key !== 'All' && years.some(function (y) {
-        return ['actual', 'secured', 'expected', 'full'].some(function (sc) {
-          return Math.abs(fig(g, y, sc).margin) >= 1;
-        });
-      });
-      if (hasMargin) {
-        rows.push('<tr class="bd-margin"><td class="bd-lbl">' + (g.key === general
-          ? 'Margins from projects' : 'Margin to General') + '</td>' +
-          bdCells(values(g, 'margin'), starts) + '</tr>');
-      }
       if (carry) rows.push(line(g, 'cf', 'bd-sum bd-cf'));
       return '<tr class="bd-project"><th colspan="' + width + '">' + esc(name) + '</th></tr>' +
         rows.join('');

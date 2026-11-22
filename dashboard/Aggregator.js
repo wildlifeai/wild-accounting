@@ -1291,6 +1291,33 @@ function runwayWalk_(parts, nowKey, months, reserves) {
 }
 
 /**
+ * Which of the runway chart's months it draws, true or false for each of `rows`
+ * (runwayWalk_'s months, { month: 'YYYY-MM', actual }, as cropped to the chart). The
+ * accountant posts the grant release journals only at each quarter end, so a month of actuals
+ * inside a quarter jumps when they land. Of the actual months the chart draws only the
+ * quarter ends, the third month of each quarter of a financial year starting in month
+ * `fyStartMonth` (1 to 12, April when not given), and its first point; every budget month is
+ * drawn, and so is the last point, where the line's label sits. Two more months are always
+ * drawn, given as 'YYYY-MM' or left out: `anchorMonth`, the working capital's month the
+ * lines start from (reserves.month), and `lastActualMonth`, whose position the today rule's
+ * label gives. Nothing is recomputed: the values, crossover and months of runway are the
+ * walk's, and the finance table its own.
+ *
+ * Self-contained on purpose, like runwayWalk_: the page receives this function's own source
+ * (Index.html), so it may not call anything outside itself.
+ */
+function runwayDrawn_(rows, fyStartMonth, anchorMonth, lastActualMonth) {
+  rows = rows || [];
+  const start = fyStartMonth || 4;
+  return rows.map((r, i) => {
+    if (!r.actual || i === 0 || i === rows.length - 1) return true;
+    if (r.month === anchorMonth || r.month === lastActualMonth) return true;
+    const m = parseInt(String(r.month).split('-')[1], 10);
+    return (m - start + 13) % 3 === 0;
+  });
+}
+
+/**
  * Per funding source: baseline (frozen budget) and actual (from Xero) spend,
  * bucketed by milestone (item code) and quarter. Returns an array ready for the
  * quarterly tracking screen; the live forecast layer is merged in WebApp/UI.

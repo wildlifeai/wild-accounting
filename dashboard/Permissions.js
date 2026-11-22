@@ -262,7 +262,7 @@ function reservesMonth_(d, now) {
 /**
  * The budget the board approved, from the Board budget tab: see boardBudgetRows_. Read when
  * the page loads, so a typed correction shows without a refresh. The tab is created with
- * its header the first time.
+ * its header the first time; a tab made before the quarter column keeps its own header.
  */
 function readBoardBudget_() {
   var ss = openOrCreateSettingsSpreadsheet_();
@@ -276,19 +276,34 @@ function readBoardBudget_() {
 }
 
 /**
- * Board budget rows, header gone, as { fy, project, income, cost, reserves }, `reserves`
- * being column E, the working capital the budget expected at year end. A financial
- * year is written as the cockpit labels it ("26/27"); a row without one, or without a
- * project, is skipped. Read as displayed text, so "26/27" cannot arrive as a date.
+ * Board budget rows, header gone, as { fy, project, quarter, income, cost, reserves }. A
+ * financial year is written as the cockpit labels it ("26/27"); a row without one, or
+ * without a project, is skipped. Read as displayed text, so "26/27" cannot arrive as a date.
+ *
+ * Column G, optional, names a quarter of that year (Q1 to Q4, or "26/27 Q1"): `quarter` is
+ * its number, and the row's figures are that quarter's. Blank is the whole year, `quarter`
+ * null, so a tab of six columns reads as it always has. A quarter that cannot be read, or
+ * that names another year, skips the row rather than counting it as the whole year.
+ * `reserves` is column E, the working capital the budget expected at the end of the year or
+ * quarter. A blank amount is null, so a row that gives only working capital is not read as
+ * budgeting nothing.
  */
 function boardBudgetRows_(values) {
   var out = [];
+  var amount = function (v) {
+    return String(v == null ? '' : v).trim() === '' ? null : parseAmount_(v);
+  };
   (values || []).forEach(function (r) {
     var fy = String(r[0] || '').trim(), project = String(r[1] || '').trim();
     if (!/^\d{2}\/\d{2}$/.test(fy) || !project) return;
-    var reserves = String(r[4] || '').trim();
-    out.push({ fy: fy, project: project, income: parseAmount_(r[2]), cost: parseAmount_(r[3]),
-      reserves: reserves === '' ? null : parseAmount_(reserves) });
+    var q = String(r[6] || '').trim(), quarter = null;
+    if (q !== '') {
+      var m = /^(?:(\d{2}\/\d{2})\s+)?Q?\s*([1-4])$/i.exec(q);
+      if (!m || (m[1] && m[1] !== fy)) return;
+      quarter = parseInt(m[2], 10);
+    }
+    out.push({ fy: fy, project: project, quarter: quarter, income: amount(r[2]),
+      cost: amount(r[3]), reserves: amount(r[4]) });
   });
   return out;
 }

@@ -154,11 +154,12 @@ function name silently collide, last definition winning.
   collision was hidden only because the former was wrapped in a closure; flattening it for
   deployment exposed the clash, which is why the underscore convention is enforced.
 * Name top-level constants distinctly, so a new file cannot shadow an existing one.
-* `runwayWalk_` and `financeTable_` also run in the browser: `Index.html` sends each one's own
-  source (`fn.toString()`), so the page runs exactly the code the tests run. Each must stay
-  self-contained, calling nothing outside itself, or the page breaks while every server test
-  passes. A test runs `financeTable_` rebuilt from its source alone; extend that guard to any
-  function added the same way.
+* `runwayWalk_`, `runwayDrawn_`, `financeTable_` and `budgetToDateOf_` also run in the
+  browser: `Index.html` sends each one's own source (`fn.toString()`), so the page runs exactly
+  the code the tests run. Each must stay self-contained, calling nothing outside itself, or
+  the page breaks while every server test passes. Tests run `financeTable_`, `runwayDrawn_`
+  and `budgetToDateOf_` rebuilt from their source alone; extend that guard to any function
+  added the same way.
 
 ---
 
@@ -258,7 +259,9 @@ changing code:
   `End`, `Cost`.
 * **Forecasts are per sheet**, on each funding source's own `Forecast` tab, read by
   `parseForecastTab_`. The central sheet, Cockpit Settings, holds the Permissions, `Reserves`
-  (working capital) and `Board budget` tabs (`Permissions.js`).
+  (working capital) and `Board budget` tabs (`Permissions.js`). A `Board budget` row naming a
+  quarter in column G is that quarter's (`boardBudgetRows_`), blank is the whole year, so a
+  six-column tab still reads; never sum or split one kind into the other.
 * **A milestone row with no forecast falls back to the budget baseline**, never to zero.
   `forecastOrBaseline_` in `ForecastEngine.js` is the one statement of that rule, used by the
   tracking grid, D5 and E2. Reading zero made every source with an unmaintained `Forecast` tab look
@@ -363,7 +366,12 @@ sheets: `reportMargins()` prints the current ones, beside what each policy expec
 
 `marginRule_` and `lineMargin_` in `Aggregator.js` are the one statement of the rule, used by the
 Overview, the runway, the timeline and General's tracking view (`marginMilestones_`).
-Organisation totals and runway do not move; only the split between projects does.
+Organisation totals and runway do not move; only the split between projects does. The board's
+finance table is the one exception: grouped by project, `financeTable_` returns each
+`(margin)` part to the source's projects, month by month in proportion to their net income,
+so a project shows what its funders give and General only its own, and counts a share when
+its project is ticked, whether or not General is. Do not take margins out of the parts to get
+that: the chart and Project tracking still route General's share through them.
 
 The `Contribution policy` is the margin a source is expected to leave, read by
 `contributionRate_`. G1 checks a source's margin against it with ten points either side
