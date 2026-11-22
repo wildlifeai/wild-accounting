@@ -1312,7 +1312,10 @@
             return esc(k.name);
           }).join('; ') + '.</span></div>'
         : '';
-      return '<h3 class="bd-h3">' + esc(g.pou) + '</h3>' + table + not;
+      var split = g.kpis.filter(function (k) { return k.funders; }).map(function (k) {
+        return funderSplit(k, p.fy);
+      }).join('');
+      return '<h3 class="bd-h3">' + esc(g.pou) + '</h3>' + table + split + not;
     }).join('');
     var changed = p.changed.length
       ? '<h3 class="bd-h3">What changed this year</h3><ul class="kpi-changed">' +
@@ -1326,6 +1329,22 @@
       : '';
     el.innerHTML = '<div class="coverage"><span>Values as at the last refresh.' + sheet +
       '</span></div>' + html + changed;
+  }
+  // T2's year to date by funder, largest first, then the income with no funding source: a
+  // thin bar for each row's share of the year's income, its income and share beside it, and
+  // the year's income under them.
+  function funderSplit(k, fy) {
+    var rows = k.funders.map(function (f) {
+      var w = Math.max(0, Math.min(100, Number(f.share) || 0));
+      return '<tr><td>' + esc(f.funder) + '</td><td class="funder-bar" aria-hidden="true">' +
+        '<span style="width:' + w + '%"></span></td><td class="num">' + fmtMoney(f.amount) +
+        '</td><td class="num">' + kpiValue(f.share, '%') + '</td></tr>';
+    }).join('');
+    return '<h3 class="bd-h3">Income by funder, ' + esc(fy) + ' to date</h3>' +
+      '<div class="table-wrap"><table class="bd-table kpi-table funder-table"><thead><tr>' +
+      '<th>Funder</th><th></th><th class="num">Income</th><th class="num">Share</th></tr>' +
+      '</thead><tbody>' + rows + '<tr class="bd-sum"><td>All income</td><td></td>' +
+      '<td class="num">' + fmtMoney(k.fundersTotal) + '</td><td></td></tr></tbody></table></div>';
   }
 
   document.querySelectorAll('.tab').forEach(function (t) {

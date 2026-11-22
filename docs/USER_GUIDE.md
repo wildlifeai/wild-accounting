@@ -201,7 +201,9 @@ click **Refresh now**.
 - **An actual looks wrong or missing**: the figure comes straight from Xero, so it is almost
   always a coding issue. See [Coding transactions in Xero](#coding-transactions-in-xero).
 - **A proposal has been won**: move its sheet from `proposed/` to `secured/`. The folder is the
-  status; the secured forecast counts `secured/` only, the proposed forecast counts both.
+  status; the secured forecast counts `secured/` only, the proposed forecast counts both, and a
+  sheet in `secured/` counts in full whatever its `Probability` says. Then add its item codes to
+  Xero's Products and Services, so its spend can be coded.
 - **A funding source has finished**: see [Archiving a funding source](#archiving-a-funding-source).
 
 ## General and Reserves
@@ -329,6 +331,20 @@ Service Performance, or retired. Three are worked out by the cockpit: **earned i
 (the largest funder's share of income, by each sheet's `Funder`) and **months of runway** (the
 secured line's, as at the last refresh).
 
+**All income** for the first two is every income line of the financial year, the total of
+Xero's P&L. That includes lines with no Projects tag and lines on an archived project, which the
+Overview's totals leave out, so the two can differ. A line with no Funding source counts in all
+income under **No funding source**, which is never named the largest funder, since interest,
+sales and donations with no tracking all land there. An archived source counts under its own
+name, since its sheet, which named the funder, is gone. A grant marked `Income recognition: as spent` counts the income its spend
+has earned, as everywhere in the cockpit, which matches Xero once the quarter's releases are
+posted.
+
+**Income by funder**, under the Toitūtanga table, lists each funder's income this financial year
+to date and its share of all income, largest first, with a bar for the share and all income at
+the foot. Its first row is income concentration. **No funding source** has its own row after
+the funders, whatever its size. A funder whose income nets to nothing is left out.
+
 The values come from the **Performance** sheet in the Budgets folder, read at each refresh. Its
 `KPIs` tab has one row per KPI: its pou, unit, cadence, who it is reported to (`Board`, `SSP`
 or funding source codes), status, owner, whether the cockpit works it out, and whether its year
@@ -385,5 +401,7 @@ in `Z_ARCH_old_budgets`.
 2. Read the **Health** tab. Most wrong numbers are already named there, with the fix.
 3. Check the sheet's `Budget` tab totals make sense: `Cost`, `Income` and the dates.
 4. Check the Xero coding for that project and funding source.
-5. Still stuck? Ask the GM, who can see in the Apps Script editor's **Executions** log exactly
+5. Early in a month? Last month counts as actual from the first, but until its books are closed
+   in Xero only what has been posted shows, so totals dip and settle once the month is closed.
+6. Still stuck? Ask the GM, who can see in the Apps Script editor's **Executions** log exactly
    what the last refresh read.

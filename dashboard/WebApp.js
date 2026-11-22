@@ -209,11 +209,19 @@ function apiGetProjectTracking(projects) {
  * KPIs as the last refresh read them (performanceView_).
  */
 function apiGetPerformance() {
-  const allowed = getUserPermissions(getCurrentUserEmail_());
-  if (!(allowed.length === 1 && allowed[0] === '*')) {
+  return performanceFor_(getUserPermissions(getCurrentUserEmail_()), getSnapshot);
+}
+
+/**
+ * The Performance tab for someone with `allowed` projects, the snapshot read by `readSnapshot`
+ * only once they pass. Full access only: its income by funder is the whole organisation's
+ * money. Pure over its inputs, so the gate can be tested.
+ */
+function performanceFor_(allowed, readSnapshot) {
+  if (!(allowed && allowed.length === 1 && allowed[0] === '*')) {
     throw new Error('The Performance tab is for people with full access.');
   }
-  const snap = getSnapshot();
+  const snap = readSnapshot();
   if (!snap) return null;
   return { generatedAt: snap.generatedAt,
     performance: performanceView_(snap.performance, fyBounds_(new Date()).startYear) };
