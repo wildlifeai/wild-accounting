@@ -238,6 +238,12 @@ Rules that follow from this:
 * Xero transactions must carry **both** tracking categories plus the item code. A line with no
   `Projects` value is dropped from project and organisation totals (D1); a line with no `Funding
   source` falls out of Project tracking (D2).
+* **T1 and T2 on the Performance tab are the exception.** A share is of all the year's income,
+  Xero's P&L total, so `computedKpis_` counts every income line: no project, an archived project
+  or source, no funding source (as `NO_FUNDING_SOURCE`, never the largest funder). Do not put
+  the project filter back: see `docs/DESIGN.md`, decisions, 2026-11-22.
+  T2's income by funder (`T2.funders`) is full access only, as the whole tab is
+  (`performanceFor_`, and `filterSnapshotForProjects_` drops `performance`).
 * Project abbreviations are `SPY`, `GEN`, `WAI`, `WW`. Do not change them: see §1,
   Verify-Before-Applying.
 

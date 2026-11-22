@@ -109,7 +109,7 @@ row has any entry, its blank cells count as 0 for every quarter the tab has a co
 
 | id | Sev | Check | Action shown |
 |---|---|---|---|
-| D1 | error | Actual lines with no `Projects` tag | **Dropped from every total.** Report count and value. |
+| D1 | error | Actual spend with no `Projects` tag | **Dropped from the organisation and project totals.** Report count and value. |
 | D2 | warning | Actual lines with no `Funding source` tag | Land in `(unassigned)`. |
 | D3 | warning | Actual lines with no item code | Outside the tracking grid. Manual-journal lines are not counted: Xero journals cannot carry a Product/Service. |
 | D4 | error | Actuals coded to a `Funding source` with no budget sheet | Either the sheet is missing, the tag is a typo, or the source was archived and its project's `archived` folder has been renamed or moved. Renaming the Xero tag with `Z_ARCH_` archives it whatever the folders say. |
