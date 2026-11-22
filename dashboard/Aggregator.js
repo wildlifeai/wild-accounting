@@ -498,13 +498,14 @@ function buildSnapshot() {
   const timeline = buildTimeline_(planned);
 
   // For the accountant's close, on the Health tab: grant income to release or defer, and
-  // spend expected but not in Xero. Before the runway, because the reserves Xero gives need
-  // the releases still to post.
+  // spend expected but not in Xero. Before the runway, because the working capital Xero
+  // gives needs the releases still to post.
   const quarterClose = buildQuarterClose_(judged, earnedBasis ? fetched : [], actualLines,
     tracking, quarterSortNum(currentQuarterLabel(now)));
 
   // Runway: cumulative income against cumulative spend, month by month, starting from the
-  // reserves on Cockpit Settings, whose last quarter-end row the refresh writes from Xero.
+  // working capital on the Cockpit Settings Reserves tab, whose last quarter-end row the
+  // refresh writes from Xero's Balance Sheet.
   const runway = buildRunway_(counted, actualLines, now, exclusivityReps, itemToMilestone,
     readReserves_(now, quarterClose));
 
@@ -557,7 +558,8 @@ function buildSnapshot() {
     exclusion: lastExclusionSummary(),
     unposted: lastUnpostedSummary(),
     secretsMissing: secretsMissing,
-    // F4: the connection predates the reports scope, so reserves could not be read.
+    // F4: the connection predates the reports scope, so working capital could not be read;
+    // F8: the Balance Sheet lacked a section it is added up from.
     reservesIssue: lastReservesIssue(),
     // So G3 can name which source had its cost suppressed and which carries it instead.
     exclusivity: { reps: exclusivityReps, suppressed: costSuppressed },
@@ -1157,14 +1159,13 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
  * so the chart runs exactly the code the tests run here. It may not call
  * anything outside itself.
  *
- * On its own this is funded runway, not cash: the Xero scopes cannot reach a bank balance,
- * so it answers "when does the plan go underwater on money we have actually won". The
+ * On its own this is funded runway, not cash: it answers "when does the plan go underwater on money we have actually won". The
  * money already in hand comes from `reserves` ({ amount, month }, latestReserves_): the
- * free money at the end of `month` as the bookkeeper worked it out at a quarter close.
+ * working capital at the end of `month`, from Xero's Balance Sheet at a quarter close.
  * Every line moves by one amount so that its position at the end of that month is the
- * figure; from there on the secured line is reserves plus secured funding against the
- * plan, the organisation's actual runway. Only the whole organisation has reserves, so
- * the Overview passes them for that view alone.
+ * figure; from there on the secured line is working capital plus secured funding against
+ * the plan, the organisation's actual runway. Only the whole organisation has working
+ * capital, so the Overview passes it for that view alone.
  *
  * Months before the current one use Xero actuals; the current month and every month after
  * use the budget. The current month is deliberately budget rather than actual-so-far,

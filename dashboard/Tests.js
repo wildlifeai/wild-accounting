@@ -927,50 +927,177 @@ function runTests() {
   check('quarter close: finished quarters only, latest first',
     qc.quarters.join('|') === '26/27 Q2|26/27 Q1');
 
-  // ---- reserves from Xero's Balance Sheet ------------------------------------
-  // Account rows sit inside nested sections; the first value column is the date asked for.
-  var bsRow = function (name, id, now, before) {
-    return { RowType: 'Row', Cells: [
-      { Value: name, Attributes: [{ Id: 'account', Value: id }] },
-      { Value: now }, { Value: before }] };
+  // ---- working capital from Xero's Balance Sheet -------------------------------
+  // Invented figures. Xero's standard report: an empty Assets heading, then Bank, Current
+  // Assets and Fixed Assets side by side, each with its own total row, untitled sections for
+  // the grand totals, and the same again for liabilities. The first value column is the date
+  // asked for; the second compares an earlier date and must be ignored.
+  var bsRow = function (name, now) {
+    return { RowType: 'Row', Cells: [{ Value: name }, { Value: now }, { Value: '1.00' }] };
   };
-  var bs = parseBalanceSheet_({ Rows: [
-    { RowType: 'Header', Cells: [{ Value: '' }, { Value: '30 Sep 2026' }, { Value: '30 Sep 2025' }] },
-    { RowType: 'Section', Title: 'Assets', Rows: [
-      { RowType: 'Section', Title: 'Bank', Rows: [
-        bsRow('WILDLIFE.AI TRUST', 'id-600', '80000.50', '1.00'),
-        bsRow('ANZ Term Deposit', 'id-605', '30000.00', '1.00'),
-        { RowType: 'SummaryRow', Cells: [{ Value: 'Total Bank' }, { Value: '110000.50' }] }] },
-      { RowType: 'Section', Title: 'Current Assets', Rows: [
-        bsRow('Accounts Receivable', 'id-610', '2000', '0')] }] },
-    { RowType: 'Section', Title: 'Liabilities', Rows: [
-      bsRow('Accounts Payable', 'id-800', '12000', '0'),
-      bsRow('Unused Donations and Grants with Conditions', 'id-8xx', '50000', '0')] }
-  ] }, { 'id-600': '600', 'id-605': '605' });
-  check('balance sheet: bank rows by code, from the first value column, totals skipped',
-    bs.byCode['600'] === 80000.5 && bs.byCode['605'] === 30000 && !bs.byName['Total Bank']);
-  var resX = reservesFromBalanceSheet_(bs, 38000);
-  // 80000.5 + 30000 + 2000 owed to us - 12000 to pay - 50000 in advance + 38000 unposted.
-  check('reserves from Xero: bank and invoices owed to us, less bills to pay and in advance, ' +
-    'plus unposted releases', resX.amount === 88001);
-  check('reserves from Xero: the note shows each part',
-    resX.note.indexOf(RESERVES_AUTO_NOTE) === 0 &&
-    resX.note.indexOf('Accounts Receivable 2000') !== -1 &&
-    resX.note.indexOf('Accounts Payable 12000') !== -1 &&
-    resX.note.indexOf('releases not yet posted 38000') !== -1);
-  check('reserves from Xero: an in-advance account not on the sheet counts as nothing, and says so',
-    reservesFromBalanceSheet_({ byCode: { '600': 100 }, byName: {} }, 0).note
-      .indexOf('not on the balance sheet') !== -1);
+  var bsTotal = function (name, now) {
+    return { RowType: 'SummaryRow', Cells: [{ Value: name }, { Value: now }, { Value: '1.00' }] };
+  };
+  var bsSec = function (title, rows) { return { RowType: 'Section', Title: title, Rows: rows }; };
+  var bsLiabilities = [
+    bsRow('Accounts Payable', '12000.00'), bsRow('GST', '3000.00'),
+    bsRow('PAYE Payable', '1500.00'), bsRow('Grants Received in Advance', '50,000.00')];
+  var xeroBs = function (liabilityRows, liabilityTotal) {
+    return { Rows: [
+      { RowType: 'Header', Cells: [{ Value: '' }, { Value: '30 Sep 2026' },
+        { Value: '30 Sep 2025' }] },
+      bsSec('Assets', []),
+      bsSec('Bank', [bsRow('Cheque account', '80,000.00'), bsRow('Term deposit', '30,000.00'),
+        bsTotal('Total Bank', '110,000.00')]),
+      bsSec('Current Assets', [bsRow('Accounts Receivable', '2000.00'),
+        bsRow('Prepayments', '500.00'), bsTotal('Total Current Assets', '2500.00')]),
+      bsSec('Fixed Assets', [bsRow('Computer Equipment', '4000.00'),
+        bsTotal('Total Fixed Assets', '4000.00')]),
+      bsSec('', [bsTotal('Total Assets', '116,500.00')]),
+      bsSec('Liabilities', []),
+      bsSec('Current Liabilities', liabilityRows.concat(liabilityTotal === undefined ? []
+        : [bsTotal('Total Current Liabilities', liabilityTotal)])),
+      bsSec('Non-current Liabilities', [bsRow('Loan', '7000.00'),
+        bsTotal('Total Non-current Liabilities', '7000.00')]),
+      bsSec('', [bsTotal('Total Liabilities', '73,500.00')]),
+      bsSec('', [bsRow('Net Assets', '43,000.00')]),
+      bsSec('Equity', [bsRow('Retained Earnings', '43,000.00'),
+        bsTotal('Total Equity', '43,000.00')])
+    ] };
+  };
+  var bs = parseBalanceSheet_(xeroBs(bsLiabilities, '66,500.00'));
+  var bsS = bs.sections;
+  check('balance sheet: section totals from the first value column, Xero\'s own total rows',
+    bsS['bank'].total === 110000 && bsS['current assets'].total === 2500 &&
+    bsS['current liabilities'].total === 66500 && bsS['equity'].total === 43000);
+  check('balance sheet: empty headings total nothing, untitled sections are not sections',
+    bsS['assets'].total === 0 && bsS['liabilities'].total === 0 && bsS[''] === undefined);
+
+  var wcX = workingCapitalFromBalanceSheet_(bs, 38000);
+  // 110000 bank + 2500 current assets - 66500 current liabilities + 38000 unposted.
+  check('working capital: Bank and Current Assets as separate sections, less Current ' +
+    'Liabilities, plus unposted releases', wcX.amount === 84000 && !wcX.missing);
+  check('working capital: the note names each part',
+    wcX.note.indexOf(RESERVES_AUTO_NOTE) === 0 &&
+    wcX.note.indexOf('Bank 110000, plus Current Assets 2500') !== -1 &&
+    wcX.note.indexOf('less Current Liabilities 66500') !== -1 &&
+    wcX.note.indexOf('releases not yet posted 38000') !== -1);
+  // The Treasurer's definitions: equity differs from working capital only by fixed and
+  // non-current items.
+  check('working capital: equity less fixed assets, plus non-current liabilities',
+    workingCapitalFromBalanceSheet_(bs, 0).amount ===
+      bsS['equity'].total - bsS['fixed assets'].total + bsS['non-current liabilities'].total);
+  // With no total row, a section is its rows: every current liability comes off, whatever
+  // the accountant named it, which a list of account names could not promise.
+  var wcOf = function (rows) {
+    return workingCapitalFromBalanceSheet_(parseBalanceSheet_(xeroBs(rows)), 0).amount;
+  };
+  check('working capital: GST and PAYE come off',
+    wcOf([bsLiabilities[0]]) - wcOf(bsLiabilities.slice(0, 3)) === 4500);
+  check('working capital: grants held in advance come off under any account name',
+    wcOf(bsLiabilities.slice(0, 3)) - wcOf(bsLiabilities) === 50000 &&
+    wcOf(bsLiabilities) === wcX.amount - 38000);
+
+  // Bank inside Current Assets is in that section's total already, with or without its row.
+  var nestedBs = function (withTotal) {
+    return parseBalanceSheet_({ Rows: [
+      bsSec('Assets', [bsSec('Current Assets', [
+        bsSec('Bank', [bsRow('Cheque account', '110,000.00'),
+          bsTotal('Total Bank', '110,000.00')]),
+        bsRow('Accounts Receivable', '2500.00')].concat(withTotal
+          ? [bsTotal('Total Current Assets', '112,500.00')] : []))]),
+      bsSec('Liabilities', [bsSec('Current Liabilities', bsLiabilities)])
+    ] });
+  };
+  var wcNested = workingCapitalFromBalanceSheet_(nestedBs(true), 0);
+  check('working capital: Bank inside Current Assets counts once',
+    wcNested.amount === 46000 &&
+    workingCapitalFromBalanceSheet_(nestedBs(false), 0).amount === 46000 &&
+    wcNested.note.indexOf('Current Assets 112500 (Bank 110000 included)') !== -1);
+  var noBank = parseBalanceSheet_({ Rows: [
+    bsSec('Current Assets', [bsRow('Cheque account', '110,000.00'),
+      bsRow('Accounts Receivable', '2500.00')]),
+    bsSec('Current Liabilities', bsLiabilities)] });
+  var wcNoBank = workingCapitalFromBalanceSheet_(noBank, 0);
+  check('working capital: no Bank section takes the bank to be in Current Assets, and says so',
+    wcNoBank.amount === 46000 && wcNoBank.note.indexOf('no Bank section') !== -1);
+
+  var noLiab = parseBalanceSheet_({ Rows: [
+    bsSec('Bank', [bsRow('Cheque account', '110,000.00')])] });
+  check('working capital: no Current Liabilities section is no figure, and says which',
+    JSON.stringify(workingCapitalFromBalanceSheet_(noLiab, 0)) ===
+      '{"missing":["Current Liabilities"]}');
+  check('working capital: no asset section is no figure either',
+    JSON.stringify(workingCapitalFromBalanceSheet_(parseBalanceSheet_({ Rows: [] }), 0)) ===
+      '{"missing":["Bank or Current Assets","Current Liabilities"]}');
   check('reserves from Xero: releases still to post, cumulative to the quarter',
     unpostedReleases_(qc, '26/27 Q1') === -400 && unpostedReleases_(qc, '26/27 Q2') === 100);
-  var f4 = function (issue) {
+
+  // The refresh's write to the Reserves tab, on a sheet and a report standing in for Drive
+  // and Xero. A refresh in October writes the row for 30 September.
+  var wcSheet = function (rows) {
+    return { rows: [CONFIG.RESERVES.HEADER].concat(rows),
+      getDataRange: function () {
+        var s = this;
+        return { getValues: function () {
+          return s.rows.map(function (r) { return r.slice(); });
+        } };
+      },
+      appendRow: function (r) { this.rows.push(r); },
+      getRange: function (row) {
+        var s = this;
+        return { setValues: function (v) { s.rows[row - 1] = v[0]; } };
+      } };
+  };
+  var wcFetched = 0;
+  var wcFetch = function (report) {
+    return function () { wcFetched++; return parseBalanceSheet_(report); };
+  };
+  var wcNow = d(2026, 10, 5), wcEnd = d(2026, 9, 30);
+  var typed = wcSheet([[wcEnd, 70000, 'Typed from the Treasurer\'s working paper']]);
+  _lastReservesIssue = null;
+  syncReservesFromXero_(typed, wcNow, null, wcFetch(xeroBs(bsLiabilities, '66,500.00')));
+  check('working capital: a row typed for the date wins, and Xero is not asked',
+    typed.rows.length === 2 && typed.rows[1][1] === 70000 && wcFetched === 0);
+  var written = wcSheet([[d(2026, 6, 30), 60000, 'typed'],
+    [wcEnd, 99000, RESERVES_AUTO_NOTE + 'an earlier refresh']]);
+  syncReservesFromXero_(written, wcNow, null, wcFetch(xeroBs(bsLiabilities, '66,500.00')));
+  check('working capital: the row a refresh wrote is replaced in place',
+    written.rows.length === 3 && written.rows[2][1] === 46000 &&
+    written.rows[2][0].getTime() === wcEnd.getTime() && written.rows[1][1] === 60000 &&
+    latestReserves_(written.rows.slice(1), wcNow).amount === 46000);
+  var fresh = wcSheet([]);
+  syncReservesFromXero_(fresh, wcNow, null, wcFetch(xeroBs(bsLiabilities, '66,500.00')));
+  check('working capital: a quarter end with no row gets one',
+    fresh.rows.length === 2 && fresh.rows[1][1] === 46000 && _lastReservesIssue === null);
+  var gap = wcSheet([[wcEnd, 99000, RESERVES_AUTO_NOTE + 'an earlier refresh']]);
+  syncReservesFromXero_(gap, wcNow, null, wcFetch({ Rows: [
+    bsSec('Bank', [bsRow('Cheque account', '110,000.00')])] }));
+  check('working capital: a report missing a section writes nothing and raises the issue',
+    gap.rows.length === 2 && gap.rows[1][1] === 99000 && !!_lastReservesIssue &&
+    _lastReservesIssue.kind === 'sections' && _lastReservesIssue.asAt === '2026-09-30' &&
+    _lastReservesIssue.missing.join() === 'Current Liabilities');
+  var sectionsIssue = _lastReservesIssue;
+  _lastReservesIssue = null;
+  syncReservesFromXero_(wcSheet([]), wcNow, null, function () {
+    throw new Error('Xero API 403 on /Reports/BalanceSheet');
+  });
+  check('working capital: Xero refusing the report is the scope issue',
+    !!_lastReservesIssue && _lastReservesIssue.kind === 'scope');
+  _lastReservesIssue = null;
+
+  var fIds = function (issue) {
     return buildHealth([], [], { now: d(2026, 10, 5), xeroConnected: true,
       exclusion: { count: 0, total: 0 }, unposted: { count: 0, total: 0 },
       secretsMissing: [], reservesIssue: issue })
-      .filter(function (f) { return f.id === 'F4'; }).length;
+      .filter(function (f) { return f.id === 'F4' || f.id === 'F8'; });
   };
-  check('F4 when Xero refused the Balance Sheet, quiet otherwise',
-    f4('scope') === 1 && f4(null) === 0);
+  var f8 = fIds(sectionsIssue);
+  check('F4 when Xero refused the Balance Sheet, F8 when it lacked a section, quiet otherwise',
+    fIds({ kind: 'scope' }).map(function (f) { return f.id; }).join() === 'F4' &&
+    f8.map(function (f) { return f.id; }).join() === 'F8' &&
+    f8[0].detail.indexOf('2026-09-30 has no Current Liabilities section') !== -1 &&
+    fIds(null).length === 0);
 
   // The page receives runwayWalk_ as its own source (Index.html), so it must stand alone:
   // a call to any server helper would work here and throw in the browser.

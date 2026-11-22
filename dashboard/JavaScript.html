@@ -438,8 +438,8 @@
     var sum = document.getElementById('filter-status-sum');
     if (sum) sum.textContent = showText(selectedStatuses());
   }
-  // Brought forward: each year starts from where the one before it ends (reserves, for the
-  // whole organisation) rather than standing alone from $0.
+  // Brought forward: each year starts from where the one before it ends (working capital,
+  // for the whole organisation) rather than standing alone from $0.
   function carryForward() {
     var box = document.getElementById('bf-carry');
     return !box || box.checked;
@@ -527,10 +527,10 @@
   }
 
   // ---- Runway ---------------------------------------------------------------
-  // Runway: the month cumulative income stops covering cumulative spend. With a reserves
-  // figure in Cockpit Settings, the whole organisation's lines start from the money in hand,
-  // so secured only is the actual runway; any narrower view is funded money only, since
-  // reserves belong to nobody's project. It follows the show and filter controls at the
+  // Runway: the month cumulative income stops covering cumulative spend. With a working
+  // capital row in Cockpit Settings, the whole organisation's lines start from the money in
+  // hand, so secured only is the actual runway; any narrower view is funded money only, since
+  // working capital belongs to nobody's project. It follows the show and filter controls at the
   // top of the tab, and draws the months of the financial years ticked there. The walk is
   // runwayWalk_, sent by the server as its own source (Index.html), so every line here is
   // the arithmetic the server's tests check.
@@ -598,7 +598,7 @@
     var statuses = selectedStatuses();
     var mode = rw.parts ? runwayGroupBy() : 'status';
     var carry = carryForward();
-    // Reserves are the organisation's money, so they start the lines only when the whole
+    // Working capital is the organisation's money, so it starts the lines only when the whole
     // organisation is drawn: every project and every source, as the three status lines, and
     // only when the years are brought forward.
     var reserves = carry && rw.reserves && mode === 'status' && allChecked('filter-projects') &&
@@ -727,7 +727,7 @@
 
   // `series` is most important first: { label, color, values (net per month), cross,
   // horizon }. `net` is the position today: income received minus spend to date, plus the
-  // reserves figure when `reserves` ({ amount, asAt }) started the lines. `caption` is the
+  // working capital when `reserves` ({ amount, asAt }) started the lines. `caption` is the
   // lines of words the chart opens with.
   function renderRunwayChart(rows, series, host, withSpend, net, reserves, caption) {
     // Sized to the container once at render, so text is 1:1 rather than scaled with
@@ -763,7 +763,7 @@
     // net position today, which is where the budget months start from.
     var netLabel = '<tspan class="rw-net' + (net < 0 ? ' danger' : '') + '"> · ' +
       (reserves ? 'position ' : 'net position ') + esc(netMoney(net)) + '</tspan>' +
-      (reserves ? ', from reserves at ' + esc(fmtIsoDate(reserves.asAt)) : '');
+      (reserves ? ', from working capital at ' + esc(fmtIsoDate(reserves.asAt)) : '');
     var firstFuture = -1;
     for (var i = 0; i < n; i++) { if (!rows[i].actual) { firstFuture = i; break; } }
     if (firstFuture > 0) {
@@ -945,8 +945,8 @@
 
     // Brought forward: where each group stands when each year begins, its income and margin
     // less its cost from the first month the parts hold, worked by the same function over
-    // everything before the year. The whole organisation's starts from the reserves: the
-    // amount the runway walk moves every line by to meet them.
+    // everything before the year. The whole organisation's starts from the working capital:
+    // the amount the runway walk moves every line by to meet it.
     var carry = carryForward();
     var before = {}, offset = 0;
     if (carry) {
@@ -965,7 +965,7 @@
       var pos = f ? f.income + f.margin - f.cost : 0;
       return g.key === 'All' && whole ? pos + offset : pos;
     }
-    // The reserves the board's budget expected at a year's end, on its Organisation row.
+    // The working capital the board's budget expected at a year's end, on its Organisation row.
     function orgReserves(fy) {
       var r = board ? board.budget.filter(function (b) {
         return b.fy === fy && b.project === board.totalRow;
@@ -1030,7 +1030,7 @@
       if (k === 'cf') return bfOf(g, y, sc) + f.surplus + f.margin;
       return f[k];
     }
-    // The board budgeted reserves for the whole organisation only: the year before's
+    // The board budgeted working capital for the whole organisation only: the year before's
     // Organisation row brings forward, this year's carries forward.
     function budgetVal(g, y, k) {
       if (k === 'margin') return null;
@@ -1053,9 +1053,16 @@
     }
     var lab = { bf: 'Brought forward', income: 'Income', cost: 'Cost', surplus: 'Surplus',
       cf: 'Carried forward' };
+    // The organisation's opening and closing rows are its working capital once a Reserves
+    // tab row anchors them, so they say so; a group's own are its funded position.
+    function label(g, k) {
+      var wc = (k === 'bf' || k === 'cf') && g.key === 'All' && whole && !!rw.reserves;
+      return wc ? 'Working capital ' + (k === 'bf' ? 'brought' : 'carried') + ' forward'
+        : lab[k];
+    }
     function line(g, k, cls) {
-      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td class="bd-lbl">' + lab[k] +
-        '</td>' + bdCells(values(g, k), starts) + '</tr>';
+      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td class="bd-lbl">' +
+        label(g, k) + '</td>' + bdCells(values(g, k), starts) + '</tr>';
     }
     function block(g, name) {
       var rows = (carry ? [line(g, 'bf', 'bd-carry')] : []).concat(
@@ -1444,12 +1451,13 @@
   }
 
   // A Reserves cell's hover: the full cost, what each other sheet pays of it, and what is
-  // left for reserves, which is the figure in the cell.
+  // left for the Reserves source, which is the figure in the cell. Capitalised, as the source
+  // is named, so it does not read as the working capital on the Reserves tab.
   function coverNote(cover) {
     if (!cover) return '';
     var paid = 0;
     var by = cover.by.map(function (b) { paid += b.amount; return b.source + ' pays ' + money0(b.amount); });
-    return 'Full cost ' + money0(cover.full) + ' · ' + by.join(' · ') + ' · left for reserves ' +
+    return 'Full cost ' + money0(cover.full) + ' · ' + by.join(' · ') + ' · left for Reserves ' +
       money0(cover.full - paid);
   }
 

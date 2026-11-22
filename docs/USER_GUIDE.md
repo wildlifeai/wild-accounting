@@ -70,22 +70,25 @@ probability), or the **surplus** where income covers the cost.
    there. Because it is the whole organisation's position, only people with access to every
    project see it.
 
-   **Reserves** make it the actual runway: the money free to spend, which is the bank balance
-   minus grant money received but not yet spent (the chart already counts that as income as it
-   is spent). They live on the `Reserves` tab of the **Cockpit Settings** sheet, one row per
-   quarter end, and each refresh writes the last quarter end's row from Xero's Balance Sheet:
-   the bank and term deposit accounts, plus *Accounts Receivable*, less *Accounts Payable* and
-   *Unused Donations and Grants with Conditions*, plus the releases
-   [Quarter close](#quarter-close) says are still to post. The chart counts a bill or invoice
-   from its date, so what is still unpaid on it comes off or goes on here; and until the
-   releases are posted, the liability still holds money already spent. Its column C shows each
-   part, to check against Xero. To correct a figure, type your own row for the same date: the
+   **Working capital** makes it the actual runway: current assets including bank, less current
+   liabilities, as the Treasurer works it out. Current liabilities include the bills still to
+   pay, GST, PAYE and accruals, and the grant money received but not yet released (the chart
+   already counts that as income as it is spent). Working capital differs from equity only by
+   fixed and non-current items. It lives on the `Reserves` tab of the **Cockpit Settings**
+   sheet, which keeps that name, one row per quarter end, and each refresh writes the last
+   quarter end's row from the section totals of Xero's Balance Sheet: *Bank* plus *Current
+   Assets*, less *Current Liabilities*, plus the releases [Quarter close](#quarter-close) says
+   are still to post. The accountant posts the releases at each quarter end, so that last part
+   is usually nothing; until they are posted, the liability still holds money already spent.
+   No account is named, so a liability renamed or added in Xero still counts. Its column C
+   shows each part, to check against Xero. A Balance Sheet without those sections writes
+   nothing and raises **F8**. To correct a figure, type your own row for the same date: the
    refresh never overwrites a row it did not write. The latest row is used: with every project
    and source shown, grouped by status and **Brought forward** ticked, all three lines start
-   from it, so **Secured only** is reserves plus secured funding against the plan, and the label
-   at today reads "position ..., from reserves at" its date. Any narrower view, filtered or
-   grouped, is funded money only, because reserves belong to no one project. With no row, every
-   view is funded money only.
+   from it, so **Secured only** is working capital plus secured funding against the plan, and
+   the label at today reads "position ..., from working capital at" its date. Any narrower view,
+   filtered or grouped, is funded money only, because working capital belongs to no one
+   project. With no row, every view is funded money only.
 
    **Brought forward**, the last box under Show, is ticked to begin with: each line carries
    everything before the years ticked, so the chart opens where the money stands. Untick it to
@@ -117,9 +120,10 @@ probability), or the **surplus** where income covers the cost.
    ticked, each group opens a year with **Brought forward**, where it stands as the year begins
    (its income and margin less its cost, from the first month the plan holds), and closes with
    **Carried forward**, that plus the year's surplus and margin. The organisation's starts from
-   the reserves, so its Carried forward is the reserves at the year's end, and its budget
-   columns are the working capital the board's budget expected at the end of the year before
-   and of this one.
+   the working capital, so its rows read **Working capital brought forward** and **Working
+   capital carried forward**, the second being the working capital at the year's end, and its
+   budget columns are the working capital the board's budget expected at the end of the year
+   before and of this one.
 
    By project, a project shows its income as its funders give it; **Margin to General** is the
    part of that income General receives (see [General and Reserves](#general-and-reserves)),
@@ -129,9 +133,10 @@ probability), or the **surplus** where income covers the cost.
 
    **GM:** the budget the board approved lives on the `Board budget` tab of **Cockpit
    Settings**: one row per financial year (`26/27`) and project, with its income and cost, and
-   on a row named `Organisation` the reserves the budget expected at year end. Keep the year
-   before's `Organisation` row too: it is this year's Brought forward budget. The page reads the
-   tab each time it loads, so a correction shows without a refresh.
+   on a row named `Organisation` the working capital the budget expected at year end, in its
+   fifth column. Keep the year before's `Organisation` row too: it is this year's Brought
+   forward budget. The page reads the tab each time it loads, so a correction shows without a
+   refresh.
 
 Grouped by project, General's line includes every project's margin: the income its funding
 sources pay for its work, less what the work costs, which is what pays for General. A project's
@@ -182,7 +187,7 @@ Nothing is retyped: when the grant's plan moves, what is left for `Reserves` mov
 - Every view counts the cost once, at `Reserves`' full cost. An application comes off `Reserves`
   only where its money counts: not on *Secured only*, at its probability on the expected line,
   and in full where every application lands.
-- In Project tracking, `Reserves`' rows show what is left for reserves to pay, so they compare
+- In Project tracking, `Reserves`' rows show what is left for `Reserves` to pay, so they compare
   with what Xero codes to `Reserves`. Hover a quarter for its full cost and who pays what. Only
   secured sheets come off there: an application shows beside `Reserves` until it is won.
 - More paid than `Reserves` holds in a month is **H1**. A General line on a milestone `Reserves`
@@ -190,7 +195,8 @@ Nothing is retyped: when the grant's plan moves, what is left for `Reserves` mov
 - What every project's funding leaves after its costs, its margin, is General's income: see
   [What you're looking at](#what-youre-looking-at-overview).
 
-The `Reserves` source is not the Cockpit Settings `Reserves` tab, which holds the money in hand.
+The `Reserves` source is not the Cockpit Settings `Reserves` tab, which holds the working capital
+the runway starts from.
 
 ## Tracking and forecasting (quarterly)
 

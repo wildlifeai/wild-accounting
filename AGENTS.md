@@ -99,7 +99,7 @@ snapshot that the dashboard reads instantly. The data model it relies on is in `
 | `BudgetReader.js` | Walk Drive, parse each sheet's `Funding_info`, `Budget` and `Forecast` tabs |
 | `ForecastEngine.js` | Pure forecasting maths and quarter helpers, unit-testable |
 | `Aggregator.js` | Join budgets and actuals into the snapshot: breakdown rows, contribution, tracking, timeline, runway |
-| `Permissions.js` | The Cockpit Settings sheet: its Permissions tab (which projects each person may see), its Reserves tab (the money the runway starts from) and its Board budget tab (the budget the board approved) |
+| `Permissions.js` | The Cockpit Settings sheet: its Permissions tab (which projects each person may see), its Reserves tab (the working capital the runway starts from) and its Board budget tab (the budget the board approved) |
 | `TrackingBuilder.js` | One project's sources and milestones by quarter, budget, actual and forecast, for both views of Project tracking |
 | `Board.js` | The finance table under the Overview's runway chart: income, cost and surplus by group for each year ticked, against the board's budget or by scenario (`financeTable_`, run by the page as `runwayWalk_` is) |
 | `Performance.js` | The Performance sheet: the strategy's KPIs and their values, read at refresh, the three KPIs the cockpit works out, the Performance tab, and health checks P1 and P2 |

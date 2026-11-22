@@ -257,8 +257,8 @@ changing code:
   and `*Account` where an older sheet still has one, though nothing uses it. Required: `Start`,
   `End`, `Cost`.
 * **Forecasts are per sheet**, on each funding source's own `Forecast` tab, read by
-  `parseForecastTab_`. The central sheet, Cockpit Settings, holds only the Permissions and
-  Reserves tabs (`Permissions.js`).
+  `parseForecastTab_`. The central sheet, Cockpit Settings, holds the Permissions, `Reserves`
+  (working capital) and `Board budget` tabs (`Permissions.js`).
 * **A milestone row with no forecast falls back to the budget baseline**, never to zero.
   `forecastOrBaseline_` in `ForecastEngine.js` is the one statement of that rule, used by the
   tracking grid, D5 and E2. Reading zero made every source with an unmaintained `Forecast` tab look
@@ -295,11 +295,20 @@ Never add a code path that drops data without a finding.
 * **Balance-sheet accounts are excluded** by account **code**, in `fetchXeroActuals`, so a Xero
   rename cannot un-exclude one (`EXCLUDED_ACCOUNTS`, reported by F5).
 * Scopes: `offline_access accounting.transactions.read accounting.settings.read
-  accounting.reports.read`, the last for the Balance Sheet the reserves come from. Xero has
-  deprecated the broad scopes in favour of granular ones (this app keeps them to September 2027);
-  scopes are additive and cannot be removed from a live token without re-consent, so plan
+  accounting.reports.read`, the last for the Balance Sheet the working capital comes from. Xero
+  has deprecated the broad scopes in favour of granular ones (this app keeps them to September
+  2027); scopes are additive and cannot be removed from a live token without re-consent, so plan
   changes rather than making them casually. A token granted before a scope was added is refused
   that scope's endpoints, which F4 reports.
+* **Working capital comes from the Balance Sheet's section totals, never from named
+  accounts.** It is the Treasurer's definition: current assets including bank, less current
+  liabilities; reserves are equity. `workingCapitalFromBalanceSheet_` takes `Bank` plus
+  `Current Assets` less `Current Liabilities` (titles in `CONFIG.RESERVES`), plus the releases
+  Quarter close says are still to post. A report lacking a section writes nothing and raises F8; do
+  not fall back to a guess. The refresh tells its own rows from typed ones by the `From Xero: `
+  prefix in column C (`RESERVES_AUTO_NOTE`), so never change that prefix: rows already written
+  would read as typed and stop updating. The Cockpit Settings tab keeps the name `Reserves`, or
+  the refresh would start a new, empty tab; it is not the `Reserves` funding source in §5.
 
 ## Payroll
 
