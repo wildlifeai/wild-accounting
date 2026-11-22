@@ -29,11 +29,26 @@ const DateMath = {
     return out;
   },
 
-  /** Inclusive overlap in days between [aStart,aEnd] and [bStart,bEnd]. */
+  /**
+   * A date's calendar day as a whole number, the same in every time zone. Days are
+   * counted this way rather than by subtracting Dates: a 23- or 25-hour day at a
+   * daylight-saving change is still one day, and one falling on a month's last day
+   * otherwise went missing from the month while the line's total kept it.
+   */
+  dayNumber(d) {
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000;
+  },
+
+  /** Calendar days from `start` to `end`, both included. */
+  daysInclusive(start, end) {
+    return DateMath.dayNumber(end) - DateMath.dayNumber(start) + 1;
+  },
+
+  /** Inclusive overlap in calendar days between [aStart,aEnd] and [bStart,bEnd]. */
   overlapDays(aStart, aEnd, bStart, bEnd) {
-    const start = Math.max(aStart.getTime(), bStart.getTime());
-    const end = Math.min(aEnd.getTime(), bEnd.getTime());
-    return Math.max(0, (end - start) / 86400000 + 1);
+    const start = Math.max(DateMath.dayNumber(aStart), DateMath.dayNumber(bStart));
+    const end = Math.min(DateMath.dayNumber(aEnd), DateMath.dayNumber(bEnd));
+    return Math.max(0, end - start + 1);
   },
 
   quartersBetween(start, end) {
@@ -143,7 +158,7 @@ function distributeByMonth_(lines, field) {
   lines.forEach(l => {
     const amount = l[field];
     if (!l.start || !l.end || !amount) return;
-    const totalDays = (l.end - l.start) / 86400000 + 1;
+    const totalDays = DateMath.daysInclusive(l.start, l.end);
     DateMath.monthsBetween(l.start, l.end).forEach(m => {
       const days = DateMath.overlapDays(l.start, l.end, DateMath.firstOfMonth(m), DateMath.lastOfMonth(m));
       const key = DateMath.monthKey(m);
@@ -269,7 +284,7 @@ function plannedLines_(lines, forecast) {
       const key = qi + '|' + start.getTime() + '|' + end.getTime();
       return pieces[key] || (pieces[key] = { qi: qi, start: start, end: end, cost: 0, income: 0 });
     };
-    const totalDays = (l.end - l.start) / 86400000 + 1;
+    const totalDays = DateMath.daysInclusive(l.start, l.end);
     ['cost', 'income'].forEach(kind => {
       const own = e[kind];
       // The Budget-tab timing, for the quarters nothing was forecast in.

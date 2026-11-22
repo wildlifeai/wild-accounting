@@ -109,7 +109,8 @@ const CONFIG = {
   GENERAL_PROJECT: 'General',
   // The funding source holding the full cost of General's work, whoever pays it. A line on any
   // other sheet tagged General, on a milestone of the same name, pays part of that cost, so it
-  // comes off this source (reservesOffsets_). Not the Reserves tab below, the money in hand.
+  // comes off this source (reservesOffsets_). Not the Reserves tab below, which holds the
+  // working capital the runway starts from.
   RESERVES_SOURCE: 'Reserves',
 
   // ---- Chart of accounts ------------------------------------------------------
@@ -139,7 +140,7 @@ const CONFIG = {
     // Minimal read-only scopes. accounting.transactions.read covers bank
     // transactions + invoices; accounting.settings.read covers the chart of
     // accounts and tracking categories; accounting.reports.read the Balance Sheet the
-    // reserves come from (readReserves_); offline_access enables token refresh. Xero
+    // working capital comes from (readReserves_); offline_access enables token refresh. Xero
     // retires the broad transactions and reports scopes for apps like this one in
     // September 2027, so they move to the granular ones before then.
     SCOPE: 'offline_access accounting.transactions.read accounting.settings.read ' +
@@ -165,31 +166,34 @@ const CONFIG = {
     HEADER: ['Email', 'Allowed Projects (comma separated, or * for all)']
   },
 
-  // ---- Reserves ------------------------------------------------------------
-  // Also a tab in the Cockpit Settings spreadsheet: one row per quarter-end close, the
-  // money free to spend on that date. The latest row starts the runway (latestReserves_).
-  // Each refresh writes the last quarter-end's row from Xero's Balance Sheet: these bank
-  // accounts, by code, plus invoices still owed to us, less bills still to pay and the
-  // liability holding grants received but not yet released (those three matched by name),
-  // plus the releases still to post.
+  // ---- Working capital (the Reserves tab) ------------------------------------
+  // Also a tab in the Cockpit Settings spreadsheet, still named Reserves: one row per
+  // quarter-end close, the working capital on that date. The latest row starts the runway
+  // (latestReserves_). Each refresh writes the last quarter-end's row from the section totals
+  // of Xero's Balance Sheet: Bank plus Current Assets, less Current Liabilities, plus the grant
+  // releases still to post (workingCapitalFromBalanceSheet_). Sections are matched by title,
+  // ignoring case, so no account name or code is needed here. Not the Reserves funding source
+  // above (RESERVES_SOURCE), which is General's budget.
   RESERVES: {
     TAB: 'Reserves',
-    HEADER: ['As at', 'Reserves',
-      'How it was worked out (bank balance and invoices owed to us, minus bills to pay and ' +
-      'grant money received but not yet spent)'],
-    BANK_CODES: ['600', '605'],   // WILDLIFE.AI TRUST, ANZ Term Deposit
-    RECEIVABLE_ACCOUNT: 'Accounts Receivable',
-    PAYABLE_ACCOUNT: 'Accounts Payable',
-    IN_ADVANCE_ACCOUNT: 'Unused Donations and Grants with Conditions'
+    HEADER: ['As at', 'Working capital',
+      'How it was worked out (Balance Sheet: bank and current assets, less current ' +
+      'liabilities, plus grant releases not yet posted)'],
+    BANK_SECTION: 'Bank',
+    CURRENT_ASSETS_SECTION: 'Current Assets',
+    CURRENT_LIABILITIES_SECTION: 'Current Liabilities'
   },
 
   // ---- Board ----------------------------------------------------------------
   // The finance table under the runway chart (Board.js), full access only. Its budget is a tab
   // of the Cockpit Settings spreadsheet: income and cost per project per financial year as the board
-  // approved them, and on the TOTAL_ROW row the reserves that budget expected at year end.
+  // approved them, and on the TOTAL_ROW row the working capital that budget expected at year end.
+  // A row naming a quarter in the last column holds that quarter's figures instead, which give
+  // the budget to date (boardBudgetToDate_); the header is written only when the tab is made.
   BOARD: {
     TAB: 'Board budget',
-    HEADER: ['Financial year', 'Project', 'Income', 'Cost', 'Reserves at year end', 'Notes'],
+    HEADER: ['Financial year', 'Project', 'Income', 'Cost',
+      'Working capital at year end, or quarter end', 'Notes', 'Quarter (blank for the year)'],
     TOTAL_ROW: 'Organisation',
     // The order the board's updates have used. A project not listed follows them.
     PROJECTS: ['Wildlife Watcher', 'Spyfish Aotearoa', 'Wild About AI', 'General']

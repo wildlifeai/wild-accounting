@@ -61,15 +61,15 @@ because nothing said when a tag was missing.
 
 ## The eleven requirements
 
-Status as at 2 October 2026. This table is the test specification: "does the cockpit work"
+Status as at 22 November 2026. This table is the test specification: "does the cockpit work"
 means "does it answer these".
 
 | # | What | Freq | Persona | Source of truth | Today |
 |---|---|---|---|---|---|
 | 1 | Forecast reported to Board | Q | Board | Cockpit: secured + weighted pipeline, frozen | Runway on the Overview on secured, weighted and all-proposed money, and a gap after pipeline. **Freezing does not exist**: the snapshot is overwritten every 6 hours, so August's figure is gone by November |
-| 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | Exists. General takes each source's whole margin, the same way in every view |
+| 2 | Annual organisation budget | A | Board, GM | Cockpit: all funding sources + General | Exists. General takes each source's whole margin, the same way in every view but the board's finance table by project, which returns each margin to its project |
 | 3 | P&L (income and expenses) | Q | Board | Xero | Approved bank transactions, invoices and bills, and posted manual journals, counted as Xero's P&L counts them. Payroll posts as Xero Payroll bills and reaches the cockpit; milestone grain depends on each line carrying an item code, which D3 reports |
-| 4 | Working capital balance and forecast | Q | Board, Treasurer | Xero balance sheet + deferred grants | **Absent.** Needs a Xero scope the cockpit does not hold |
+| 4 | Working capital balance and forecast | Q | Board, Treasurer | Xero balance sheet + deferred grants | Exists: each refresh reads working capital (bank plus current assets, less current liabilities) from Xero's Balance Sheet at the last quarter close onto the Cockpit Settings `Reserves` tab; the runway and the board finance table carry it forward |
 | 5 | Bill payments | M | Bookkeeper | Xero | Native Xero. Deliberately out of scope |
 | 6 | Payroll | F | Bookkeeper | Xero Payroll | Posts as bills with both tracking categories. The Health tab flags untagged spend (D1, D2), missing item codes (D3), tags with no sheet (D4) and spend after a grant ended (D6). **Not routed to the bookkeeper**: someone has to read the Health tab |
 | 7 | Funding source income and expense variance | M | Project lead | Cockpit | Exists, on Project tracking. Monthly cadence not enforced |
@@ -86,7 +86,7 @@ Ranked by how badly they hurt the persona who depends on them:
    snapshot four times a day.
 2. **No funder-facing output (#9).** The one requirement an external party sees has no
    implementation at all.
-3. **Working capital and cash are absent (#4).** The Board cannot see the balance sheet here.
+3. **Cash between quarter ends is absent (#4).** Working capital is read only at quarter ends.
 4. **Findings reach nobody unprompted (#6).** Every sheet names an `Owner`, but nothing tells that
    person, or the bookkeeper, that a finding is theirs.
 
@@ -103,6 +103,9 @@ Ranked by how badly they hurt the persona who depends on them:
   cards and runway credit each line's own income. They agree for most sheets and can differ
   slightly for one whose lines are not priced in proportion to their cost. Only the line
   attribution is on screen.
+- **Phasing the board's budget.** The cockpit writes nothing to the `Board budget` tab but its
+  header, so quarter rows, like whole-year ones, are typed by hand. Writing next year's rows,
+  phased by quarter, from the plan the board adopts is not built.
 - **Granular Xero scopes by September 2027.** Xero retires the broad `accounting.transactions`
   and `accounting.reports.read` scopes then for apps created before 2 March 2026, which this one
   is. Moving means naming the granular scopes for bank transactions, invoices, manual journals
@@ -282,6 +285,74 @@ Ranked by how badly they hurt the persona who depends on them:
   begins and say when a year's funding falls behind its spend. The budget figures are the
   working capital on the `Board budget` tab's `Organisation` rows, the year before's brought
   forward; projects have no budgeted position, so theirs stay blank.
+- **2026-11-22: the runway starts from working capital, added up from the Balance Sheet's
+  sections.** The anchor named its accounts: two bank codes, receivables, payables and the
+  liability holding grants received in advance, matched by name. That liability was not
+  found under its configured name, so it counted as nothing, and GST, PAYE, accruals and the
+  other current liabilities were never taken off, so the anchor sat above the Treasurer's
+  working capital by exactly those. Walking the runway back from her figure gave her opening
+  working capital for the year, so the walk was right and only the anchor was wrong. The
+  cockpit now follows the Treasurer's definitions: working capital is current assets
+  including bank, less current liabilities; reserves are equity, which differs from it only
+  by fixed and non-current items. `workingCapitalFromBalanceSheet_` takes Xero's section
+  totals, `Bank` plus `Current Assets` less `Current Liabilities`, so a renamed or new account
+  still counts, and adds the grant releases Quarter close has not seen posted, usually
+  nothing since the accountant posts them at each quarter end. `Bank` inside `Current Assets`
+  counts once. A report without an asset section or `Current Liabilities` writes nothing and
+  raises F8, rather than guessing. The figure is called working capital wherever it shows:
+  the runway's label at today, the finance table's Organisation rows, the Health tab, and
+  the header a new `Reserves` tab is given; the tab keeps its name, so its rows still count.
+  The `Reserves` funding source, General's budget, keeps its name: it is a different thing.
+  Published figures move at the first refresh after the push, which rewrites the last
+  quarter end's row: the runway's lines, the Organisation's brought and carried forward and
+  the runway KPI move by the difference, mostly down by the current liabilities the old
+  anchor missed. Rows for earlier quarter ends keep the old definition until someone retypes
+  them.
+- **2026-11-22: the board's finance table returns each margin to its project.** Grouped by
+  project, the table showed a "Margin to General" row under each project and "Margins from
+  projects" under General, and the Treasurer found the routing hard to follow. As she puts it,
+  a project's surplus adds to reserves, a loss draws on them, and so does General's deficit.
+  By project, `financeTable_` now returns each margin part to the source's projects, each
+  month split in proportion to their income that month net of the margin. Every part of a
+  source has one margin rate, so each project gets back exactly what its own income gave; a
+  month where they net to nothing goes to the source's largest part. A project's income is
+  what its funders give, its surplus is that less its cost and its carried forward is brought
+  forward plus surplus, and General shows only its own income and cost. The table counts the
+  projects ticked itself, so a margin follows its project, not General's tick: a project
+  shows the same figures whether or not General is ticked, and an unticked project's share is
+  left out. Margins net to zero across projects, so the Organisation's rows do not move, which
+  tests check against the table with no margin moved and against the total by funding source.
+  Its brought and carried forward rows stay working capital, not reserves. A source funding
+  more than one project moves its projects' rows: before, the largest showed the whole
+  margin. Margins stay everywhere else: the runway parts, the chart grouped by project and its
+  readout, and Project tracking, since they are how the cockpit routes General's share.
+  Grouped by milestone the `(margin)` lines remain, having no single milestone to return to.
+- **2026-11-22: of the months gone, the runway chart draws only quarter ends.** The accountant
+  posts the grant release journals at each quarter end, so the monthly actuals jumped in June,
+  September, December and March. `runwayDrawn_`, sent to the page as `runwayWalk_` is, draws
+  the chart's first month and, of the actual months, only quarter ends of the financial year;
+  every budget month is drawn as before, and so is the last point, where the label sits. Two
+  more are always drawn, passed in so the function stays self-contained: the working
+  capital's month the lines start from, and the last month of actuals, whose position the
+  today rule names, so the line meets both figures rather than cutting from the last quarter
+  end to the first budget month. Any other month after the last close, whose release is not
+  posted yet, is not drawn. Only the points the lines pass through and the readout stops on
+  change: the walk, the crossover, months of runway and the finance table are worked out as
+  before, which a test checks.
+- **2026-11-22: a budget to date beside the actual to date.** The board compares actuals to
+  date with the budget to date, and the `Board budget` tab held whole years only. A seventh
+  column, G, may now name a quarter of the row's year; blank is the whole year, so a tab of six
+  columns reads as before, and the header is written only when the tab is made. With quarter
+  rows for this year, the finance table adds **Budget to** the end of the quarter before the
+  snapshot's, beside the actual (`boardBudgetToDate_`), and none in a year's first quarter.
+  Each project's is its quarter rows added up, blank rather than short when it lacks a quarter
+  so far. The whole organisation's, with every project and source shown, is the
+  `Organisation`'s own quarter rows where it has them, whose column E gives the working
+  capital at that quarter end; otherwise it is the projects shown added up, blank when one of
+  them with a budget this year lacks its quarters, since the sum would be short
+  (`budgetToDateOf_`, run by the page as `financeTable_` is). Whole-year rows are never split.
+  The budget runs to the quarter end and the actual to last month, so between quarter ends
+  they cover different months; the column names its month so the reader sees it.
 
 ## History
 

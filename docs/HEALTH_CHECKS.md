@@ -117,8 +117,11 @@ row has any entry, its blank cells count as 0 for every quarter the tab has a co
 | D6 | error | Actuals against a funding source whose `Funding end` has passed | Almost always a stale recurring journal or template. |
 | D8 | warning | Xero moves a source's income by manual journal (the accountant's deferral and release), but its sheet is not marked `Income recognition: as spent` | If the grant is released as it is spent, mark it; otherwise its income follows the releases, which lag by up to a quarter. |
 
-D1 to D4 and D6 leave out spend on an archived funding source or project: no total or grid
-includes it, so coding it better would change nothing.
+D2 to D4 and D6 leave out spend on an archived funding source or project. An archived source's
+spend counts as it stands, as its own plan in the year it fell in, and no grid tracks it; an
+archived project's spend counts nowhere. Either way, coding it better would change nothing. D1
+still names an archived source's lines with no `Projects` tag, because tagging them brings them
+into the totals.
 
 D1, D2, D3, D6 and F6 look only at transactions dated in the current financial year: they ask for
 a change in Xero, and earlier years' books are closed. D4 looks at every year, because its spend
@@ -175,7 +178,8 @@ Performance tab shows them (see the [user guide](USER_GUIDE.md#the-performance-t
 |---|---|---|---|
 | F1 | error | Xero not connected or token invalid | Run the reconnect step; actuals are stale meanwhile. |
 | F3 | error | Required Script Properties missing | Name which. |
-| F4 | warning | Xero refused a report because the connection lacks a scope a feature needs | Today that is `accounting.reports.read`, for the Balance Sheet the reserves come from. Run `resetXeroConnection`, then `logXeroAuthUrl`, and approve, in one sitting, since actuals stop in between. Until then the Reserves rows typed by hand still start the runway. |
+| F4 | warning | Xero refused a report because the connection lacks a scope a feature needs | Today that is `accounting.reports.read`, for the Balance Sheet the working capital comes from. Run `resetXeroConnection`, then `logXeroAuthUrl`, and approve, in one sitting, since actuals stop in between. Until then the working capital rows typed by hand on the Cockpit Settings `Reserves` tab still start the runway. |
+| F8 | warning | Xero's Balance Sheet at the last quarter end has no `Bank` or `Current Assets` section, or no `Current Liabilities` section, so the working capital cannot be added up | Nothing is written for that date rather than a guess, and the detail names the missing section. Check the report in Xero, or the section titles in `CONFIG.RESERVES`; until then type the row on the `Reserves` tab by hand. The runway starts from the latest row there meanwhile. |
 | F5 | info | Last refresh time, duration, sheets read, lines parsed | Trend tells you when the 6-minute limit is approaching. |
 | F6 | info | Xero documents skipped because they are still in draft or awaiting approval | Approve them in Xero to have them count. Drafts are not on the ledger, so Xero's own reports ignore them too. A draft bill understates spend and flatters runway; a draft invoice does the reverse. Voided and deleted documents are not counted here: they are decisions somebody already made, not a queue to clear. |
 | F2 | warning | Snapshot older than 2× the refresh interval | Press Refresh now, then look at Executions in the editor for why the trigger is failing. One missed run is a hiccup, two is a pattern. **Raised at serve time**, by `serveTimeHealth` in `getFilteredSnapshot_`, not by `buildHealth`: inside a refresh the snapshot is fresh by definition. The detail says how old the snapshot is and how often it is meant to refresh. |

@@ -43,6 +43,48 @@ function isArchivedSource_(name) {
 }
 
 /**
+ * Each archived source as a secured plan made of its own Xero actuals: a line per project
+ * and month it spent or earned in, so its money counts in the financial year it fell in.
+ *
+ * Archiving takes the sheet away, not the money. A grant that ends mid-year was part of
+ * that year's income and spend, and the reserves Xero reports already hold its cash, so
+ * dropping its actuals understated the year. With its actuals as its plan, every view that
+ * sets plan beside actual sees the two agree, and it never reads as spend with no budget.
+ * Project tracking, the timeline and the health checks are about live sheets and are not
+ * given it. A line with no project, or on an archived project, counts nowhere, as for any
+ * source. A name that still has a live sheet in `live` is left to that sheet, whose own plan
+ * already holds its actuals to date.
+ */
+function archivedPlan_(actualLines, live) {
+  const liveNames = {};
+  (live || []).forEach(b => { liveNames[b.name] = true; });
+  const bySource = {};
+  (actualLines || []).forEach(l => {
+    const fs = clean_(l.fundingSource || '');
+    if (!fs || !isArchivedSource_(fs) || liveNames[fs]) return;
+    if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
+    const mk = DateMath.monthKey(new Date(l.date));
+    const months = bySource[fs] || (bySource[fs] = {});
+    const e = months[l.project + '||' + mk] ||
+      (months[l.project + '||' + mk] = { project: l.project, mk: mk, cost: 0, income: 0 });
+    e[l.kind === 'expense' ? 'cost' : 'income'] += Number(l.amount) || 0;
+  });
+  return Object.keys(bySource).map(name => {
+    const lines = Object.keys(bySource[name]).sort().map(k => {
+      const e = bySource[name][k];
+      const p = e.mk.split('-');
+      const start = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, 1);
+      return { description: '(archived actuals)', milestone: '(unassigned)', item: '',
+        project: e.project, start: start,
+        end: new Date(start.getFullYear(), start.getMonth() + 1, 0),
+        cost: e.cost, income: e.income, contribution: e.income - e.cost };
+    });
+    return { name: name, status: 'secured', archived: true, projectFolder: lines[0].project,
+      metadata: {}, forecast: { cost: {}, income: {}, comments: {} }, lines: lines };
+  });
+}
+
+/**
  * The share of a funding source's income its Contribution policy expects to fund General.
  *
  * Since 2026-10-25 this moves no money: General takes each source's whole margin
@@ -381,7 +423,9 @@ function buildSnapshot() {
   // that count money (reservesOffsets_). Project tracking nets its own (netReservesTracking_).
   const offsets = reservesOffsets_(planned, exclusivityReps,
     CONFIG.PLAN_REMAINING ? DateMath.monthKey(now) : null);
-  const counted = planned.concat(offsets);
+  // Archived sources keep their money in the year it fell in, as plans of their own actuals
+  // (archivedPlan_). Counted only: tracking, the timeline and the checks keep live sheets.
+  const counted = planned.concat(archivedPlan_(actualLines, planned), offsets);
   const agg = aggregateBudgets_(counted, fy, exclusivityReps);
   const projects = agg.projects;             // name -> rollup accumulator
   const fundingSources = agg.fundingSources; // per-source summary
@@ -404,11 +448,8 @@ function buildSnapshot() {
   actualLines.forEach(l => {
     if (l.kind !== 'expense') return;
     if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
-    // An archived source's budget file is skipped by the crawl (collectStatusFolder_),
-    // so keeping its actuals guaranteed a mismatch: spend with no budget beside it,
-    // inflating org actuals and making the whole organisation look overspent.
-    // buildTimeline_ already filtered both, so the two views disagreed.
-    if (isArchivedSource_(l.fundingSource)) return;
+    // An archived source's spend stays in: its sheet is gone, but archivedPlan_ has put its
+    // actuals beside it as its plan, so it adds to the year without reading as overspent.
     const p = project_(l.project);
     p.actualExpense += l.amount;
     
@@ -457,13 +498,14 @@ function buildSnapshot() {
   const timeline = buildTimeline_(planned);
 
   // For the accountant's close, on the Health tab: grant income to release or defer, and
-  // spend expected but not in Xero. Before the runway, because the reserves Xero gives need
-  // the releases still to post.
+  // spend expected but not in Xero. Before the runway, because the working capital Xero
+  // gives needs the releases still to post.
   const quarterClose = buildQuarterClose_(judged, earnedBasis ? fetched : [], actualLines,
     tracking, quarterSortNum(currentQuarterLabel(now)));
 
   // Runway: cumulative income against cumulative spend, month by month, starting from the
-  // reserves on Cockpit Settings, whose last quarter-end row the refresh writes from Xero.
+  // working capital on the Cockpit Settings Reserves tab, whose last quarter-end row the
+  // refresh writes from Xero's Balance Sheet.
   const runway = buildRunway_(counted, actualLines, now, exclusivityReps, itemToMilestone,
     readReserves_(now, quarterClose));
 
@@ -516,7 +558,8 @@ function buildSnapshot() {
     exclusion: lastExclusionSummary(),
     unposted: lastUnpostedSummary(),
     secretsMissing: secretsMissing,
-    // F4: the connection predates the reports scope, so reserves could not be read.
+    // F4: the connection predates the reports scope, so working capital could not be read;
+    // F8: the Balance Sheet lacked a section it is added up from.
     reservesIssue: lastReservesIssue(),
     // So G3 can name which source had its cost suppressed and which carries it instead.
     exclusivity: { reps: exclusivityReps, suppressed: costSuppressed },
@@ -1083,8 +1126,8 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
 
   (actualLines || []).forEach(l => {
     // Same exclusions as the org totals, or runway would disagree with the cards above it.
+    // An archived source's money stays in, under the plan archivedPlan_ made of it.
     if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
-    if (isArchivedSource_(l.fundingSource)) return;
     const fs = l.fundingSource || '(unassigned)';
     // Money already spent or received is real whatever its sheet says, so a tag with no
     // sheet counts as secured.
@@ -1116,14 +1159,13 @@ function runwayParts_(budgets, actualLines, exclusivityReps, itemToMilestone) {
  * so the chart runs exactly the code the tests run here. It may not call
  * anything outside itself.
  *
- * On its own this is funded runway, not cash: the Xero scopes cannot reach a bank balance,
- * so it answers "when does the plan go underwater on money we have actually won". The
+ * On its own this is funded runway, not cash: it answers "when does the plan go underwater on money we have actually won". The
  * money already in hand comes from `reserves` ({ amount, month }, latestReserves_): the
- * free money at the end of `month` as the bookkeeper worked it out at a quarter close.
+ * working capital at the end of `month`, from Xero's Balance Sheet at a quarter close.
  * Every line moves by one amount so that its position at the end of that month is the
- * figure; from there on the secured line is reserves plus secured funding against the
- * plan, the organisation's actual runway. Only the whole organisation has reserves, so
- * the Overview passes them for that view alone.
+ * figure; from there on the secured line is working capital plus secured funding against
+ * the plan, the organisation's actual runway. Only the whole organisation has working
+ * capital, so the Overview passes it for that view alone.
  *
  * Months before the current one use Xero actuals; the current month and every month after
  * use the budget. The current month is deliberately budget rather than actual-so-far,
@@ -1246,6 +1288,33 @@ function runwayWalk_(parts, nowKey, months, reserves) {
       weighted: monthsUntil(nowKey, crossover.weighted),
       proposed: monthsUntil(nowKey, crossover.proposed)
     } };
+}
+
+/**
+ * Which of the runway chart's months it draws, true or false for each of `rows`
+ * (runwayWalk_'s months, { month: 'YYYY-MM', actual }, as cropped to the chart). The
+ * accountant posts the grant release journals only at each quarter end, so a month of actuals
+ * inside a quarter jumps when they land. Of the actual months the chart draws only the
+ * quarter ends, the third month of each quarter of a financial year starting in month
+ * `fyStartMonth` (1 to 12, April when not given), and its first point; every budget month is
+ * drawn, and so is the last point, where the line's label sits. Two more months are always
+ * drawn, given as 'YYYY-MM' or left out: `anchorMonth`, the working capital's month the
+ * lines start from (reserves.month), and `lastActualMonth`, whose position the today rule's
+ * label gives. Nothing is recomputed: the values, crossover and months of runway are the
+ * walk's, and the finance table its own.
+ *
+ * Self-contained on purpose, like runwayWalk_: the page receives this function's own source
+ * (Index.html), so it may not call anything outside itself.
+ */
+function runwayDrawn_(rows, fyStartMonth, anchorMonth, lastActualMonth) {
+  rows = rows || [];
+  const start = fyStartMonth || 4;
+  return rows.map((r, i) => {
+    if (!r.actual || i === 0 || i === rows.length - 1) return true;
+    if (r.month === anchorMonth || r.month === lastActualMonth) return true;
+    const m = parseInt(String(r.month).split('-')[1], 10);
+    return (m - start + 13) % 3 === 0;
+  });
 }
 
 /**

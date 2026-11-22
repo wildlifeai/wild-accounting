@@ -100,8 +100,9 @@ function computedKpis_(actualLines, budgets, runway, fyStartYear, now) {
   const ytd = { total: 0, earned: 0, funders: {} };
   (actualLines || []).forEach(l => {
     if (l.kind === 'expense') return;
+    // An archived source's income counts in the year it fell in, as in every other total;
+    // with no sheet to name its Funder, it counts under its own name.
     if (!l.project || startsWith_(l.project, CONFIG.ARCHIVE_PREFIX)) return;
-    if (isArchivedSource_(l.fundingSource)) return;
     const q = quarterOfMonthKey_(DateMath.monthKey(new Date(l.date)));
     if (q.indexOf(fy) !== 0) return;
     const amount = Number(l.amount) || 0;

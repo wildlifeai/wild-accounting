@@ -154,11 +154,12 @@ function name silently collide, last definition winning.
   collision was hidden only because the former was wrapped in a closure; flattening it for
   deployment exposed the clash, which is why the underscore convention is enforced.
 * Name top-level constants distinctly, so a new file cannot shadow an existing one.
-* `runwayWalk_` and `financeTable_` also run in the browser: `Index.html` sends each one's own
-  source (`fn.toString()`), so the page runs exactly the code the tests run. Each must stay
-  self-contained, calling nothing outside itself, or the page breaks while every server test
-  passes. A test runs `financeTable_` rebuilt from its source alone; extend that guard to any
-  function added the same way.
+* `runwayWalk_`, `runwayDrawn_`, `financeTable_` and `budgetToDateOf_` also run in the
+  browser: `Index.html` sends each one's own source (`fn.toString()`), so the page runs exactly
+  the code the tests run. Each must stay self-contained, calling nothing outside itself, or
+  the page breaks while every server test passes. Tests run `financeTable_`, `runwayDrawn_`
+  and `budgetToDateOf_` rebuilt from their source alone; extend that guard to any function
+  added the same way.
 
 ---
 
@@ -220,7 +221,7 @@ Budgets/
     proposed/           -> status 'proposed'
     archived/           not read; each sheet named like a funding source, with or without
                         Z_ARCH_ or Z_ARCHIVED_, marks that Xero tag as archived
-                        (archivedSourceName_), so its actuals leave the totals too
+                        (archivedSourceName_), so its actuals count as its own plan
 ```
 
 Rules that follow from this:
@@ -228,9 +229,11 @@ Rules that follow from this:
 * A funding-source sheet is **named exactly as its Xero *Funding source* tracking value**.
 * Status comes from the folder. *Secured* means `secured/` only; *proposed* means secured plus
   proposed.
-* An archived source is archived everywhere: `isArchivedSource_` is the one definition, and it
-  drops the source's actuals as well as its sheet, even though Xero keeps the tracking value's
-  original name forever.
+* `isArchivedSource_` is the one definition of an archived source, matching the bare name too,
+  because Xero keeps the tracking value's original name forever. Archiving drops the sheet, not
+  the money: `archivedPlan_` makes the source's actuals its secured plan for the months they fall
+  in, so they count in that financial year's totals, the runway and the board's finance.
+  Project tracking, the timeline and the health checks (D1 aside) leave it out.
 * A funding source can span projects: the per-line `Project` column overrides the parent folder.
 * Xero transactions must carry **both** tracking categories plus the item code. A line with no
   `Projects` value is dropped from project and organisation totals (D1); a line with no `Funding
@@ -255,8 +258,10 @@ changing code:
   and `*Account` where an older sheet still has one, though nothing uses it. Required: `Start`,
   `End`, `Cost`.
 * **Forecasts are per sheet**, on each funding source's own `Forecast` tab, read by
-  `parseForecastTab_`. The central sheet, Cockpit Settings, holds only the Permissions and
-  Reserves tabs (`Permissions.js`).
+  `parseForecastTab_`. The central sheet, Cockpit Settings, holds the Permissions, `Reserves`
+  (working capital) and `Board budget` tabs (`Permissions.js`). A `Board budget` row naming a
+  quarter in column G is that quarter's (`boardBudgetRows_`), blank is the whole year, so a
+  six-column tab still reads; never sum or split one kind into the other.
 * **A milestone row with no forecast falls back to the budget baseline**, never to zero.
   `forecastOrBaseline_` in `ForecastEngine.js` is the one statement of that rule, used by the
   tracking grid, D5 and E2. Reading zero made every source with an unmaintained `Forecast` tab look
@@ -293,11 +298,20 @@ Never add a code path that drops data without a finding.
 * **Balance-sheet accounts are excluded** by account **code**, in `fetchXeroActuals`, so a Xero
   rename cannot un-exclude one (`EXCLUDED_ACCOUNTS`, reported by F5).
 * Scopes: `offline_access accounting.transactions.read accounting.settings.read
-  accounting.reports.read`, the last for the Balance Sheet the reserves come from. Xero has
-  deprecated the broad scopes in favour of granular ones (this app keeps them to September 2027);
-  scopes are additive and cannot be removed from a live token without re-consent, so plan
+  accounting.reports.read`, the last for the Balance Sheet the working capital comes from. Xero
+  has deprecated the broad scopes in favour of granular ones (this app keeps them to September
+  2027); scopes are additive and cannot be removed from a live token without re-consent, so plan
   changes rather than making them casually. A token granted before a scope was added is refused
   that scope's endpoints, which F4 reports.
+* **Working capital comes from the Balance Sheet's section totals, never from named
+  accounts.** It is the Treasurer's definition: current assets including bank, less current
+  liabilities; reserves are equity. `workingCapitalFromBalanceSheet_` takes `Bank` plus
+  `Current Assets` less `Current Liabilities` (titles in `CONFIG.RESERVES`), plus the releases
+  Quarter close says are still to post. A report lacking a section writes nothing and raises F8; do
+  not fall back to a guess. The refresh tells its own rows from typed ones by the `From Xero: `
+  prefix in column C (`RESERVES_AUTO_NOTE`), so never change that prefix: rows already written
+  would read as typed and stop updating. The Cockpit Settings tab keeps the name `Reserves`, or
+  the refresh would start a new, empty tab; it is not the `Reserves` funding source in §5.
 
 ## Payroll
 
@@ -352,7 +366,12 @@ sheets: `reportMargins()` prints the current ones, beside what each policy expec
 
 `marginRule_` and `lineMargin_` in `Aggregator.js` are the one statement of the rule, used by the
 Overview, the runway, the timeline and General's tracking view (`marginMilestones_`).
-Organisation totals and runway do not move; only the split between projects does.
+Organisation totals and runway do not move; only the split between projects does. The board's
+finance table is the one exception: grouped by project, `financeTable_` returns each
+`(margin)` part to the source's projects, month by month in proportion to their net income,
+so a project shows what its funders give and General only its own, and counts a share when
+its project is ticked, whether or not General is. Do not take margins out of the parts to get
+that: the chart and Project tracking still route General's share through them.
 
 The `Contribution policy` is the margin a source is expected to leave, read by
 `contributionRate_`. G1 checks a source's margin against it with ten points either side

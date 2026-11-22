@@ -324,6 +324,23 @@ function runTests() {
   addInto_(accQ, { '26/27 Q1': 7 });
   check('addInto_ accumulates rather than overwrites',
     accQ['26/27 Q1'] === 17 && accQ['26/27 Q2'] === 5);
+  // Day weighting counts calendar days in every time zone: a 23- or 25-hour day at a
+  // daylight-saving change is still one day. At one per day, a line then costs each month
+  // its days and sums to its own cost. The years include changes on a month's last day,
+  // which subtracting Dates dropped from the month but kept in the line: 31 Oct 2027 in
+  // Europe, 30 Sep 2029 in New Zealand.
+  var calendarDays = true;
+  for (var fyYear = 2024; fyYear <= 2030; fyYear++) {
+    var perDay = { start: d(fyYear, 4, 1), end: d(fyYear + 1, 3, 31) };
+    perDay.cost = DateMath.daysInclusive(perDay.start, perDay.end);
+    var perDayMonths = distributeByMonth_([perDay], 'cost');
+    Object.keys(perDayMonths).forEach(function (k) {
+      if (perDayMonths[k] !== Math.round(perDayMonths[k])) calendarDays = false;
+    });
+    if (sumMap(perDayMonths) !== perDay.cost ||
+        perDay.cost !== (fyYear % 4 === 3 ? 366 : 365)) calendarDays = false;
+  }
+  check('dates: day weighting counts calendar days, the same in every time zone', calendarDays);
 
   // The C, D and E checks. All were unimplementable until sheets carried Owner, Status,
   // Funding end and Contribution policy. `now` is injected so they stay reproducible.
@@ -407,7 +424,7 @@ function runTests() {
     d3.lines[0].date === '2026-07-01' && d3.lines[0].document === 'Bill INV-7' &&
     d3.lines[0].contact === 'Acme Ltd' && d3.lines[0].description === 'Refund of deposit' &&
     d3.lines[0].fundingSource === 'XXX_27_GOOD');
-  // Archived spend is out of every total and grid, so coding it better changes nothing.
+  // No grid tracks archived spend, so an item code on it would change nothing.
   check('D3 leaves out archived spend, by source or by project',
     idsFor([sheet_()], [
       spend_(900, '2026-07-01', { item: '', fundingSource: CONFIG.ARCHIVE_PREFIX + 'General' }),
@@ -432,9 +449,11 @@ function runTests() {
       [spend_(500, '2026-02-01')]).indexOf('D6') === -1 &&
     idsFor([sheet_({ metadata: { 'funding end': '31/Dec/25' } })],
       [spend_(500, '2026-05-01')]).indexOf('D6') !== -1);
-  check('D1 leaves out archived spend too',
+  // An archived source's spend counts in its year, so a line of it with no project is
+  // dropped from a total it would otherwise be in.
+  check('D1 names an archived source\'s spend with no project',
     idsFor([sheet_()], [spend_(900, '2026-07-01',
-      { project: '', fundingSource: CONFIG.ARCHIVE_PREFIX + 'General' })]).indexOf('D1') === -1);
+      { project: '', fundingSource: CONFIG.ARCHIVE_PREFIX + 'General' })]).indexOf('D1') !== -1);
   var d1 = hOf(buildHealth([sheet_()], [spend_(900, '2026-07-01', { project: '' })],
     { now: NOW, xeroConnected: true }), 'D1');
   check('D1 lists its lines', d1 && d1.lines.length === 1 && d1.lines[0].amount === 900);
@@ -908,56 +927,237 @@ function runTests() {
   check('quarter close: finished quarters only, latest first',
     qc.quarters.join('|') === '26/27 Q2|26/27 Q1');
 
-  // ---- reserves from Xero's Balance Sheet ------------------------------------
-  // Account rows sit inside nested sections; the first value column is the date asked for.
-  var bsRow = function (name, id, now, before) {
-    return { RowType: 'Row', Cells: [
-      { Value: name, Attributes: [{ Id: 'account', Value: id }] },
-      { Value: now }, { Value: before }] };
+  // ---- working capital from Xero's Balance Sheet -------------------------------
+  // Invented figures. Xero's standard report: an empty Assets heading, then Bank, Current
+  // Assets and Fixed Assets side by side, each with its own total row, untitled sections for
+  // the grand totals, and the same again for liabilities. The first value column is the date
+  // asked for; the second compares an earlier date and must be ignored.
+  var bsRow = function (name, now) {
+    return { RowType: 'Row', Cells: [{ Value: name }, { Value: now }, { Value: '1.00' }] };
   };
-  var bs = parseBalanceSheet_({ Rows: [
-    { RowType: 'Header', Cells: [{ Value: '' }, { Value: '30 Sep 2026' }, { Value: '30 Sep 2025' }] },
-    { RowType: 'Section', Title: 'Assets', Rows: [
-      { RowType: 'Section', Title: 'Bank', Rows: [
-        bsRow('WILDLIFE.AI TRUST', 'id-600', '80000.50', '1.00'),
-        bsRow('ANZ Term Deposit', 'id-605', '30000.00', '1.00'),
-        { RowType: 'SummaryRow', Cells: [{ Value: 'Total Bank' }, { Value: '110000.50' }] }] },
-      { RowType: 'Section', Title: 'Current Assets', Rows: [
-        bsRow('Accounts Receivable', 'id-610', '2000', '0')] }] },
-    { RowType: 'Section', Title: 'Liabilities', Rows: [
-      bsRow('Accounts Payable', 'id-800', '12000', '0'),
-      bsRow('Unused Donations and Grants with Conditions', 'id-8xx', '50000', '0')] }
-  ] }, { 'id-600': '600', 'id-605': '605' });
-  check('balance sheet: bank rows by code, from the first value column, totals skipped',
-    bs.byCode['600'] === 80000.5 && bs.byCode['605'] === 30000 && !bs.byName['Total Bank']);
-  var resX = reservesFromBalanceSheet_(bs, 38000);
-  // 80000.5 + 30000 + 2000 owed to us - 12000 to pay - 50000 in advance + 38000 unposted.
-  check('reserves from Xero: bank and invoices owed to us, less bills to pay and in advance, ' +
-    'plus unposted releases', resX.amount === 88001);
-  check('reserves from Xero: the note shows each part',
-    resX.note.indexOf(RESERVES_AUTO_NOTE) === 0 &&
-    resX.note.indexOf('Accounts Receivable 2000') !== -1 &&
-    resX.note.indexOf('Accounts Payable 12000') !== -1 &&
-    resX.note.indexOf('releases not yet posted 38000') !== -1);
-  check('reserves from Xero: an in-advance account not on the sheet counts as nothing, and says so',
-    reservesFromBalanceSheet_({ byCode: { '600': 100 }, byName: {} }, 0).note
-      .indexOf('not on the balance sheet') !== -1);
+  var bsTotal = function (name, now) {
+    return { RowType: 'SummaryRow', Cells: [{ Value: name }, { Value: now }, { Value: '1.00' }] };
+  };
+  var bsSec = function (title, rows) { return { RowType: 'Section', Title: title, Rows: rows }; };
+  var bsLiabilities = [
+    bsRow('Accounts Payable', '12000.00'), bsRow('GST', '3000.00'),
+    bsRow('PAYE Payable', '1500.00'), bsRow('Grants Received in Advance', '50,000.00')];
+  var xeroBs = function (liabilityRows, liabilityTotal) {
+    return { Rows: [
+      { RowType: 'Header', Cells: [{ Value: '' }, { Value: '30 Sep 2026' },
+        { Value: '30 Sep 2025' }] },
+      bsSec('Assets', []),
+      bsSec('Bank', [bsRow('Cheque account', '80,000.00'), bsRow('Term deposit', '30,000.00'),
+        bsTotal('Total Bank', '110,000.00')]),
+      bsSec('Current Assets', [bsRow('Accounts Receivable', '2000.00'),
+        bsRow('Prepayments', '500.00'), bsTotal('Total Current Assets', '2500.00')]),
+      bsSec('Fixed Assets', [bsRow('Computer Equipment', '4000.00'),
+        bsTotal('Total Fixed Assets', '4000.00')]),
+      bsSec('', [bsTotal('Total Assets', '116,500.00')]),
+      bsSec('Liabilities', []),
+      bsSec('Current Liabilities', liabilityRows.concat(liabilityTotal === undefined ? []
+        : [bsTotal('Total Current Liabilities', liabilityTotal)])),
+      bsSec('Non-current Liabilities', [bsRow('Loan', '7000.00'),
+        bsTotal('Total Non-current Liabilities', '7000.00')]),
+      bsSec('', [bsTotal('Total Liabilities', '73,500.00')]),
+      bsSec('', [bsRow('Net Assets', '43,000.00')]),
+      bsSec('Equity', [bsRow('Retained Earnings', '43,000.00'),
+        bsTotal('Total Equity', '43,000.00')])
+    ] };
+  };
+  var bs = parseBalanceSheet_(xeroBs(bsLiabilities, '66,500.00'));
+  var bsS = bs.sections;
+  check('balance sheet: section totals from the first value column, Xero\'s own total rows',
+    bsS['bank'].total === 110000 && bsS['current assets'].total === 2500 &&
+    bsS['current liabilities'].total === 66500 && bsS['equity'].total === 43000);
+  check('balance sheet: empty headings total nothing, untitled sections are not sections',
+    bsS['assets'].total === 0 && bsS['liabilities'].total === 0 && bsS[''] === undefined);
+
+  var wcX = workingCapitalFromBalanceSheet_(bs, 38000);
+  // 110000 bank + 2500 current assets - 66500 current liabilities + 38000 unposted.
+  check('working capital: Bank and Current Assets as separate sections, less Current ' +
+    'Liabilities, plus unposted releases', wcX.amount === 84000 && !wcX.missing);
+  check('working capital: the note names each part',
+    wcX.note.indexOf(RESERVES_AUTO_NOTE) === 0 &&
+    wcX.note.indexOf('Bank 110000, plus Current Assets 2500') !== -1 &&
+    wcX.note.indexOf('less Current Liabilities 66500') !== -1 &&
+    wcX.note.indexOf('releases not yet posted 38000') !== -1);
+  // The Treasurer's definitions: equity differs from working capital only by fixed and
+  // non-current items.
+  check('working capital: equity less fixed assets, plus non-current liabilities',
+    workingCapitalFromBalanceSheet_(bs, 0).amount ===
+      bsS['equity'].total - bsS['fixed assets'].total + bsS['non-current liabilities'].total);
+  // With no total row, a section is its rows: every current liability comes off, whatever
+  // the accountant named it, which a list of account names could not promise.
+  var wcOf = function (rows) {
+    return workingCapitalFromBalanceSheet_(parseBalanceSheet_(xeroBs(rows)), 0).amount;
+  };
+  check('working capital: GST and PAYE come off',
+    wcOf([bsLiabilities[0]]) - wcOf(bsLiabilities.slice(0, 3)) === 4500);
+  check('working capital: grants held in advance come off under any account name',
+    wcOf(bsLiabilities.slice(0, 3)) - wcOf(bsLiabilities) === 50000 &&
+    wcOf(bsLiabilities) === wcX.amount - 38000);
+
+  // Bank inside Current Assets is in that section's total already, with or without its row.
+  var nestedBs = function (withTotal) {
+    return parseBalanceSheet_({ Rows: [
+      bsSec('Assets', [bsSec('Current Assets', [
+        bsSec('Bank', [bsRow('Cheque account', '110,000.00'),
+          bsTotal('Total Bank', '110,000.00')]),
+        bsRow('Accounts Receivable', '2500.00')].concat(withTotal
+          ? [bsTotal('Total Current Assets', '112,500.00')] : []))]),
+      bsSec('Liabilities', [bsSec('Current Liabilities', bsLiabilities)])
+    ] });
+  };
+  var wcNested = workingCapitalFromBalanceSheet_(nestedBs(true), 0);
+  check('working capital: Bank inside Current Assets counts once',
+    wcNested.amount === 46000 &&
+    workingCapitalFromBalanceSheet_(nestedBs(false), 0).amount === 46000 &&
+    wcNested.note.indexOf('Current Assets 112500 (Bank 110000 included)') !== -1);
+  var noBank = parseBalanceSheet_({ Rows: [
+    bsSec('Current Assets', [bsRow('Cheque account', '110,000.00'),
+      bsRow('Accounts Receivable', '2500.00')]),
+    bsSec('Current Liabilities', bsLiabilities)] });
+  var wcNoBank = workingCapitalFromBalanceSheet_(noBank, 0);
+  check('working capital: no Bank section takes the bank to be in Current Assets, and says so',
+    wcNoBank.amount === 46000 && wcNoBank.note.indexOf('no Bank section') !== -1);
+
+  var noLiab = parseBalanceSheet_({ Rows: [
+    bsSec('Bank', [bsRow('Cheque account', '110,000.00')])] });
+  check('working capital: no Current Liabilities section is no figure, and says which',
+    JSON.stringify(workingCapitalFromBalanceSheet_(noLiab, 0)) ===
+      '{"missing":["Current Liabilities"]}');
+  check('working capital: no asset section is no figure either',
+    JSON.stringify(workingCapitalFromBalanceSheet_(parseBalanceSheet_({ Rows: [] }), 0)) ===
+      '{"missing":["Bank or Current Assets","Current Liabilities"]}');
   check('reserves from Xero: releases still to post, cumulative to the quarter',
     unpostedReleases_(qc, '26/27 Q1') === -400 && unpostedReleases_(qc, '26/27 Q2') === 100);
-  var f4 = function (issue) {
+
+  // The refresh's write to the Reserves tab, on a sheet and a report standing in for Drive
+  // and Xero. A refresh in October writes the row for 30 September.
+  var wcSheet = function (rows) {
+    return { rows: [CONFIG.RESERVES.HEADER].concat(rows),
+      getDataRange: function () {
+        var s = this;
+        return { getValues: function () {
+          return s.rows.map(function (r) { return r.slice(); });
+        } };
+      },
+      appendRow: function (r) { this.rows.push(r); },
+      getRange: function (row) {
+        var s = this;
+        return { setValues: function (v) { s.rows[row - 1] = v[0]; } };
+      } };
+  };
+  var wcFetched = 0;
+  var wcFetch = function (report) {
+    return function () { wcFetched++; return parseBalanceSheet_(report); };
+  };
+  var wcNow = d(2026, 10, 5), wcEnd = d(2026, 9, 30);
+  var typed = wcSheet([[wcEnd, 70000, 'Typed from the Treasurer\'s working paper']]);
+  _lastReservesIssue = null;
+  syncReservesFromXero_(typed, wcNow, null, wcFetch(xeroBs(bsLiabilities, '66,500.00')));
+  check('working capital: a row typed for the date wins, and Xero is not asked',
+    typed.rows.length === 2 && typed.rows[1][1] === 70000 && wcFetched === 0);
+  var written = wcSheet([[d(2026, 6, 30), 60000, 'typed'],
+    [wcEnd, 99000, RESERVES_AUTO_NOTE + 'an earlier refresh']]);
+  syncReservesFromXero_(written, wcNow, null, wcFetch(xeroBs(bsLiabilities, '66,500.00')));
+  check('working capital: the row a refresh wrote is replaced in place',
+    written.rows.length === 3 && written.rows[2][1] === 46000 &&
+    written.rows[2][0].getTime() === wcEnd.getTime() && written.rows[1][1] === 60000 &&
+    latestReserves_(written.rows.slice(1), wcNow).amount === 46000);
+  var fresh = wcSheet([]);
+  syncReservesFromXero_(fresh, wcNow, null, wcFetch(xeroBs(bsLiabilities, '66,500.00')));
+  check('working capital: a quarter end with no row gets one',
+    fresh.rows.length === 2 && fresh.rows[1][1] === 46000 && _lastReservesIssue === null);
+  var gap = wcSheet([[wcEnd, 99000, RESERVES_AUTO_NOTE + 'an earlier refresh']]);
+  syncReservesFromXero_(gap, wcNow, null, wcFetch({ Rows: [
+    bsSec('Bank', [bsRow('Cheque account', '110,000.00')])] }));
+  check('working capital: a report missing a section writes nothing and raises the issue',
+    gap.rows.length === 2 && gap.rows[1][1] === 99000 && !!_lastReservesIssue &&
+    _lastReservesIssue.kind === 'sections' && _lastReservesIssue.asAt === '2026-09-30' &&
+    _lastReservesIssue.missing.join() === 'Current Liabilities');
+  var sectionsIssue = _lastReservesIssue;
+  _lastReservesIssue = null;
+  syncReservesFromXero_(wcSheet([]), wcNow, null, function () {
+    throw new Error('Xero API 403 on /Reports/BalanceSheet');
+  });
+  check('working capital: Xero refusing the report is the scope issue',
+    !!_lastReservesIssue && _lastReservesIssue.kind === 'scope');
+  _lastReservesIssue = null;
+
+  var fIds = function (issue) {
     return buildHealth([], [], { now: d(2026, 10, 5), xeroConnected: true,
       exclusion: { count: 0, total: 0 }, unposted: { count: 0, total: 0 },
       secretsMissing: [], reservesIssue: issue })
-      .filter(function (f) { return f.id === 'F4'; }).length;
+      .filter(function (f) { return f.id === 'F4' || f.id === 'F8'; });
   };
-  check('F4 when Xero refused the Balance Sheet, quiet otherwise',
-    f4('scope') === 1 && f4(null) === 0);
+  var f8 = fIds(sectionsIssue);
+  check('F4 when Xero refused the Balance Sheet, F8 when it lacked a section, quiet otherwise',
+    fIds({ kind: 'scope' }).map(function (f) { return f.id; }).join() === 'F4' &&
+    f8.map(function (f) { return f.id; }).join() === 'F8' &&
+    f8[0].detail.indexOf('2026-09-30 has no Current Liabilities section') !== -1 &&
+    fIds(null).length === 0);
 
   // The page receives runwayWalk_ as its own source (Index.html), so it must stand alone:
   // a call to any server helper would work here and throw in the browser.
   check('runway: the walk calls nothing outside itself',
     !/\b(round_|monthsUntil_|addInto_|scaleMap_|distributeByMonth_|CONFIG|DateMath|clean_)\b/
       .test(runwayWalk_.toString()));
+
+  // The chart draws, of the months gone, only the quarter ends and its first point, since
+  // the release journals land at quarter ends; every budget month as before.
+  var rdPart = { project: 'P', fundingSource: 'S', milestone: 'M', status: 'secured',
+    probability: 1, cost: {}, income: {}, actualCost: {}, actualIncome: {} };
+  ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10']
+    .forEach(function (k) {
+      rdPart.actualCost[k] = 100;
+      rdPart.actualIncome[k] = k === '2026-06' || k === '2026-09' ? 300 : 0;
+    });
+  ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03'].forEach(function (k) {
+    rdPart.cost[k] = 300;
+  });
+  var rdWalk = runwayWalk_([rdPart], '2026-11', undefined,
+    { amount: 1000, month: '2026-09' });
+  var rdTable = financeTable_([rdPart], '2026-11',
+    [{ label: '26/27', from: '2026-04', to: '2027-03' }], 'project', 'General');
+  var rdBefore = JSON.stringify([rdWalk, rdTable]);
+  var rdDrawn = runwayDrawn_(rdWalk.months, 4);
+  var rdShown = function (rows, drawn) {
+    return rows.filter(function (r, i) { return drawn[i]; })
+      .map(function (r) { return r.month; }).join();
+  };
+  check('runway chart: of the months gone, only the quarter ends and the first are drawn',
+    rdShown(rdWalk.months, rdDrawn) ===
+      '2026-04,2026-06,2026-09,2026-11,2026-12,2027-01,2027-02,2027-03');
+  check('runway chart: what is drawn moves no value, crossover, runway or table',
+    JSON.stringify([rdWalk, rdTable]) === rdBefore && rdWalk.crossover.secured === '2027-02' &&
+    rdWalk.monthsOfRunway.secured === 3 &&
+    rdDrawn[rdWalk.months.map(function (r) { return r.month; }).indexOf('2027-02')] &&
+    rdWalk.months.every(function (r, i) { return r.actual || rdDrawn[i]; }));
+  var rdJan = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07']
+    .map(function (k) { return { month: k, actual: true }; });
+  check('runway chart: quarter ends follow the financial year, and the last point stays',
+    rdShown(rdJan, runwayDrawn_(rdJan, 1)) === '2026-01,2026-03,2026-06,2026-07' &&
+    runwayDrawn_([]).length === 0);
+  // A refresh in December with a typed Reserves row for 30 November: November is the month
+  // the lines start from and the last of actuals, so it is drawn, and the line passes through
+  // the position the today rule names rather than cutting from September to December.
+  var rdDec = runwayWalk_([rdPart], '2026-12', undefined, { amount: 1000, month: '2026-11' });
+  var rdNov = rdDec.months.map(function (r) { return r.month; }).indexOf('2026-11');
+  check('runway chart: the working capital\'s month, the last of actuals, is always drawn',
+    rdNov !== -1 && rdDec.months[rdNov].actual && !runwayDrawn_(rdDec.months, 4)[rdNov] &&
+    runwayDrawn_(rdDec.months, 4, '2026-11', '2026-11')[rdNov] &&
+    rdDec.months[rdNov].secured - rdDec.months[rdNov].spend === rdDec.openingNet);
+  var rdOct = runwayDrawn_(rdDec.months, 4, '2026-10', '2026-11');
+  check('runway chart: the working capital\'s month and the last actual month each stay drawn',
+    rdShown(rdDec.months, rdOct) ===
+      '2026-04,2026-06,2026-09,2026-10,2026-11,2026-12,2027-01,2027-02,2027-03');
+  var rdAlone = new Function('return ' + runwayDrawn_.toString())();
+  check('runway chart: the page runs which months are drawn from its own source',
+    JSON.stringify(rdAlone(rdWalk.months, 4)) === JSON.stringify(rdDrawn) &&
+    JSON.stringify(rdAlone(rdDec.months, 4, '2026-10', '2026-11')) === JSON.stringify(rdOct) &&
+    !/\b(CONFIG|DateMath|fyStartMonth_|qiOfMonthKey_)\b/.test(runwayDrawn_.toString()));
 
   // Parts split income the way the cards do: the source's whole margin, half its income
   // here whatever its 40% policy says, moves from a non-General line to a "(margin)" part
@@ -1018,14 +1218,48 @@ function runTests() {
   check('archived: an empty tag is not archived, it is unassigned',
     isArchivedSource_('') === false && isArchivedSource_(null) === false);
 
+  // Archiving takes the sheet away, not the money: what an archived source spent or earned
+  // counts in the month and year it fell in.
   var rwArchName = buildRunway_([
     mSrc('A', 'secured', {}, [mLine(2026, 6, 4000, 0)])
   ], [
     { date: new Date(2026, 4, 10), amount: 7777, kind: 'expense',
       project: 'P', fundingSource: 'WW_25_OLD', item: '' }
   ], rwNow, {});
-  check('archived: spend on an archived source stays out of runway',
-    rwArchName.openingNet === 0);
+  check('archived: spend on an archived source counts in runway, in the month it fell in',
+    rwArchName.openingNet === -7777);
+
+  var archLines = [
+    { date: new Date(2026, 4, 10), amount: 7777, kind: 'expense',
+      project: 'P', fundingSource: 'WW_25_OLD', item: '' },
+    { date: new Date(2026, 4, 20), amount: 1000, kind: 'income',
+      project: 'P', fundingSource: 'WW_25_OLD', item: '' },
+    { date: new Date(2026, 5, 2), amount: 50, kind: 'expense',
+      project: 'P', fundingSource: CONFIG.ARCHIVE_PREFIX + 'WW_25_OLD', item: '' },
+    { date: new Date(2026, 4, 10), amount: 300, kind: 'expense',
+      project: 'P', fundingSource: 'WW_25_TOI', item: '' },
+    { date: new Date(2026, 4, 10), amount: 400, kind: 'expense',
+      project: CONFIG.ARCHIVE_PREFIX + 'Old', fundingSource: 'WW_25_OLD', item: '' }
+  ];
+  var archPlan = archivedPlan_(archLines);
+  var archOld = archPlan.filter(function (s) { return s.name === 'WW_25_OLD'; })[0];
+  check('archived plan: a secured source per archived tag, none for a live one',
+    archPlan.length === 2 && !!archOld && archOld.status === 'secured' &&
+    archPlan.every(function (s) { return s.name !== 'WW_25_TOI'; }));
+  check('archived plan: its actuals by project and month are its lines',
+    archOld.lines.length === 1 && archOld.lines[0].cost === 7777 &&
+    archOld.lines[0].income === 1000 && archOld.lines[0].project === 'P');
+  check('archived plan: spend on an archived project counts nowhere',
+    archPlan.every(function (s) {
+      return s.lines.every(function (l) { return l.project === 'P'; });
+    }));
+  check('archived plan: a name with a live sheet is left to that sheet',
+    archivedPlan_(archLines, [{ name: 'WW_25_OLD' }]).every(function (s) {
+      return s.name !== 'WW_25_OLD';
+    }));
+  var archAgg = aggregateBudgets_(archPlan, fyBounds_(rwNow), {});
+  check('archived plan: its plan equals its spend, so it never reads as unbudgeted',
+    archAgg.budgetByKey['P||WW_25_OLD||(unassigned)'].budget === 7777);
   setArchivedSourceNames_({}); // shared global: leave it as it was found
 
   // Only a funding-source name in archived/ hides a Xero tag. An old budget called
@@ -2067,12 +2301,17 @@ function runTests() {
   check('board budget: the tab gives a row per year and project, with its amounts',
     bdBudget.length === 2 && bdBudget[0].income === 2000 && bdBudget[0].cost === 1500 &&
     bdBudget[1].reserves === 4000);
+  check('board budget: a six-column row is the whole year, and a blank amount is none',
+    bdBudget[0].quarter === null && bdBudget[1].quarter === null &&
+    bdBudget[1].income === null && bdBudget[1].cost === null);
   var bdSpy = bdFig(bd, 'Spyfish Aotearoa', '26/27', 'expected');
-  check('finance: a project shows its funders\' income and the margin it passes to General',
-    bdSpy.income === 1500 && bdSpy.margin === -500 && bdSpy.cost === 1000 && bdSpy.surplus === 500);
-  check('finance: General shows the margins it receives on their own line',
-    bdFig(bd, 'General', '26/27', 'expected').margin === 500 &&
-    bdFig(bd, 'General', '26/27', 'expected').income === 500);
+  check('finance: by project, a project shows its income as its funders give it, no margin',
+    bdSpy.income === 1500 && bdSpy.cost === 1000 && bdSpy.surplus === 500 &&
+    !('margin' in bdSpy));
+  check('finance: by project, General shows only its own income and cost',
+    bdFig(bd, 'General', '26/27', 'expected').income === 500 &&
+    bdFig(bd, 'General', '26/27', 'expected').cost === 1000 &&
+    bdFig(bd, 'General', '26/27', 'expected').surplus === -500);
   check('finance: actual is the months before this one',
     bdFig(bd, 'Spyfish Aotearoa', '26/27', 'actual').income === 500 &&
     bdFig(bd, 'Spyfish Aotearoa', '26/27', 'actual').cost === 400);
@@ -2087,16 +2326,108 @@ function runTests() {
     bdFig(bd, 'All', '26/27', 'expected').cost === 2400);
   check('finance: each year holds only its own months',
     bdFig(bd, 'General', '27/28', 'secured').cost === 2000);
+  // The margins net to zero across projects: the projects and General add up to the
+  // organisation, and the table is the one the parts would give had no margin been moved.
+  var bdScs = ['actual', 'secured', 'expected', 'full'];
+  check('finance: by project, the groups add up to the organisation in every year and case',
+    bdYears.every(function (y) {
+      return bdScs.every(function (sc) {
+        var t = bd.filter(function (g) { return g.key !== 'All'; }).reduce(function (a, g) {
+          var f = g.years[y.label] && g.years[y.label][sc];
+          return f ? { income: a.income + f.income, cost: a.cost + f.cost } : a;
+        }, { income: 0, cost: 0 });
+        var o = bdFig(bd, 'All', y.label, sc);
+        return t.income === o.income && t.cost === o.cost;
+      });
+    }));
+  var bdGross = bdParts.filter(function (p) {
+    return p.milestone !== marginMilestone_(p.fundingSource);
+  }).map(function (p) {
+    return p.fundingSource !== 'XXX_27_P' ? p : Object.assign({}, p,
+      { income: { '2026-11': 1000 }, actualIncome: { '2026-08': 500 } });
+  });
+  check('finance: by project, the table is the one with no margin moved, totals included',
+    JSON.stringify(financeTable_(bdGross, '2026-10', bdYears, 'project', 'General')) ===
+      JSON.stringify(bd));
+  // From the parts the runway builds: the source's whole margin is General's there and back
+  // in its project's income here, so General, with no work of its own, has no group.
+  var bdFromParts = financeTable_(rwParts, '2026-06', [{ label: '26/27', from: '2026-04',
+    to: '2027-03' }], 'project', CONFIG.GENERAL_PROJECT);
+  check('finance: from runway parts, the margin is back in its project\'s income',
+    bdFromParts.map(function (g) { return g.key; }).join() === 'P,All' &&
+    bdFig(bdFromParts, 'P', '26/27', 'expected').income === 1200 &&
+    bdFig(bdFromParts, 'P', '26/27', 'actual').income === 200 &&
+    bdFig(bdFromParts, 'All', '26/27', 'expected').income === 1200);
+  // One source, two projects: 1,000 against 600 for one and 500 against 300 for the other,
+  // the second's spread over two months, and actual income for both. Each gets back the
+  // margin its own income gave, month by month, not the largest project all of it.
+  var bdProj = function (l, project) { return Object.assign(l, { project: project }); };
+  var bdTwo = runwayParts_([mSrc('S', 'secured', {}, [
+    bdProj(mLine(2026, 10, 600, 1000), 'Wildlife Watcher'),
+    bdProj(mLine(2026, 10, 150, 250), 'Spyfish Aotearoa'),
+    bdProj(mLine(2026, 11, 150, 250), 'Spyfish Aotearoa')])],
+  [{ date: new Date(2026, 4, 10), amount: 400, kind: 'income', project: 'Wildlife Watcher',
+    fundingSource: 'S', item: '' },
+  { date: new Date(2026, 4, 12), amount: 200, kind: 'income', project: 'Spyfish Aotearoa',
+    fundingSource: 'S', item: '' }], {}, {});
+  var bdTwoYear = [{ label: '26/27', from: '2026-04', to: '2027-03' }];
+  var bdTwoT = financeTable_(bdTwo, '2026-08', bdTwoYear, 'project', CONFIG.GENERAL_PROJECT);
+  var bdTwoWw = bdFig(bdTwoT, 'Wildlife Watcher', '26/27', 'expected');
+  var bdTwoSpy = bdFig(bdTwoT, 'Spyfish Aotearoa', '26/27', 'expected');
+  check('finance: a source funding two projects returns each the margin its income gave',
+    bdTwoWw.income === 1400 && bdTwoWw.cost === 600 && bdTwoWw.surplus === 800 &&
+    bdTwoSpy.income === 700 && bdTwoSpy.cost === 300 && bdTwoSpy.surplus === 400 &&
+    bdFig(bdTwoT, 'Wildlife Watcher', '26/27', 'actual').income === 400 &&
+    bdFig(bdTwoT, 'Spyfish Aotearoa', '26/27', 'actual').income === 200 &&
+    bdTwoT.map(function (g) { return g.key; }).join() ===
+      'Wildlife Watcher,Spyfish Aotearoa,All');
+  check('finance: splitting a margin between projects leaves the organisation as it was',
+    JSON.stringify(bdTwoT.filter(function (g) { return g.key === 'All'; })[0]) ===
+      JSON.stringify(financeTable_(bdTwo, '2026-08', bdTwoYear, 'fundingSource',
+        CONFIG.GENERAL_PROJECT).filter(function (g) { return g.key === 'All'; })[0]) &&
+    bdFig(bdTwoT, 'All', '26/27', 'expected').income === 2100);
+  // The projects ticked: a project's figures are the same whether or not General is ticked,
+  // since its margin comes back with it, and the total is what the groups shown add up to.
+  var bdTick = runwayParts_([
+    mSrc('T', 'secured', {}, [bdProj(mLine(2026, 10, 600, 1200), 'Wildlife Watcher')]),
+    mSrc('G', 'secured', {}, [bdProj(mLine(2026, 10, 100, 0), CONFIG.GENERAL_PROJECT)])],
+  [], {}, {});
+  var bdTickFig = function (parts, shown, key) {
+    var g = financeTable_(parts, '2026-08', bdTwoYear, 'project', CONFIG.GENERAL_PROJECT,
+      shown).filter(function (r) { return r.key === key; })[0];
+    return g ? g.years['26/27'].expected : null;
+  };
+  var bdWwOnly = bdTickFig(bdTick, ['Wildlife Watcher'], 'Wildlife Watcher');
+  var bdWwGen = bdTickFig(bdTick, ['Wildlife Watcher', CONFIG.GENERAL_PROJECT],
+    'Wildlife Watcher');
+  check('finance: a project\'s income and surplus do not depend on General being ticked',
+    bdWwOnly.income === 1200 && bdWwOnly.surplus === 600 &&
+    bdWwGen.income === 1200 && bdWwGen.surplus === 600 &&
+    bdTickFig(bdTick, ['Wildlife Watcher'], CONFIG.GENERAL_PROJECT) === null);
+  check('finance: the total is what the projects ticked add up to',
+    bdTickFig(bdTick, ['Wildlife Watcher'], 'All').income === 1200 &&
+    bdTickFig(bdTick, ['Wildlife Watcher'], 'All').cost === 600 &&
+    bdTickFig(bdTick, [CONFIG.GENERAL_PROJECT], 'All').income === 0 &&
+    bdTickFig(bdTick, [CONFIG.GENERAL_PROJECT], 'All').cost === 100 &&
+    bdTickFig(bdTick, [CONFIG.GENERAL_PROJECT], 'Wildlife Watcher') === null &&
+    JSON.stringify(financeTable_(bdTick, '2026-08', bdTwoYear, 'project',
+      CONFIG.GENERAL_PROJECT, ['Wildlife Watcher', CONFIG.GENERAL_PROJECT])) ===
+      JSON.stringify(financeTable_(bdTick, '2026-08', bdTwoYear, 'project',
+        CONFIG.GENERAL_PROJECT)));
+  check('finance: a project ticked alone gets its share of a shared margin, not the rest',
+    bdTickFig(bdTwo, ['Wildlife Watcher'], 'Wildlife Watcher').income === 1400 &&
+    bdTickFig(bdTwo, ['Wildlife Watcher'], 'All').income === 1400 &&
+    bdTickFig(bdTwo, ['Wildlife Watcher'], 'Spyfish Aotearoa') === null);
   var bdBySource = financeTable_(bdParts, '2026-10', bdYears, 'fundingSource', 'General');
-  check('finance: grouped by funding source, a source keeps its own margin',
+  check('finance: grouped by funding source, a source shows the income its funders give',
     bdFig(bdBySource, 'XXX_27_P', '26/27', 'expected').income === 1500 &&
-    bdFig(bdBySource, 'XXX_27_P', '26/27', 'expected').margin === 0);
+    bdFig(bdBySource, 'XXX_27_P', '26/27', 'expected').cost === 1000);
   // Brought forward: the page works everything before a year by the same function, so that
-  // plus the year's own surplus and margin is where each group stands at the year's end.
+  // plus the year's own surplus is where each group stands at the year's end.
   var bdPos = function (rows, key, year, sc) {
     var g = rows.filter(function (r) { return r.key === key; })[0];
     var f = g && g.years[year] ? g.years[year][sc] : null;
-    return f ? f.income + f.margin - f.cost : 0;
+    return f ? f.income - f.cost : 0;
   };
   var bdBefore = financeTable_(bdParts, '2026-10', [{ label: '27/28', from: '0000-01',
     to: '2027-03' }], 'project', 'General');
@@ -2118,7 +2449,88 @@ function runTests() {
   var bdAlone = new Function('return ' + financeTable_.toString())();
   check('finance: the page runs the function from its own source, needing nothing else',
     JSON.stringify(bdAlone(bdParts, '2026-10', bdYears, 'project', 'General')) ===
-      JSON.stringify(bd));
+      JSON.stringify(bd) &&
+    JSON.stringify(bdAlone(bdTwo, '2026-08', bdTwoYear, 'project', CONFIG.GENERAL_PROJECT,
+      ['Wildlife Watcher'])) === JSON.stringify(financeTable_(bdTwo, '2026-08', bdTwoYear,
+      'project', CONFIG.GENERAL_PROJECT, ['Wildlife Watcher'])));
+
+  // Budget to date: the Board budget tab's quarter rows, summed to the quarter before this one.
+  var bdQ = boardBudgetRows_([
+    ['26/27', 'Spyfish Aotearoa', '2,000', '1,500', '', ''],
+    ['26/27', 'Spyfish Aotearoa', '400', '300', '', '', 'Q1'],
+    ['26/27', 'Spyfish Aotearoa', '600', '500', '', '', 'Q2'],
+    ['26/27', 'Spyfish Aotearoa', '600', '400', '', '', '26/27 Q3'],
+    ['26/27', 'General', '100', '200', '', '', 'Q1'],
+    ['26/27', 'Organisation', '', '', '3,000', '', ''],
+    ['26/27', 'Organisation', '1,000', '900', '3,500', '', 'Q1'],
+    ['26/27', 'Organisation', '1,200', '1,100', '3,600', '', 'q2'],
+    ['26/27', 'Organisation', '1', '1', '', '', 'Q5'],
+    ['26/27', 'Organisation', '1', '1', '', '', '27/28 Q1'],
+    ['27/28', 'Spyfish Aotearoa', '700', '700', '', '', '1']]);
+  check('board budget: column G names a quarter; one unread, or of another year, is skipped',
+    bdQ.length === 9 && bdQ[0].quarter === null && bdQ[1].quarter === 1 &&
+    bdQ[3].quarter === 3 && bdQ[7].quarter === 2 && bdQ[8].quarter === 1);
+  var bdTd = boardBudgetToDate_(bdQ, '26/27 Q3', 'Organisation');
+  check('budget to date: the quarters to the one before this, the Organisation\'s with its ' +
+    'working capital then',
+    bdTd.fy === '26/27' && bdTd.quarter === 2 && bdTd.through === '2026-09' &&
+    bdTd.projects['Spyfish Aotearoa'].income === 1000 &&
+    bdTd.projects['Spyfish Aotearoa'].cost === 800 &&
+    bdTd.projects.Organisation.income === 2200 && bdTd.projects.Organisation.cost === 2000 &&
+    bdTd.reserves === 3600);
+  check('budget to date: a project missing a quarter to date is left out, not short',
+    !bdTd.projects.General);
+  check('budget to date: none in a year\'s first quarter, and whole-year rows are never split',
+    boardBudgetToDate_(bdQ, '26/27 Q1', 'Organisation') === null &&
+    boardBudgetToDate_(bdBudget, '26/27 Q3', 'Organisation') === null &&
+    boardBudgetToDate_(bdQ, '27/28 Q2', 'Organisation').projects['Spyfish Aotearoa'].cost ===
+      700);
+  var bdTdWc = boardBudgetToDate_(boardBudgetRows_([
+    ['26/27', 'Organisation', '', '', '3,500', '', 'Q1'],
+    ['26/27', 'Organisation', '', '', '3,600', '', 'Q2']]), '26/27 Q3', 'Organisation');
+  check('budget to date: quarter rows with working capital alone budget no income or cost',
+    bdTdWc.reserves === 3600 && Object.keys(bdTdWc.projects).length === 0);
+  check('budget to date: the projects with a budget this year, whole or by quarter',
+    bdTd.budgeted.join() === 'Spyfish Aotearoa,General' && bdTdWc.budgeted.length === 0);
+  // The total's budget to date. Spyfish and the Organisation both have Q1 and Q2; General
+  // has Q1 only. With everything shown the total is the Organisation's own, not Spyfish's.
+  var bdAllShown = ['Wildlife Watcher', 'Spyfish Aotearoa', 'Wild About AI', 'General'];
+  var bdTdOf = function (td, project, shown, whole) {
+    var t = budgetToDateOf_(td, project, shown, whole, 'Organisation');
+    return t ? [t.income, t.cost, t.surplus].join() : null;
+  };
+  check('budget to date: with everything shown, the total is the Organisation\'s quarters',
+    bdTdOf(bdTd, null, bdAllShown, true) === '2200,2000,200');
+  check('budget to date: a project shows its own, or nothing without every quarter so far',
+    bdTdOf(bdTd, 'Spyfish Aotearoa', bdAllShown, true) === '1000,800,200' &&
+    bdTdOf(bdTd, 'General', bdAllShown, true) === null &&
+    bdTdOf(bdTd, 'Wildlife Watcher', bdAllShown, true) === null);
+  check('budget to date: a narrower total adds up the projects shown, none with a budget ' +
+    'lacking its quarters',
+    bdTdOf(bdTd, null, ['Spyfish Aotearoa'], false) === '1000,800,200' &&
+    bdTdOf(bdTd, null, ['Spyfish Aotearoa', 'Wildlife Watcher'], false) === '1000,800,200' &&
+    bdTdOf(bdTd, null, ['Spyfish Aotearoa', 'General'], false) === null &&
+    bdTdOf(bdTd, null, ['Wildlife Watcher'], false) === null &&
+    bdTdOf(null, null, bdAllShown, true) === null);
+  // No Organisation quarter rows: everything shown adds up the projects, and is blank when a
+  // project with a budget this year has no quarter rows, rather than short.
+  var bdTdNoOrg = boardBudgetToDate_(boardBudgetRows_([
+    ['26/27', 'Spyfish Aotearoa', '400', '300', '', '', 'Q1'],
+    ['26/27', 'Spyfish Aotearoa', '600', '500', '', '', 'Q2'],
+    ['26/27', 'Wild About AI', '100', '100', '', '', 'Q1'],
+    ['26/27', 'Wild About AI', '100', '100', '', '', 'Q2'],
+    ['26/27', 'Wildlife Watcher', '3,000', '2,000', '', '']]), '26/27 Q3', 'Organisation');
+  check('budget to date: with no Organisation quarters, a project without them leaves it blank',
+    bdTdOf(bdTdNoOrg, null, bdAllShown, true) === null &&
+    bdTdOf(bdTdNoOrg, null, ['Spyfish Aotearoa', 'Wild About AI', 'General'], false) ===
+      '1200,1000,200');
+  var bdTdAlone = new Function('return ' + budgetToDateOf_.toString())();
+  check('budget to date: the page runs the total from its own source, needing nothing else',
+    JSON.stringify(bdTdAlone(bdTd, null, bdAllShown, true, 'Organisation')) ===
+      JSON.stringify(budgetToDateOf_(bdTd, null, bdAllShown, true, 'Organisation')) &&
+    JSON.stringify(bdTdAlone(bdTdNoOrg, null, ['Spyfish Aotearoa'], false, 'Organisation')) ===
+      JSON.stringify(budgetToDateOf_(bdTdNoOrg, null, ['Spyfish Aotearoa'], false,
+        'Organisation')));
 
   // ---- Performance: the strategy's KPIs by pou ------------------------------------------
   var pfKpis = kpiRows_([
