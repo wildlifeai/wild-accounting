@@ -153,7 +153,8 @@ Only needed to stand up a new copy of the cockpit.
   refresh after its sheet lands in a `secured/` or `proposed/` folder with the right name.
 - **When something looks wrong:** read the Health tab first; it names most problems. Click
   **Refresh now**. The editor's **Executions** list shows each `refreshSnapshot` run and any error.
-  If Xero reports not connected (F1), repeat the connect step.
+  If Xero reports not connected (F1), repeat the connect step. Early in a month, last month's
+  actuals are partial until Xero closes it (`SKILL.md` §3).
 - **Common adjustments, all in `Config.js`:** a balance-sheet account to exclude goes in
   `EXCLUDED_ACCOUNTS`, matched on its code, so a rename in Xero needs nothing; the refresh interval
   is `REFRESH_TRIGGER_HOURS`, after which re-run `installRefreshTrigger`.

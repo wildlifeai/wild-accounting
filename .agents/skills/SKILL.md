@@ -228,7 +228,11 @@ Rules that follow from this:
 
 * A funding-source sheet is **named exactly as its Xero *Funding source* tracking value**.
 * Status comes from the folder. *Secured* means `secured/` only; *proposed* means secured plus
-  proposed.
+  proposed. **The folder overrides the sheet**: a sheet in `secured/` counts in full, and its
+  `Probability` and `Goes ahead` are ignored, because only a proposed source is weighted or held
+  back until funded. A target filed in `secured/` by mistake inflates every *Secured* figure while
+  its own `Funding_info` says otherwise, so when the figures look too good, compare each
+  `secured/` sheet's `Amount secured` and `Probability` with its folder.
 * `isArchivedSource_` is the one definition of an archived source, matching the bare name too,
   because Xero keeps the tracking value's original name forever. Archiving drops the sheet, not
   the money: `archivedPlan_` makes the source's actuals its secured plan for the months they fall
@@ -284,6 +288,20 @@ changing code:
   budgeted income. It needs `CONFIG.ACTUALS_EARNED`: on the invoiced basis an upfront grant is
   income to date on no milestone, and its income to come would count it again. See
   `docs/DESIGN.md`, decisions, 2026-10-02.
+* **A month is past from the first of the next month, closed or not.** `nowKey` comes from the
+  calendar, and for past months the plan is the actuals, so for the first weeks after a month ends
+  its unposted spend and income drop out: totals dip, and the margin rules, worked out over actuals
+  to date plus what is left, shift with them. The cockpit does not know which months Xero has
+  closed: `reserves.month` is only the month of the latest `Reserves` row, written at the first
+  refresh after each quarter end, so ask the accountant. Before quoting figures, compare the last
+  month's actuals with its plan; figures for the board hold an unclosed month at its budget. See
+  `docs/DESIGN.md`, open questions.
+* **A Forecast entry spreads over its quarter by days**, not by when the money moves. A quarter's
+  share for a month that passed without its spend is lost, and a quarter spent in its first month,
+  such as the last pays of a grant that ends early in a quarter, leaves cost and income in the other
+  two months that will never happen. Where the month matters (pay runs, a grant ending mid-quarter,
+  a sheet that pays `Reserves`), budget one line per quarter at that quarter's amount instead: a
+  `Budget` line spreads over its own dates.
 
 **The parser reports rather than skips.** A line it cannot use becomes a health finding: both
 `Cost` and `Income` zero (B1), an unparseable date (B2), an end before its start (B3), no item
@@ -407,6 +425,13 @@ It is enforced rather than remembered:
   sheet, on a milestone of the same name, pays part of it and comes off it: `reservesOffsets_` for
   the Overview and runway, `netReservesTracking_` for Project tracking. E4 is quiet for those
   pairs; H1 reports more paid than `Reserves` holds, H2 General work on a milestone it lacks.
+* **Paying `Reserves` is month by month**, by milestone, inside the months `Reserves` holds that
+  milestone in. Give a paying sheet one line per quarter matching `Reserves`' quarters, or it comes
+  off unevenly and H1 reports the months it pays more than `Reserves` holds. `Reserves` needs lines
+  for every month a paying sheet runs, a proposal's next year included: in months it lacks, the
+  paying sheet's cost counts in full against its weighted income.
+* **A proposal that pays `Reserves` leaves `Goes ahead` blank.** Its costs are `Reserves`' own and
+  stand whatever the funder decides; only its income is weighted.
 
 ---
 
@@ -426,6 +451,39 @@ It is enforced rather than remembered:
   is answered, and diagnostics stay out of feature commits.
 * Findings belong in the repo docs. Anything left undone goes into `docs/DESIGN.md`'s open
   questions rather than living only in a conversation.
+* **Board figures can be worked out offline.** `financeTable_` and `runwayWalk_` are
+  self-contained (§1, Global Scope), so a Node script that loads `Config.js`, `Aggregator.js` and
+  `Board.js` the way `tools/run_tests.js` does can run them over the snapshot the refresh writes to
+  Drive (named by `CONFIG.SNAPSHOT_FILE_NAME`). **Budget to** also needs `ForecastEngine.js` for
+  `boardBudgetToDate_` and the `Board budget` tab's rows, which the snapshot does not carry. Check
+  the snapshot's `generatedAt` first: **Refresh now** writes the file only when the run finishes,
+  so a refresh that lost the lock or failed leaves the old one in place. The figures go to the
+  board's documents and `wildlife-ai-management`, never into this repository.
+* **Check board figures against the Treasurer's Xero reports before they go out**: the P&L by
+  project, the P&L by funding source and the Balance Sheet. The board uses her definitions (§4,
+  working capital): never call working capital reserves. Organisation totals leave out lines with
+  no project or an archived one (§2), so they can sit below Xero's P&L total.
+* **Board documents speak of one pool.** Each project's surplus adds to reserves and each loss,
+  General's included, draws on them, so the organisation's deficit is what must be raised (not the
+  finance table's fundraising target line, which is expected income above secured). Margins stay
+  out of board documents, as they stay out of the finance table (§5).
+* **Quote past balances at quarter ends only**, as the runway chart draws them (`runwayDrawn_`):
+  the accountant posts the grant release journals at each quarter end, so a month-end balance
+  between two of them jumps.
+* **A budget to date needs a phased budget.** When the budget was set by year, compare with a
+  quarterly forecast the board has already seen and name it, rather than splitting the year
+  evenly. The finance table's **Budget to** column needs quarter rows on the `Board budget` tab
+  and never splits a year.
+* **Writing to budget sheets through an API or a connector:** check the sheet's locale first (the
+  budget sheets are `en_US`, so a typed date is month first); rows written past the formatted ones
+  need the formats copied; read every write back. Start a new funding source by copying a sheet of
+  the same project and status into the target folder and replacing all four tabs, clearing
+  `Forecast` and `Submitted_budget`. `Funding_info` keys are read from any row. Moving a sheet
+  between status folders may need a person: a connector that can create files in a folder has
+  been refused moves out of it.
+* **Item codes reach Xero when a source is won**, not while it is proposed: add them to the item
+  list that is imported into Xero's Products and Services as a CSV, with no trailing spaces in
+  the code.
 
 ---
 
@@ -441,6 +499,11 @@ Before deploying or committing, verify:
 * Will this change move published numbers, and have I said which and by how much, outside the
   repository? Remember the push alone moves them at the next refresh.
 * Is every changed file LF in the working tree?
+* Am I quoting figures for a month Xero has not closed? The cockpit cannot tell; ask the
+  accountant.
+* Do figures for the board agree with the Treasurer's Xero reports, and is working capital called
+  working capital?
+* Does any `secured/` sheet say it is not secured (`Amount secured`, `Probability`, `Goes ahead`)?
 * Does the commit message or PR description carry a figure, or any AI attribution?
 
 If any answer is wrong, stop and re-read the relevant invariant.

@@ -106,6 +106,18 @@ Ranked by how badly they hurt the persona who depends on them:
 - **Phasing the board's budget.** The cockpit writes nothing to the `Board budget` tab but its
   header, so quarter rows, like whole-year ones, are typed by hand. Writing next year's rows,
   phased by quarter, from the plan the board adopts is not built.
+- **Actuals before the books close.** A month counts as actual from the first of the next month,
+  so until Xero closes it the cockpit shows whatever has been posted and drops the rest of its
+  plan, and the margin rules shift with it. Counting a month as actual only once a recorded close
+  date reaches it would hold it at plan until then; what to show for spend already posted in it is
+  undecided.
+- **Quarter entries spread evenly.** A Forecast entry spreads over its quarter by days, so a month
+  that passes without its share loses it, and a quarter spent in its first month leaves cost and
+  income in the other two that will never happen. Re-spreading what is left of a quarter over its
+  remaining months would fix both.
+- **A `secured/` sheet that says it is not.** Nothing flags a sheet in `secured/` whose
+  `Funding_info` gives nothing as `Amount secured`, a `Probability` below certainty, or `Goes
+  ahead: only if funded`. A health check beside C2 would catch a target filed in the wrong folder.
 - **Granular Xero scopes by September 2027.** Xero retires the broad `accounting.transactions`
   and `accounting.reports.read` scopes then for apps created before 2 March 2026, which this one
   is. Moving means naming the granular scopes for bank transactions, invoices, manual journals
