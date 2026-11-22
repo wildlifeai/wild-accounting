@@ -304,9 +304,7 @@ Never add a code path that drops data without a finding.
   accounts.** It is the Treasurer's definition: current assets including bank, less current
   liabilities; reserves are equity. `workingCapitalFromBalanceSheet_` takes `Bank` plus
   `Current Assets` less `Current Liabilities` (titles in `CONFIG.RESERVES`), plus the releases
-  Quarter close says are still to post. Matching accounts by name once missed the liability
-  holding grants in advance, which had another name, and never took off GST, PAYE or accruals,
-  so the runway started too high. A report lacking a section writes nothing and raises F8; do
+  Quarter close says are still to post. A report lacking a section writes nothing and raises F8; do
   not fall back to a guess. The refresh tells its own rows from typed ones by the `From Xero: `
   prefix in column C (`RESERVES_AUTO_NOTE`), so never change that prefix: rows already written
   would read as typed and stop updating. The Cockpit Settings tab keeps the name `Reserves`, or

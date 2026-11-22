@@ -61,7 +61,7 @@ because nothing said when a tag was missing.
 
 ## The eleven requirements
 
-Status as at 2 October 2026. This table is the test specification: "does the cockpit work"
+Status as at 22 November 2026. This table is the test specification: "does the cockpit work"
 means "does it answer these".
 
 | # | What | Freq | Persona | Source of truth | Today |
@@ -86,7 +86,7 @@ Ranked by how badly they hurt the persona who depends on them:
    snapshot four times a day.
 2. **No funder-facing output (#9).** The one requirement an external party sees has no
    implementation at all.
-3. **Working capital and cash are absent (#4).** The Board cannot see the balance sheet here.
+3. **Cash between quarter ends is absent (#4).** Working capital is read only at quarter ends.
 4. **Findings reach nobody unprompted (#6).** Every sheet names an `Owner`, but nothing tells that
    person, or the bookkeeper, that a finding is theirs.
 
@@ -294,7 +294,7 @@ Ranked by how badly they hurt the persona who depends on them:
   by fixed and non-current items. `workingCapitalFromBalanceSheet_` takes Xero's section
   totals, `Bank` plus `Current Assets` less `Current Liabilities`, so a renamed or new account
   still counts, and adds the grant releases Quarter close has not seen posted, usually
-  nothing since the Treasurer posts them at each quarter end. `Bank` inside `Current Assets`
+  nothing since the accountant posts them at each quarter end. `Bank` inside `Current Assets`
   counts once. A report without an asset section or `Current Liabilities` writes nothing and
   raises F8, rather than guessing. The figure is called working capital wherever it shows:
   the runway's label at today, the finance table's Organisation rows, the Health tab, and

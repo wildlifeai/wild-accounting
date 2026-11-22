@@ -78,7 +78,7 @@ probability), or the **surplus** where income covers the cost.
    sheet, which keeps that name, one row per quarter end, and each refresh writes the last
    quarter end's row from the section totals of Xero's Balance Sheet: *Bank* plus *Current
    Assets*, less *Current Liabilities*, plus the releases [Quarter close](#quarter-close) says
-   are still to post. The Treasurer posts the releases at each quarter end, so that last part
+   are still to post. The accountant posts the releases at each quarter end, so that last part
    is usually nothing; until they are posted, the liability still holds money already spent.
    No account is named, so a liability renamed or added in Xero still counts. Its column C
    shows each part, to check against Xero. A Balance Sheet without those sections writes
